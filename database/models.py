@@ -88,8 +88,12 @@ class Profile(Base):
     city_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lon: Mapped[float | None] = mapped_column(Float, nullable=True)
-    gender: Mapped[Gender | None] = mapped_column(Enum(Gender), nullable=True)
-    looking_for: Mapped[LookingFor | None] = mapped_column(Enum(LookingFor), nullable=True)
+    gender: Mapped[Gender | None] = mapped_column(
+        Enum(Gender, native_enum=False, length=16), nullable=True
+    )
+    looking_for: Mapped[LookingFor | None] = mapped_column(
+        Enum(LookingFor, native_enum=False, length=16), nullable=True
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_file_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -111,7 +115,7 @@ class Like(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     from_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id"))
     to_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id"), index=True)
-    action: Mapped[LikeAction] = mapped_column(Enum(LikeAction))
+    action: Mapped[LikeAction] = mapped_column(Enum(LikeAction, native_enum=False, length=16))
     message_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_seen: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -145,7 +149,9 @@ class PremiumOrder(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id"), index=True)
     plan_id: Mapped[int] = mapped_column(Integer, ForeignKey("premium_plans.id"))
-    status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.pending)
+    status: Mapped[OrderStatus] = mapped_column(
+        Enum(OrderStatus, native_enum=False, length=16), default=OrderStatus.pending
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

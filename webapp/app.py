@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import httpx
@@ -14,7 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from config import settings
 from database.models import RequiredChannel, User
-from database.session import async_session_maker, init_db
+from database.session import async_session_maker
 from services.admin_tools import (
     DUSHANBE_CITY,
     DUSHANBE_LAT,
@@ -73,9 +74,19 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup() -> None:
-        await init_db()
-        async with async_session_maker() as session:
-            await ensure_defaults(session)
+        # схему создаёт bot (init_db); web только сиды, с ретраями
+        last_exc: Exception | None = None
+        for _ in range(30):
+            try:
+                async with async_session_maker() as session:
+                    await ensure_defaults(session)
+                last_exc = None
+                break
+            except Exception as exc:  # noqa: BLE001 — ждём готовности схемы
+                last_exc = exc
+                await asyncio.sleep(1)
+        if last_exc is not None:
+            raise last_exc
 
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(request: Request):
