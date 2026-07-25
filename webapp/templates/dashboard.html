@@ -17,6 +17,63 @@
 <body>
   <p><a href="/logout">Выйти</a></p>
   <h1>Vinchik — админка</h1>
+  {% if flash == "geo_saved" %}<p style="color:#0a7;">Геолокация админа сохранена.</p>{% endif %}
+  {% if flash == "bad_admin" %}<p style="color:#a00;">Неверный admin id.</p>{% endif %}
+  {% if flash and flash.startswith("test_created_") %}<p style="color:#0a7;">Создано тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
+  {% if flash and flash.startswith("test_cleared_") %}<p style="color:#0a7;">Удалено тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
+
+  <section>
+    <h2>Моя геолокация</h2>
+    <p>Координаты профиля админа для ленты. По умолчанию — Душанбе.</p>
+    {% if not admin_ids %}
+    <p style="color:#a00;">В <code>ADMIN_IDS</code> никого нет.</p>
+    {% else %}
+    <form method="post" action="/admin-geo">
+      <div class="row">
+        <label>Admin Telegram ID
+          <select name="admin_tg_id" required>
+            {% for aid in admin_ids %}
+            <option value="{{ aid }}">{{ aid }}
+              {% set g = admin_geo.get(aid) %}
+              {% if g and g.lat is not none %} (сейчас {{ g.lat }}, {{ g.lon }}){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Широта (lat)
+          <input type="number" step="any" name="lat" value="{{ dushanbe_lat }}" required>
+        </label>
+        <label>Долгота (lon)
+          <input type="number" step="any" name="lon" value="{{ dushanbe_lon }}" required>
+        </label>
+        <label>Город
+          <input type="text" name="city_name" value="{{ dushanbe_city }}" required>
+        </label>
+      </div>
+      <button type="submit">Сохранить координаты</button>
+    </form>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Тестовые пользователи</h2>
+    <p>Сейчас в базе: <strong>{{ test_users_count }}</strong>. Фото: <code>data/test.png</code>.
+      Координаты случайные по Таджикистану и окрестностям. Снимите «видимы в ленте», чтобы создать невидимых (<code>is_active=false</code>).</p>
+    <form method="post" action="/test-users/create" class="row">
+      <label>Сколько
+        <input type="number" name="count" value="10" min="1" max="100" required>
+      </label>
+      <label>
+        <input type="checkbox" name="visible" checked>
+        Видимы в ленте
+      </label>
+      <button type="submit">Добавить</button>
+    </form>
+    <form method="post" action="/test-users/clear" style="margin-top:.6rem;"
+          onsubmit="return confirm('Удалить всех тестовых пользователей?');">
+      <button type="submit">Удалить всех тестовых</button>
+    </form>
+  </section>
 
   <section>
     <h2>Настройки</h2>

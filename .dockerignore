@@ -6,7 +6,6 @@ venv/
 *.md
 .cursor/
 *.db
-data/
 .pytest_cache/
 .idea/
 .vscode/

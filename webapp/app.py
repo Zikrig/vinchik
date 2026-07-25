@@ -5,7 +5,7 @@ from pathlib import Path
 import httpx
 from aiogram import Bot
 from fastapi import Depends, FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select
@@ -15,6 +15,17 @@ from sqlalchemy.orm import selectinload
 from config import settings
 from database.models import RequiredChannel, User
 from database.session import async_session_maker, init_db
+from services.admin_tools import (
+    DUSHANBE_CITY,
+    DUSHANBE_LAT,
+    DUSHANBE_LON,
+    clear_test_users,
+    count_test_users,
+    create_test_users,
+    get_user_geo,
+    set_user_geo,
+)
+from services.media import local_photo_path
 from services.premium import (
     approve_order,
     list_pending_orders,
@@ -109,6 +120,10 @@ def create_app() -> FastAPI:
         ).scalars().all()
         pay = await get_payment_info(session)
         blocked = await list_blocked_users(session)
+        admin_ids = sorted(settings.admin_id_set)
+        admin_geo = {}
+        for aid in admin_ids:
+            admin_geo[aid] = await get_user_geo(session, aid)
         ctx = {
             "limit": await get_daily_like_limit(session),
             "distance": await get_max_distance_km(session),
@@ -120,6 +135,13 @@ def create_app() -> FastAPI:
             "premiums": premiums,
             "channels": channels,
             "blocked": blocked,
+            "admin_ids": admin_ids,
+            "admin_geo": admin_geo,
+            "dushanbe_lat": DUSHANBE_LAT,
+            "dushanbe_lon": DUSHANBE_LON,
+            "dushanbe_city": DUSHANBE_CITY,
+            "test_users_count": await count_test_users(session),
+            "flash": request.query_params.get("flash"),
         }
         return TEMPLATES.TemplateResponse(request, "dashboard.html", ctx)
 
@@ -132,6 +154,9 @@ def create_app() -> FastAPI:
         user = await session.get(User, user_id, options=[selectinload(User.profile)])
         if not user or not user.profile or not user.profile.photo_file_id:
             return Response(status_code=404)
+        local = local_photo_path(user.profile.photo_file_id)
+        if local is not None:
+            return FileResponse(local, media_type="image/png")
         bot = Bot(token=settings.bot_token)
         try:
             f = await bot.get_file(user.profile.photo_file_id)
@@ -241,5 +266,42 @@ def create_app() -> FastAPI:
             return redir
         await reject_order(session, order_id, admin_id=0)
         return RedirectResponse("/", status_code=303)
+
+    @app.post("/admin-geo")
+    async def save_admin_geo(
+        request: Request,
+        admin_tg_id: int = Form(...),
+        lat: float = Form(...),
+        lon: float = Form(...),
+        city_name: str = Form(DUSHANBE_CITY),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        if admin_tg_id not in settings.admin_id_set:
+            return RedirectResponse("/?flash=bad_admin", status_code=303)
+        await set_user_geo(session, admin_tg_id, lat, lon, city_name)
+        return RedirectResponse("/?flash=geo_saved", status_code=303)
+
+    @app.post("/test-users/create")
+    async def test_users_create(
+        request: Request,
+        count: int = Form(10),
+        visible: str | None = Form(None),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        n = await create_test_users(session, count, visible=bool(visible))
+        return RedirectResponse(f"/?flash=test_created_{n}", status_code=303)
+
+    @app.post("/test-users/clear")
+    async def test_users_clear(
+        request: Request, session: AsyncSession = Depends(get_db)
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        n = await clear_test_users(session)
+        return RedirectResponse(f"/?flash=test_cleared_{n}", status_code=303)
 
     return app

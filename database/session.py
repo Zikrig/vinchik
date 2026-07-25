@@ -31,6 +31,11 @@ async def init_db() -> None:
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_at TIMESTAMPTZ"
             )
         )
+        await conn.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT FALSE"
+            )
+        )
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

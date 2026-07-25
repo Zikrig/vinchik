@@ -9,6 +9,7 @@ from database.models import Profile, User
 from keyboards.inline import main_menu_kb, my_profile_kb
 from locales import t
 from services.browse import profile_caption
+from services.media import as_photo_input
 from services.settings_service import is_registration_only
 
 
@@ -20,8 +21,9 @@ async def show_my_profile(message: Message, user: User, profile: Profile) -> Non
     lang = user.language
     caption = profile_caption(profile)
     kb = my_profile_kb(lang)
-    if profile.photo_file_id:
-        await message.answer_photo(profile.photo_file_id, caption=caption, reply_markup=kb)
+    photo = as_photo_input(profile.photo_file_id)
+    if photo is not None:
+        await message.answer_photo(photo, caption=caption, reply_markup=kb)
     else:
         await message.answer(caption, reply_markup=kb)
 

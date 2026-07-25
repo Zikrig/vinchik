@@ -12,6 +12,7 @@ from locales import t
 from services.activity import touch_activity
 from services.browse import next_profile, profile_caption
 from services.channels import list_active_channels, user_subscribed_all
+from services.media import as_photo_input
 from services.likes import (
     format_likes_list,
     list_unseen_likers,
@@ -60,8 +61,9 @@ async def start_browse(message: Message, session: AsyncSession, user) -> None:
         return
     caption = profile_caption(profile)
     kb = browse_kb(lang, profile.user_id)
-    if profile.photo_file_id:
-        await message.answer_photo(profile.photo_file_id, caption=caption, reply_markup=kb)
+    photo = as_photo_input(profile.photo_file_id)
+    if photo is not None:
+        await message.answer_photo(photo, caption=caption, reply_markup=kb)
     else:
         await message.answer(caption, reply_markup=kb)
 

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 from locales import t
 from services.browse import profile_caption
+from services.media import as_photo_input
 from services.premium import (
     approve_order,
     list_pending_orders,
@@ -98,9 +99,10 @@ async def adm_blocked(callback: CallbackQuery, session: AsyncSession) -> None:
                 ]
             ]
         )
-        if profile and profile.photo_file_id:
+        photo = as_photo_input(profile.photo_file_id) if profile else None
+        if photo is not None:
             await callback.message.answer_photo(
-                profile.photo_file_id, caption=caption[:1024], reply_markup=kb
+                photo, caption=caption[:1024], reply_markup=kb
             )
         else:
             await callback.message.answer(caption, reply_markup=kb)
