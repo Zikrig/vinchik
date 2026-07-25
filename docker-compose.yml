@@ -2,9 +2,9 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: vinchik
-      POSTGRES_PASSWORD: vinchik
-      POSTGRES_DB: vinchik
+      POSTGRES_USER: ${POSTGRES_USER:-vinchik}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vinchik}
+      POSTGRES_DB: ${POSTGRES_DB:-vinchik}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
