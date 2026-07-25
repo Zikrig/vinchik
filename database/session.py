@@ -9,9 +9,13 @@ from database.models import Base
 engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
 async_session_maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
+# bot + web оба зовут init_db при старте; без лока ENUM create_all падает гонкой
+_SCHEMA_LOCK_ID = 872314205
+
 
 async def init_db() -> None:
     async with engine.begin() as conn:
+        await conn.execute(text(f"SELECT pg_advisory_xact_lock({_SCHEMA_LOCK_ID})"))
         await conn.run_sync(Base.metadata.create_all)
         await conn.execute(
             text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ")
