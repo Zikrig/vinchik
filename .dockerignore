@@ -1,0 +1,13 @@
+.env
+__pycache__/
+.git/
+.venv/
+venv/
+*.md
+.cursor/
+*.db
+data/
+.pytest_cache/
+.idea/
+.vscode/
+agent-transcripts/

@@ -1,0 +1,78 @@
+# Запуск Vinchik (только Docker)
+
+Локальный venv не используем — всё через Docker Compose.
+
+## Требования
+
+- Docker + Docker Compose
+- Токен бота от @BotFather
+- Telegram ID админа
+
+## Настройка
+
+1. Скопируй `.env.example` → `.env`
+2. Заполни минимум: `BOT_TOKEN`, `ADMIN_IDS`, `ADMIN_WEB_PASSWORD`, `BOT_USERNAME`
+3. Карту, время проверки и контакты менеджера удобнее задать в веб-админке после старта (или в `.env`: `PAYMENT_CARD`, `PAYMENT_CHECK_TIME`, `MANAGER_CONTACT`)
+
+## Запуск
+
+```bash
+docker compose up --build -d
+```
+
+Сервисы:
+
+| Сервис | Порт | Назначение |
+|--------|------|------------|
+| bot | 8081 | Telegram (polling по умолчанию; webhook-порт при `USE_WEBHOOK=true`) |
+| web | 8080 | Админка |
+| db | — | PostgreSQL |
+| redis | — | FSM |
+
+Админка: http://localhost:8080  
+В боте: `/admin`
+
+Логи:
+
+```bash
+docker compose logs -f bot
+```
+
+## Polling или webhook
+
+По умолчанию: **long polling** (`USE_WEBHOOK=false`) — домен не нужен.
+
+Чтобы включить **webhook**:
+
+1. Нужен HTTPS-домен (nginx/Caddy → `bot:8081`)
+2. В `.env`:
+   ```
+   USE_WEBHOOK=true
+   WEBHOOK_BASE_URL=https://your.domain
+   WEBHOOK_PATH=/webhook/bot
+   WEBHOOK_SECRET=длинный-секрет
+   ```
+3. Проксируй `https://your.domain/webhook/bot` → `http://bot:8081/webhook/bot`
+4. `docker compose up -d --build bot`
+
+Без публичного HTTPS Telegram webhook не примет.
+
+## Веб-админка: оплата
+
+- Карта для приёма платежей
+- Время проверки оплаты
+- Контакты менеджера
+
+Эти поля попадают в сообщение пользователю при покупке Премиум.
+
+## Бэкап Postgres
+
+```bash
+docker compose exec db pg_dump -U vinchik vinchik > backup.sql
+```
+
+## Остановка
+
+```bash
+docker compose down
+```
