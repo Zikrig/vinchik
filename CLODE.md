@@ -40,4 +40,6 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - `callback_data` ≤ 64 байт.
 - Nominatim только при сохранении гео.
 - `BOT_TOKEN` и `ADMIN_WEB_PASSWORD` только в `.env`.
+- БД: в `.env` только `POSTGRES_*`; `DATABASE_URL` собирает `docker-compose.yml`.
+- В `.env` без `$` — Compose режет значения как переменные.
 - Webhook без публичного HTTPS не работает.

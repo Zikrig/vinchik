@@ -1,3 +1,6 @@
+x-app-environment: &app-environment
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-vinchik}:${POSTGRES_PASSWORD:-vinchik}@db:5432/${POSTGRES_DB:-vinchik}
+
 services:
   db:
     image: postgres:16-alpine
@@ -25,6 +28,8 @@ services:
   bot:
     build: .
     env_file: .env
+    environment:
+      <<: *app-environment
     command: ["python", "bot.py"]
     ports:
       - "8081:8081"
@@ -40,6 +45,8 @@ services:
   web:
     build: .
     env_file: .env
+    environment:
+      <<: *app-environment
     command: ["python", "web.py"]
     ports:
       - "8080:8080"
