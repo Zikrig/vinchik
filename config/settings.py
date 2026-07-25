@@ -1,6 +1,7 @@
 from functools import lru_cache
+from urllib.parse import quote_plus
 
-from pydantic import Field
+from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,7 +13,11 @@ class Settings(BaseSettings):
     )
 
     bot_token: str = Field(alias="BOT_TOKEN")
-    database_url: str = Field(alias="DATABASE_URL")
+    postgres_user: str = Field(default="vinchik", alias="POSTGRES_USER")
+    postgres_password: str = Field(default="vinchik", alias="POSTGRES_PASSWORD")
+    postgres_db: str = Field(default="vinchik", alias="POSTGRES_DB")
+    postgres_host: str = Field(default="db", alias="POSTGRES_HOST")
+    postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
     redis_url: str = Field(alias="REDIS_URL")
     admin_ids: str = Field(alias="ADMIN_IDS")
     admin_web_password: str = Field(alias="ADMIN_WEB_PASSWORD")
@@ -35,6 +40,16 @@ class Settings(BaseSettings):
     default_max_distance_km: float = 100.0
     like_notify_interval_minutes: int = 30
     registration_only_default: bool = True
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def database_url(self) -> str:
+        user = quote_plus(self.postgres_user)
+        password = quote_plus(self.postgres_password)
+        return (
+            f"postgresql+asyncpg://{user}:{password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
 
     @property
     def admin_id_set(self) -> set[int]:
