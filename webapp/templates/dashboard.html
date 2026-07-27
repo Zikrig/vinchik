@@ -14,6 +14,8 @@
   {% if flash == "bad_admin" %}<p class="flash-err">Неверный admin id.</p>{% endif %}
   {% if flash and flash.startswith("test_created_") %}<p class="flash-ok">Создано тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
   {% if flash and flash.startswith("test_cleared_") %}<p class="flash-ok">Удалено тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
+  {% if flash and flash.startswith("test_shown_") %}<p class="flash-ok">Тестовые показаны в ленте: {{ flash.split('_')[-1] }}.</p>{% endif %}
+  {% if flash and flash.startswith("test_hidden_") %}<p class="flash-ok">Тестовые скрыты из ленты: {{ flash.split('_')[-1] }}.</p>{% endif %}
 
   <section class="panel">
     <h2>Моя геолокация</h2>
@@ -51,14 +53,18 @@
   <section class="panel">
     <h2>Тестовые пользователи</h2>
     <p>Сейчас в базе: <strong>{{ test_users_count }}</strong>. Фото: <code>data/test.png</code>.
-      Снимите «видимы в ленте», чтобы создать невидимых (<code>is_active=false</code>).</p>
+      Галочка сразу включает или скрывает <em>все</em> тестовые анкеты в ленте.</p>
+    <form method="post" action="{{ url('/test-users/visibility') }}" class="row" style="margin-bottom:.75rem;">
+      <label class="check">
+        <input type="checkbox" name="visible" value="1"
+               {% if test_users_visible %}checked{% endif %}
+               onchange="this.form.submit()">
+        Видимы в ленте (все тестовые)
+      </label>
+    </form>
     <form method="post" action="{{ url('/test-users/create') }}" class="row">
       <label>Сколько
         <input type="number" name="count" value="10" min="1" max="100" required>
-      </label>
-      <label class="check">
-        <input type="checkbox" name="visible" checked>
-        Видимы в ленте
       </label>
       <button type="submit">Добавить</button>
     </form>

@@ -20,10 +20,12 @@ from services.admin_tools import (
     DUSHANBE_CITY,
     DUSHANBE_LAT,
     DUSHANBE_LON,
+    are_test_users_visible,
     clear_test_users,
     count_test_users,
     create_test_users,
     get_user_geo,
+    set_test_users_visible,
     set_user_geo,
 )
 from services.accounts import filters_from_query, search_accounts
@@ -155,6 +157,7 @@ def create_app() -> FastAPI:
             "dushanbe_lon": DUSHANBE_LON,
             "dushanbe_city": DUSHANBE_CITY,
             "test_users_count": await count_test_users(session),
+            "test_users_visible": await are_test_users_visible(session),
             "flash": request.query_params.get("flash"),
         }
         return TEMPLATES.TemplateResponse(request, "dashboard.html", ctx)
@@ -329,14 +332,27 @@ def create_app() -> FastAPI:
     async def test_users_create(
         request: Request,
         count: int = Form(10),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        n = await create_test_users(session, count)
+        return RedirectResponse(
+            settings.abs_path(f"/?flash=test_created_{n}"), status_code=303
+        )
+
+    @app.post("/test-users/visibility")
+    async def test_users_visibility(
+        request: Request,
         visible: str | None = Form(None),
         session: AsyncSession = Depends(get_db),
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        n = await create_test_users(session, count, visible=bool(visible))
+        n = await set_test_users_visible(session, bool(visible))
+        flash = "test_shown" if visible else "test_hidden"
         return RedirectResponse(
-            settings.abs_path(f"/?flash=test_created_{n}"), status_code=303
+            settings.abs_path(f"/?flash={flash}_{n}"), status_code=303
         )
 
     @app.post("/test-users/clear")

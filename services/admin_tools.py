@@ -70,13 +70,9 @@ async def _next_test_tg_id(session: AsyncSession) -> int:
     return int(current_min) - 1
 
 
-async def create_test_users(
-    session: AsyncSession,
-    count: int,
-    *,
-    visible: bool = True,
-) -> int:
+async def create_test_users(session: AsyncSession, count: int) -> int:
     count = max(0, min(int(count), 100))
+    visible = await are_test_users_visible(session)
     created = 0
     for _ in range(count):
         tg_id = await _next_test_tg_id(session)
@@ -123,6 +119,32 @@ async def count_test_users(session: AsyncSession) -> int:
     )
     return int(result.scalar_one())
 
+
+async def are_test_users_visible(session: AsyncSession) -> bool:
+    """True if there are no test users yet, or all test profiles are active in feed."""
+    total = await count_test_users(session)
+    if total == 0:
+        return True
+    result = await session.execute(
+        select(func.count())
+        .select_from(Profile)
+        .join(User, User.tg_id == Profile.user_id)
+        .where(User.is_test.is_(True), Profile.is_active.is_(True))
+    )
+    return int(result.scalar_one()) == total
+
+
+async def set_test_users_visible(session: AsyncSession, visible: bool) -> int:
+    result = await session.execute(
+        select(Profile)
+        .join(User, User.tg_id == Profile.user_id)
+        .where(User.is_test.is_(True))
+    )
+    profiles = list(result.scalars().all())
+    for p in profiles:
+        p.is_active = visible
+    await session.commit()
+    return len(profiles)
 
 async def clear_test_users(session: AsyncSession) -> int:
     result = await session.execute(select(User.tg_id).where(User.is_test.is_(True)))
