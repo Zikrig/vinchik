@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import random
 from datetime import UTC, datetime
 
@@ -7,6 +8,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from config import settings
 from database.models import Gender, LookingFor, Profile, User
 from services.media import TEST_PHOTO_MARKER
 from services.users import get_or_create_user
@@ -16,9 +18,8 @@ DUSHANBE_LAT = 38.5598
 DUSHANBE_LON = 68.7870
 DUSHANBE_CITY = "Душанбе"
 
-# Tajikistan + nearby border belt
-TJ_LAT_MIN, TJ_LAT_MAX = 36.0, 41.8
-TJ_LON_MIN, TJ_LON_MAX = 66.5, 76.0
+# Spawn test profiles near center (not across whole TJ).
+TEST_SPAWN_RADIUS_KM = 15.0
 
 _TEST_NAMES = (
     "Али",
@@ -52,11 +53,29 @@ async def set_user_geo(
     return user
 
 
-def _random_tj_coords() -> tuple[float, float]:
-    return (
-        round(random.uniform(TJ_LAT_MIN, TJ_LAT_MAX), 6),
-        round(random.uniform(TJ_LON_MIN, TJ_LON_MAX), 6),
-    )
+def _random_near(
+    lat: float, lon: float, radius_km: float = TEST_SPAWN_RADIUS_KM
+) -> tuple[float, float]:
+    """Uniform random point in a circle around (lat, lon)."""
+    r = radius_km * math.sqrt(random.random())
+    theta = random.uniform(0, 2 * math.pi)
+    dlat = (r * math.cos(theta)) / 111.0
+    cos_lat = math.cos(math.radians(lat)) or 1e-6
+    dlon = (r * math.sin(theta)) / (111.0 * cos_lat)
+    return round(lat + dlat, 6), round(lon + dlon, 6)
+
+
+async def _test_spawn_center(session: AsyncSession) -> tuple[float, float, str]:
+    """Prefer first admin with saved geo, else Dushanbe."""
+    for aid in sorted(settings.admin_id_set):
+        geo = await get_user_geo(session, aid)
+        if geo["lat"] is not None and geo["lon"] is not None:
+            return (
+                float(geo["lat"]),
+                float(geo["lon"]),
+                str(geo["city_name"] or DUSHANBE_CITY),
+            )
+    return DUSHANBE_LAT, DUSHANBE_LON, DUSHANBE_CITY
 
 
 async def _next_test_tg_id(session: AsyncSession) -> int:
@@ -73,10 +92,11 @@ async def _next_test_tg_id(session: AsyncSession) -> int:
 async def create_test_users(session: AsyncSession, count: int) -> int:
     count = max(0, min(int(count), 100))
     visible = await are_test_users_visible(session)
+    center_lat, center_lon, city = await _test_spawn_center(session)
     created = 0
     for _ in range(count):
         tg_id = await _next_test_tg_id(session)
-        lat, lon = _random_tj_coords()
+        lat, lon = _random_near(center_lat, center_lon)
         gender = random.choice((Gender.male, Gender.female))
         if gender == Gender.male:
             looking = random.choice((LookingFor.female, LookingFor.any))
@@ -99,7 +119,7 @@ async def create_test_users(session: AsyncSession, count: int) -> int:
             looking_for=looking,
             lat=lat,
             lon=lon,
-            city_name="Тоҷикистон",
+            city_name=city,
             description="Тестовая анкета",
             photo_file_id=TEST_PHOTO_MARKER,
             is_active=visible,

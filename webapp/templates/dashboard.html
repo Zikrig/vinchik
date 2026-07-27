@@ -59,6 +59,7 @@
   <section class="panel">
     <h2>Тестовые пользователи</h2>
     <p>Сейчас в базе: <strong>{{ test_users_count }}</strong>. Фото: <code>data/test.png</code>.
+      Новые создаются в радиусе ~15 км от гео админа (или Душанбе).
       Галочка сразу включает или скрывает <em>все</em> тестовые анкеты в ленте.</p>
     <form method="post" action="{{ url('/test-users/visibility') }}" class="row" style="margin-bottom:.75rem;">
       <label class="check">
