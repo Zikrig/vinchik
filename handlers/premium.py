@@ -23,7 +23,7 @@ async def premium_menu(callback: CallbackQuery, session: AsyncSession) -> None:
         )
     plans = await list_active_plans(session)
     rows = [
-        [InlineKeyboardButton(text=f"{p.title} — {p.price_text}", callback_data=f"prem:buy:{p.id}")]
+        [InlineKeyboardButton(text=f"💎 {p.title} — {p.price_text}", callback_data=f"prem:buy:{p.id}")]
         for p in plans
     ]
     await callback.message.answer(

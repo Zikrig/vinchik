@@ -235,7 +235,7 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         await set_setting(session, "daily_like_limit", str(daily_like_limit))
-        capped = min(max(float(max_distance_km), 1.0), 1000.0)
+        capped = min(max(float(max_distance_km), 1.0), 20000.0)
         await set_setting(session, "max_distance_km", str(capped))
         await set_setting(session, "manager_contact", manager_contact.strip())
         await set_setting(session, "payment_card", payment_card.strip())

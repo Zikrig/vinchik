@@ -51,6 +51,12 @@
   </section>
 
   <section class="panel">
+    <h2>Аккаунты</h2>
+    <p>Все пользователи, включая тестовые. Поиск и фильтры по полям.</p>
+    <p><a class="btn" href="{{ url('/accounts') }}">Открыть список аккаунтов</a></p>
+  </section>
+
+  <section class="panel">
     <h2>Тестовые пользователи</h2>
     <p>Сейчас в базе: <strong>{{ test_users_count }}</strong>. Фото: <code>data/test.png</code>.
       Галочка сразу включает или скрывает <em>все</em> тестовые анкеты в ленте.</p>
@@ -81,8 +87,8 @@
         <label>Лимит лайков / сутки UTC
           <input type="number" name="daily_like_limit" value="{{ limit }}" min="1" required>
         </label>
-        <label>Радиус км (макс. 1000)
-          <input type="number" step="0.1" name="max_distance_km" value="{{ distance }}" min="1" max="1000" required>
+        <label>Радиус км (макс. 20000)
+          <input type="number" step="1" name="max_distance_km" value="{{ distance }}" min="1" max="20000" required>
         </label>
         <label class="check">
           <input type="checkbox" name="registration_only" {% if registration_only %}checked{% endif %}>

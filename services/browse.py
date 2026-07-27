@@ -9,8 +9,20 @@ from sqlalchemy.orm import selectinload
 from database.models import Gender, Like, LookingFor, Profile, User
 from services.geo import haversine_km
 
-# Implicit for viewer: expand only through these tiers, then stop.
-RADIUS_TIERS_KM = (10, 25, 50, 100, 250, 500, 1000)
+# Implicit for viewer: expand only through these tiers, then stop at max_distance_km.
+RADIUS_TIERS_KM = (
+    10,
+    25,
+    50,
+    100,
+    250,
+    500,
+    1000,
+    2500,
+    5000,
+    10000,
+    20000,
+)
 
 
 def profile_caption(profile: Profile) -> str:
@@ -33,7 +45,7 @@ async def next_profile(
     viewer: User,
     viewer_profile: Profile,
 ) -> Profile | None:
-    """Nearest available profile: expand through radius tiers up to 1000 km."""
+    """Nearest available profile: expand through radius tiers up to max_distance_km."""
     from services.settings_service import get_max_distance_km
 
     if (
