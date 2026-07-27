@@ -60,9 +60,36 @@ docker compose logs -f bot
    - `/vinchik/` → `http://127.0.0.1:8180/`
 4. `docker compose up -d --build`
 
-Без публичного HTTPS Telegram webhook не примет.
+## Важно для krigz.com (webhook + админка)
 
-## Веб-админка: оплата
+В `.env` на сервере:
+
+```
+USE_WEBHOOK=true
+WEBHOOK_BASE_URL=https://krigz.com
+WEBHOOK_PATH=/vinchik/webhook
+WEBHOOK_PORT=8081
+WEBHOOK_HOST=0.0.0.0
+WEB_ROOT_PATH=/vinchik
+```
+
+`WEBHOOK_PORT` — **только внутри контейнера** (8081). На хосте наружу смотрит **8181** (`8181:8081`). Не ставь `WEBHOOK_PORT=8180` — nginx бьёт в пустоту, бот молчит.
+
+Фрагмент nginx: [`deploy/nginx-vinchik.snippet.conf`](deploy/nginx-vinchik.snippet.conf)
+
+После правок:
+
+```bash
+nginx -t && systemctl reload nginx
+docker compose up --build -d
+docker compose logs -f bot
+```
+
+В логах должно быть: `listening on 0.0.0.0:8081/vinchik/webhook` (не 8180).
+
+Админка: https://krigz.com/vinchik/login
+
+## Бэкап Postgres
 
 - Карта для приёма платежей
 - Время проверки оплаты

@@ -44,6 +44,7 @@ from services.settings_service import (
 )
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+TEMPLATES.env.globals["url"] = settings.abs_path
 signer = URLSafeSerializer(settings.web_secret_key, salt="vinchik-admin")
 
 
@@ -65,12 +66,12 @@ def is_logged_in(request: Request) -> bool:
 
 def require_auth(request: Request):
     if not is_logged_in(request):
-        return RedirectResponse("/login", status_code=303)
+        return RedirectResponse(settings.abs_path("/login"), status_code=303)
     return None
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Vinchik Admin")
+    app = FastAPI(title="Vinchik Admin", root_path=settings.web_root_path or "")
 
     @app.on_event("startup")
     async def startup() -> None:
@@ -91,7 +92,7 @@ def create_app() -> FastAPI:
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(request: Request):
         if is_logged_in(request):
-            return RedirectResponse("/", status_code=303)
+            return RedirectResponse(settings.abs_path("/"), status_code=303)
         return TEMPLATES.TemplateResponse(
             request, "login.html", {"error": None}
         )
@@ -105,19 +106,20 @@ def create_app() -> FastAPI:
                 {"error": "Неверный пароль"},
                 status_code=401,
             )
-        resp = RedirectResponse("/", status_code=303)
+        resp = RedirectResponse(settings.abs_path("/"), status_code=303)
         resp.set_cookie(
             "admin_session",
             signer.dumps({"ok": True}),
             httponly=True,
             samesite="lax",
+            path=settings.web_root_path or "/",
         )
         return resp
 
     @app.get("/logout")
     async def logout():
-        resp = RedirectResponse("/login", status_code=303)
-        resp.delete_cookie("admin_session")
+        resp = RedirectResponse(settings.abs_path("/login"), status_code=303)
+        resp.delete_cookie("admin_session", path=settings.web_root_path or "/")
         return resp
 
     @app.get("/", response_class=HTMLResponse)
@@ -190,7 +192,7 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         await unban_user(session, user_id)
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(settings.abs_path("/"), status_code=303)
 
     @app.post("/settings")
     async def save_settings(
@@ -213,7 +215,7 @@ def create_app() -> FastAPI:
         await set_setting(
             session, "registration_only", "true" if registration_only else "false"
         )
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(settings.abs_path("/"), status_code=303)
 
     @app.post("/channels/add")
     async def add_channel(
@@ -234,7 +236,7 @@ def create_app() -> FastAPI:
             )
         )
         await session.commit()
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(settings.abs_path("/"), status_code=303)
 
     @app.post("/channels/{channel_pk}/toggle")
     async def toggle_channel(
@@ -246,7 +248,7 @@ def create_app() -> FastAPI:
         if ch:
             ch.is_active = not ch.is_active
             await session.commit()
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(settings.abs_path("/"), status_code=303)
 
     @app.post("/channels/{channel_pk}/delete")
     async def delete_channel(
@@ -258,7 +260,7 @@ def create_app() -> FastAPI:
         if ch:
             await session.delete(ch)
             await session.commit()
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(settings.abs_path("/"), status_code=303)
 
     @app.post("/orders/{order_id}/approve")
     async def order_approve(
@@ -267,7 +269,7 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         await approve_order(session, order_id, admin_id=0)
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(settings.abs_path("/"), status_code=303)
 
     @app.post("/orders/{order_id}/reject")
     async def order_reject(
@@ -276,7 +278,7 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         await reject_order(session, order_id, admin_id=0)
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(settings.abs_path("/"), status_code=303)
 
     @app.post("/admin-geo")
     async def save_admin_geo(
@@ -290,9 +292,13 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         if admin_tg_id not in settings.admin_id_set:
-            return RedirectResponse("/?flash=bad_admin", status_code=303)
+            return RedirectResponse(
+                settings.abs_path("/?flash=bad_admin"), status_code=303
+            )
         await set_user_geo(session, admin_tg_id, lat, lon, city_name)
-        return RedirectResponse("/?flash=geo_saved", status_code=303)
+        return RedirectResponse(
+            settings.abs_path("/?flash=geo_saved"), status_code=303
+        )
 
     @app.post("/test-users/create")
     async def test_users_create(
@@ -304,7 +310,9 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         n = await create_test_users(session, count, visible=bool(visible))
-        return RedirectResponse(f"/?flash=test_created_{n}", status_code=303)
+        return RedirectResponse(
+            settings.abs_path(f"/?flash=test_created_{n}"), status_code=303
+        )
 
     @app.post("/test-users/clear")
     async def test_users_clear(
@@ -313,6 +321,8 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         n = await clear_test_users(session)
-        return RedirectResponse(f"/?flash=test_cleared_{n}", status_code=303)
+        return RedirectResponse(
+            settings.abs_path(f"/?flash=test_cleared_{n}"), status_code=303
+        )
 
     return app

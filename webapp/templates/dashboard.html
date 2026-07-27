@@ -15,7 +15,7 @@
   </style>
 </head>
 <body>
-  <p><a href="/logout">Выйти</a></p>
+  <p><a href="{{ url('/logout') }}">Выйти</a></p>
   <h1>Vinchik — админка</h1>
   {% if flash == "geo_saved" %}<p style="color:#0a7;">Геолокация админа сохранена.</p>{% endif %}
   {% if flash == "bad_admin" %}<p style="color:#a00;">Неверный admin id.</p>{% endif %}
@@ -28,7 +28,7 @@
     {% if not admin_ids %}
     <p style="color:#a00;">В <code>ADMIN_IDS</code> никого нет.</p>
     {% else %}
-    <form method="post" action="/admin-geo">
+    <form method="post" action="{{ url('/admin-geo') }}">
       <div class="row">
         <label>Admin Telegram ID
           <select name="admin_tg_id" required>
@@ -59,7 +59,7 @@
     <h2>Тестовые пользователи</h2>
     <p>Сейчас в базе: <strong>{{ test_users_count }}</strong>. Фото: <code>data/test.png</code>.
       Координаты случайные по Таджикистану и окрестностям. Снимите «видимы в ленте», чтобы создать невидимых (<code>is_active=false</code>).</p>
-    <form method="post" action="/test-users/create" class="row">
+    <form method="post" action="{{ url('/test-users/create') }}" class="row">
       <label>Сколько
         <input type="number" name="count" value="10" min="1" max="100" required>
       </label>
@@ -69,7 +69,7 @@
       </label>
       <button type="submit">Добавить</button>
     </form>
-    <form method="post" action="/test-users/clear" style="margin-top:.6rem;"
+    <form method="post" action="{{ url('/test-users/clear') }}" style="margin-top:.6rem;"
           onsubmit="return confirm('Удалить всех тестовых пользователей?');">
       <button type="submit">Удалить всех тестовых</button>
     </form>
@@ -77,7 +77,7 @@
 
   <section>
     <h2>Настройки</h2>
-    <form method="post" action="/settings">
+    <form method="post" action="{{ url('/settings') }}">
       <div class="row">
         <label>Лимит лайков / сутки UTC
           <input type="number" name="daily_like_limit" value="{{ limit }}" min="1" required>
@@ -123,14 +123,14 @@
         <td>{{ ch.invite_link }}</td>
         <td>{{ ch.is_active }}</td>
         <td class="row">
-          <form method="post" action="/channels/{{ ch.id }}/toggle"><button type="submit">on/off</button></form>
-          <form method="post" action="/channels/{{ ch.id }}/delete"><button type="submit">удалить</button></form>
+          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/toggle') }}"><button type="submit">on/off</button></form>
+          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/delete') }}"><button type="submit">удалить</button></form>
         </td>
       </tr>
       {% endfor %}
     </table>
     <h3>Добавить канал</h3>
-    <form method="post" action="/channels/add" class="row">
+    <form method="post" action="{{ url('/channels/add') }}" class="row">
       <input name="channel_id" placeholder="@channel или -100..." required>
       <input name="title" placeholder="Название">
       <input name="invite_link" placeholder="https://t.me/...">
@@ -148,8 +148,8 @@
         <td>user {{ o.user_id }}</td>
         <td>plan {{ o.plan_id }}</td>
         <td class="row">
-          <form method="post" action="/orders/{{ o.id }}/approve"><button type="submit">OK</button></form>
-          <form method="post" action="/orders/{{ o.id }}/reject"><button type="submit">Reject</button></form>
+          <form method="post" action="{{ url('/orders/' ~ o.id ~ '/approve') }}"><button type="submit">OK</button></form>
+          <form method="post" action="{{ url('/orders/' ~ o.id ~ '/reject') }}"><button type="submit">Reject</button></form>
         </td>
       </tr>
       {% endfor %}
@@ -177,7 +177,7 @@
     <article style="border:1px solid #eee; padding:1rem; margin:.8rem 0;">
       <div class="row" style="align-items:flex-start;">
         {% if profile and profile.photo_file_id %}
-        <img src="/users/{{ u.tg_id }}/photo" alt="photo"
+        <img src="{{ url('/users/' ~ u.tg_id ~ '/photo') }}" alt="photo"
              style="width:140px;height:140px;object-fit:cover;background:#f2f2f2;">
         {% else %}
         <div style="width:140px;height:140px;background:#f2f2f2;display:flex;align-items:center;justify-content:center;">нет фото</div>
@@ -195,7 +195,7 @@
           <p><strong>О себе:</strong> {{ profile.description or '—' }}</p>
           <p><strong>Анкета активна:</strong> {{ profile.is_active }} · <strong>Заполнена:</strong> {{ profile.is_complete }}</p>
           {% endif %}
-          <form method="post" action="/users/{{ u.tg_id }}/unban">
+          <form method="post" action="{{ url('/users/' ~ u.tg_id ~ '/unban') }}">
             <button type="submit">Разбанить</button>
           </form>
         </div>

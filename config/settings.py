@@ -28,18 +28,27 @@ class Settings(BaseSettings):
     web_secret_key: str = Field(alias="WEB_SECRET_KEY")
     web_host: str = Field(default="0.0.0.0", alias="WEB_HOST")
     web_port: int = Field(default=8080, alias="WEB_PORT")
+    # Публичный префикс за nginx, напр. /vinchik (без слэша в конце). Пусто = корень.
+    web_root_path: str = Field(default="", alias="WEB_ROOT_PATH")
 
     use_webhook: bool = Field(default=False, alias="USE_WEBHOOK")
     webhook_base_url: str = Field(default="", alias="WEBHOOK_BASE_URL")
     webhook_path: str = Field(default="/webhook/bot", alias="WEBHOOK_PATH")
     webhook_secret: str = Field(default="", alias="WEBHOOK_SECRET")
     webhook_host: str = Field(default="0.0.0.0", alias="WEBHOOK_HOST")
+    # Порт ВНУТРИ контейнера (compose: 8181:8081). Не ставь сюда 8180/8181.
     webhook_port: int = Field(default=8081, alias="WEBHOOK_PORT")
 
     default_daily_like_limit: int = 50
     default_max_distance_km: float = 100.0
     like_notify_interval_minutes: int = 30
     registration_only_default: bool = True
+
+    def abs_path(self, path: str) -> str:
+        root = (self.web_root_path or "").rstrip("/")
+        if not path.startswith("/"):
+            path = "/" + path
+        return f"{root}{path}" if root else path
 
     @computed_field  # type: ignore[prop-decorator]
     @property
