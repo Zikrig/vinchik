@@ -38,6 +38,7 @@ TEXTS = {
     "btn_edit_photo": "Тағйири акс",
     "btn_edit_text": "Тағйири матн",
     "btn_browse": "Дидани анкетаҳо",
+    "btn_main_menu": "Менюи асосӣ",
     "btn_like": "❤️",
     "btn_message": "💌",
     "btn_dislike": "👎",

@@ -57,7 +57,7 @@ async def get_daily_like_limit(session: AsyncSession) -> int:
 
 
 async def get_max_distance_km(session: AsyncSession) -> float:
-    return float(await get_setting(session, "max_distance_km", "100"))
+    return float(await get_setting(session, "max_distance_km", "1000"))
 
 
 async def is_registration_only(session: AsyncSession) -> bool:

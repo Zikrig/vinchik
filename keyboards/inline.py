@@ -70,6 +70,7 @@ def my_profile_kb(lang: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=t("btn_edit_photo", lang), callback_data="profile:edit_photo")],
             [InlineKeyboardButton(text=t("btn_edit_text", lang), callback_data="profile:edit_text")],
             [InlineKeyboardButton(text=t("btn_browse", lang), callback_data="browse:start")],
+            [InlineKeyboardButton(text=t("btn_main_menu", lang), callback_data="menu:root")],
         ]
     )
 

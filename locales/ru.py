@@ -38,6 +38,7 @@ TEXTS = {
     "btn_edit_photo": "Изменить фото",
     "btn_edit_text": "Изменить текст",
     "btn_browse": "Смотреть анкеты",
+    "btn_main_menu": "Главное меню",
     "btn_like": "❤️",
     "btn_message": "💌",
     "btn_dislike": "👎",

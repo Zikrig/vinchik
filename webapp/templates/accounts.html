@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Аккаунты — Vinchik Admin{% endblock %}
+{% block head %}
+<style>
+  .wrap { max-width: 1200px; }
+  .tag {
+    display: inline-block;
+    font-size: .75rem;
+    font-weight: 600;
+    padding: .15rem .45rem;
+    border-radius: 6px;
+    background: var(--bg-accent);
+    color: var(--muted);
+    margin-right: .25rem;
+  }
+  .tag.ok { background: #e3f6ec; color: var(--ok); }
+  .tag.warn { background: #fef3c7; color: #92400e; }
+  .tag.danger { background: #fee4e2; color: var(--danger); }
+  .table-scroll { overflow-x: auto; }
+  .filters label { min-width: 120px; }
+  .filters input[type="text"] { min-width: 220px; }
+  .meta { font-size: .85rem; color: var(--muted); }
+</style>
+{% endblock %}
+{% block body %}
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">Vinchik <span>Admin</span></div>
+    <div class="nav">
+      <a href="{{ url('/') }}">Дашборд</a>
+      <a href="{{ url('/logout') }}">Выйти</a>
+    </div>
+  </div>
+
+  <section class="panel">
+    <h2>Все аккаунты</h2>
+    <p>Включая тестовые. Поиск по tg id, username, имени, городу, описанию, возрасту, полу, языку. Найдено: <strong>{{ count }}</strong> (до 500).</p>
+
+    <form method="get" action="{{ url('/accounts') }}" class="row filters">
+      <label>Поиск
+        <input type="text" name="q" value="{{ f.q }}" placeholder="id, @user, имя, город…">
+      </label>
+      <label>Тестовый
+        <select name="is_test">
+          <option value="any" {% if f.is_test == 'any' %}selected{% endif %}>любой</option>
+          <option value="true" {% if f.is_test == 'true' %}selected{% endif %}>да</option>
+          <option value="false" {% if f.is_test == 'false' %}selected{% endif %}>нет</option>
+        </select>
+      </label>
+      <label>Бан
+        <select name="is_blocked">
+          <option value="any" {% if f.is_blocked == 'any' %}selected{% endif %}>любой</option>
+          <option value="true" {% if f.is_blocked == 'true' %}selected{% endif %}>да</option>
+          <option value="false" {% if f.is_blocked == 'false' %}selected{% endif %}>нет</option>
+        </select>
+      </label>
+      <label>Активен
+        <select name="is_active">
+          <option value="any" {% if f.is_active == 'any' %}selected{% endif %}>любой</option>
+          <option value="true" {% if f.is_active == 'true' %}selected{% endif %}>да</option>
+          <option value="false" {% if f.is_active == 'false' %}selected{% endif %}>нет</option>
+        </select>
+      </label>
+      <label>Анкета готова
+        <select name="is_complete">
+          <option value="any" {% if f.is_complete == 'any' %}selected{% endif %}>любой</option>
+          <option value="true" {% if f.is_complete == 'true' %}selected{% endif %}>да</option>
+          <option value="false" {% if f.is_complete == 'false' %}selected{% endif %}>нет</option>
+        </select>
+      </label>
+      <label>Пол
+        <select name="gender">
+          <option value="any" {% if f.gender == 'any' %}selected{% endif %}>любой</option>
+          <option value="male" {% if f.gender == 'male' %}selected{% endif %}>м</option>
+          <option value="female" {% if f.gender == 'female' %}selected{% endif %}>ж</option>
+        </select>
+      </label>
+      <label>Ищет
+        <select name="looking_for">
+          <option value="any" {% if f.looking_for == 'any' %}selected{% endif %}>любой</option>
+          <option value="male" {% if f.looking_for == 'male' %}selected{% endif %}>м</option>
+          <option value="female" {% if f.looking_for == 'female' %}selected{% endif %}>ж</option>
+          <option value="all" {% if f.looking_for == 'all' %}selected{% endif %}>всех</option>
+        </select>
+      </label>
+      <label>Язык
+        <select name="language">
+          <option value="any" {% if f.language == 'any' %}selected{% endif %}>любой</option>
+          <option value="ru" {% if f.language == 'ru' %}selected{% endif %}>ru</option>
+          <option value="tg" {% if f.language == 'tg' %}selected{% endif %}>tg</option>
+        </select>
+      </label>
+      <label>Премиум
+        <select name="has_premium">
+          <option value="any" {% if f.has_premium == 'any' %}selected{% endif %}>любой</option>
+          <option value="true" {% if f.has_premium == 'true' %}selected{% endif %}>да</option>
+          <option value="false" {% if f.has_premium == 'false' %}selected{% endif %}>нет</option>
+        </select>
+      </label>
+      <button type="submit">Найти</button>
+      <a class="btn secondary" href="{{ url('/accounts') }}">Сброс</a>
+    </form>
+  </section>
+
+  <section class="panel table-scroll">
+    {% if not rows %}
+    <p>Никого не найдено.</p>
+    {% else %}
+    <table>
+      <thead>
+        <tr>
+          <th>Фото</th>
+          <th>Пользователь</th>
+          <th>Анкета</th>
+          <th>Флаги</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u, p in rows %}
+        <tr>
+          <td>
+            {% if p and p.photo_file_id %}
+            <img src="{{ url('/users/' ~ u.tg_id ~ '/photo') }}" alt="" width="64" height="64"
+                 style="width:64px;height:64px;object-fit:cover;border-radius:10px;background:var(--bg-accent)">
+            {% else %}
+            <div class="ph" style="width:64px;height:64px">—</div>
+            {% endif %}
+          </td>
+          <td>
+            <div><code>{{ u.tg_id }}</code>{% if u.username %} @{{ u.username }}{% endif %}</div>
+            <div class="meta">lang={{ u.language }} · с {{ u.created_at }}</div>
+            {% if u.premium_until %}<div class="meta">premium до {{ u.premium_until }}</div>{% endif %}
+          </td>
+          <td>
+            {% if p %}
+            <div>{{ p.name or '—' }}{% if p.age %}, {{ p.age }}{% endif %}{% if p.city_name %}, {{ p.city_name }}{% endif %}</div>
+            <div class="meta">
+              {% if p.gender %}{{ p.gender.value }}{% else %}—{% endif %}
+              →
+              {% if p.looking_for %}{{ p.looking_for.value }}{% else %}—{% endif %}
+            </div>
+            {% if p.description %}<div class="meta">{{ p.description[:120] }}{% if p.description|length > 120 %}…{% endif %}</div>{% endif %}
+            {% if p.lat is not none %}<div class="meta">{{ p.lat }}, {{ p.lon }}</div>{% endif %}
+            {% else %}
+            <span class="meta">нет профиля</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if u.is_test %}<span class="tag warn">test</span>{% endif %}
+            {% if u.is_blocked %}<span class="tag danger">ban</span>{% endif %}
+            {% if p and p.is_active %}<span class="tag ok">active</span>{% elif p %}<span class="tag">скрыт</span>{% endif %}
+            {% if p and p.is_complete %}<span class="tag ok">ready</span>{% elif p %}<span class="tag">draft</span>{% endif %}
+          </td>
+          <td>
+            {% if u.is_blocked %}
+            <form method="post" action="{{ url('/users/' ~ u.tg_id ~ '/unban') }}">
+              <button type="submit" class="secondary">Разбан</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

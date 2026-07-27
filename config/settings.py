@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     webhook_port: int = Field(default=8081, alias="WEBHOOK_PORT")
 
     default_daily_like_limit: int = 50
-    default_max_distance_km: float = 100.0
+    default_max_distance_km: float = 1000.0
     like_notify_interval_minutes: int = 30
     registration_only_default: bool = True
 

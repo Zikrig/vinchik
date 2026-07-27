@@ -10,7 +10,7 @@ from database.models import Gender, Like, LookingFor, Profile, User
 from services.geo import haversine_km
 
 # Implicit for viewer: expand only through these tiers, then stop.
-RADIUS_TIERS_KM = (10, 25, 50, 100)
+RADIUS_TIERS_KM = (10, 25, 50, 100, 250, 500, 1000)
 
 
 def profile_caption(profile: Profile) -> str:
@@ -33,7 +33,9 @@ async def next_profile(
     viewer: User,
     viewer_profile: Profile,
 ) -> Profile | None:
-    """Nearest available profile: try 10 km, then 25, 50, 100. Beyond 100 — None."""
+    """Nearest available profile: expand through radius tiers up to 1000 km."""
+    from services.settings_service import get_max_distance_km
+
     if (
         viewer_profile.lat is None
         or viewer_profile.lon is None
@@ -41,6 +43,13 @@ async def next_profile(
         or viewer_profile.looking_for is None
     ):
         return None
+
+    max_km = await get_max_distance_km(session)
+    tiers = [r for r in RADIUS_TIERS_KM if r <= max_km]
+    if not tiers and max_km > 0:
+        tiers = [max_km]
+    elif tiers and tiers[-1] < max_km:
+        tiers.append(max_km)
 
     rated = select(Like.to_user_id).where(Like.from_user_id == viewer.tg_id)
 
@@ -75,7 +84,7 @@ async def next_profile(
             (User.premium_until.is_not(None) & (User.premium_until > now)).desc(),
             func.random(),
         )
-        .limit(300)
+        .limit(1000)
     )
     result = await session.execute(q)
     candidates = list(result.scalars().all())
@@ -89,7 +98,7 @@ async def next_profile(
         d = haversine_km(viewer_profile.lat, viewer_profile.lon, p.lat, p.lon)
         with_dist.append((d, p))
 
-    for radius in RADIUS_TIERS_KM:
+    for radius in tiers:
         in_tier = [p for d, p in with_dist if d <= radius]
         if in_tier:
             return in_tier[0]

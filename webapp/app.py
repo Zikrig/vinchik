@@ -26,6 +26,7 @@ from services.admin_tools import (
     get_user_geo,
     set_user_geo,
 )
+from services.accounts import filters_from_query, search_accounts
 from services.media import local_photo_path
 from services.premium import (
     approve_order,
@@ -158,6 +159,29 @@ def create_app() -> FastAPI:
         }
         return TEMPLATES.TemplateResponse(request, "dashboard.html", ctx)
 
+    @app.get("/accounts", response_class=HTMLResponse)
+    async def accounts_list(request: Request, session: AsyncSession = Depends(get_db)):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        raw = {
+            "q": request.query_params.get("q") or "",
+            "is_test": request.query_params.get("is_test") or "any",
+            "is_blocked": request.query_params.get("is_blocked") or "any",
+            "is_active": request.query_params.get("is_active") or "any",
+            "is_complete": request.query_params.get("is_complete") or "any",
+            "gender": request.query_params.get("gender") or "any",
+            "looking_for": request.query_params.get("looking_for") or "any",
+            "language": request.query_params.get("language") or "any",
+            "has_premium": request.query_params.get("has_premium") or "any",
+        }
+        filters = filters_from_query(raw)
+        rows = await search_accounts(session, **filters, limit=500)
+        return TEMPLATES.TemplateResponse(
+            request,
+            "accounts.html",
+            {"rows": rows, "f": raw, "count": len(rows)},
+        )
+
     @app.get("/users/{user_id}/photo")
     async def user_photo(
         user_id: int, request: Request, session: AsyncSession = Depends(get_db)
@@ -208,7 +232,8 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         await set_setting(session, "daily_like_limit", str(daily_like_limit))
-        await set_setting(session, "max_distance_km", str(max_distance_km))
+        capped = min(max(float(max_distance_km), 1.0), 1000.0)
+        await set_setting(session, "max_distance_km", str(capped))
         await set_setting(session, "manager_contact", manager_contact.strip())
         await set_setting(session, "payment_card", payment_card.strip())
         await set_setting(session, "payment_check_time", payment_check_time.strip())

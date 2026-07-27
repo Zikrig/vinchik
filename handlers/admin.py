@@ -58,8 +58,9 @@ async def admin_cmd(message: Message, session: AsyncSession) -> None:
             [InlineKeyboardButton(text="Soft-launch on/off", callback_data="adm:toggle_reg")],
             [InlineKeyboardButton(text="Лимит = 50", callback_data="adm:limit:50")],
             [InlineKeyboardButton(text="Лимит = 20", callback_data="adm:limit:20")],
-            [InlineKeyboardButton(text="Радиус 50 км", callback_data="adm:dist:50")],
             [InlineKeyboardButton(text="Радиус 100 км", callback_data="adm:dist:100")],
+            [InlineKeyboardButton(text="Радиус 500 км", callback_data="adm:dist:500")],
+            [InlineKeyboardButton(text="Радиус 1000 км", callback_data="adm:dist:1000")],
             [InlineKeyboardButton(text="Заблокированные", callback_data="adm:blocked")],
         ]
     )
@@ -227,5 +228,6 @@ async def adm_dist(callback: CallbackQuery, session: AsyncSession) -> None:
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
     value = callback.data.split(":")[2]  # type: ignore[union-attr]
-    await set_setting(session, "max_distance_km", value)
-    await callback.answer(f"distance={value}")
+    capped = min(max(float(value), 1.0), 1000.0)
+    await set_setting(session, "max_distance_km", str(capped))
+    await callback.answer(f"distance={capped}")

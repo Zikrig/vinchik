@@ -64,6 +64,19 @@
       font-size: 1.35rem;
     }
     .brand span { color: var(--brand); }
+    .nav { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+    }
+    .btn.secondary {
+      background: var(--bg-accent);
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+    .btn.secondary:hover { text-decoration: none; background: #dce8e1; }
     .panel {
       background: var(--surface);
       border: 1px solid var(--line);
