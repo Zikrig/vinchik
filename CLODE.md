@@ -9,6 +9,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Точка входа бота | `bot.py` |
 | Веб-админка | `web.py`, `webapp/` |
 | Список аккаунтов (поиск/фильтры) | `webapp/` → `/accounts`, `services/accounts.py` |
+| Карта пользователей (≤50, админ красным) | `/accounts` (Leaflet), `map_markers()` |
 | Гео админа / тестовые юзеры | `services/admin_tools.py`, `services/media.py` |
 | Тестовое фото | `data/test.png` |
 | Роутеры | `handlers/` |

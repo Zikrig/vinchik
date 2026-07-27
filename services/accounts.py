@@ -8,6 +8,8 @@ from sqlalchemy.orm import selectinload
 
 from database.models import Gender, LookingFor, Profile, User
 
+MAP_MARKERS_LIMIT = 50
+
 
 def _parse_bool(raw: str | None) -> bool | None:
     if raw is None or raw == "" or raw == "any":
@@ -90,6 +92,78 @@ async def search_accounts(
     result = await session.execute(stmt)
     users = list(result.scalars().unique().all())
     return [(u, u.profile) for u in users]
+
+
+async def map_markers(
+    session: AsyncSession,
+    *,
+    admin_ids: set[int],
+    limit: int = MAP_MARKERS_LIMIT,
+) -> list[dict]:
+    """Up to `limit` profiles with coordinates. Admins always preferred, marked is_admin."""
+    stmt = (
+        select(User)
+        .join(Profile, Profile.user_id == User.tg_id)
+        .where(Profile.lat.is_not(None), Profile.lon.is_not(None))
+        .options(selectinload(User.profile))
+        .order_by(User.created_at.desc())
+        .limit(max(limit * 4, 200))
+    )
+    result = await session.execute(stmt)
+    users = list(result.scalars().unique().all())
+
+    admins: list[User] = []
+    others: list[User] = []
+    for u in users:
+        if u.tg_id in admin_ids:
+            admins.append(u)
+        else:
+            others.append(u)
+
+    missing_admin_ids = [aid for aid in admin_ids if aid not in {u.tg_id for u in admins}]
+    if missing_admin_ids:
+        extra = await session.execute(
+            select(User)
+            .join(Profile, Profile.user_id == User.tg_id)
+            .where(
+                User.tg_id.in_(missing_admin_ids),
+                Profile.lat.is_not(None),
+                Profile.lon.is_not(None),
+            )
+            .options(selectinload(User.profile))
+        )
+        for u in extra.scalars().unique().all():
+            admins.append(u)
+
+    picked: list[User] = []
+    for u in admins:
+        if len(picked) >= limit:
+            break
+        picked.append(u)
+    for u in others:
+        if len(picked) >= limit:
+            break
+        picked.append(u)
+
+    markers: list[dict] = []
+    for u in picked:
+        p = u.profile
+        if not p or p.lat is None or p.lon is None:
+            continue
+        markers.append(
+            {
+                "tg_id": u.tg_id,
+                "username": u.username,
+                "name": p.name,
+                "age": p.age,
+                "city": p.city_name,
+                "lat": p.lat,
+                "lon": p.lon,
+                "is_admin": u.tg_id in admin_ids,
+                "is_test": u.is_test,
+            }
+        )
+    return markers
 
 
 def filters_from_query(params) -> dict:

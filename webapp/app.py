@@ -28,7 +28,7 @@ from services.admin_tools import (
     set_test_users_visible,
     set_user_geo,
 )
-from services.accounts import filters_from_query, search_accounts
+from services.accounts import filters_from_query, map_markers, search_accounts
 from services.media import local_photo_path
 from services.premium import (
     approve_order,
@@ -179,10 +179,19 @@ def create_app() -> FastAPI:
         }
         filters = filters_from_query(raw)
         rows = await search_accounts(session, **filters, limit=500)
+        markers = await map_markers(session, admin_ids=settings.admin_id_set, limit=50)
         return TEMPLATES.TemplateResponse(
             request,
             "accounts.html",
-            {"rows": rows, "f": raw, "count": len(rows)},
+            {
+                "rows": rows,
+                "f": raw,
+                "count": len(rows),
+                "markers": markers,
+                "map_limit": 50,
+                "dushanbe_lat": DUSHANBE_LAT,
+                "dushanbe_lon": DUSHANBE_LON,
+            },
         )
 
     @app.get("/users/{user_id}/photo")
