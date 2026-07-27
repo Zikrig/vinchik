@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,13 +40,26 @@ def _looking_matches(looking: LookingFor, gender: Gender) -> bool:
     return looking.value == gender.value
 
 
+def recently_rated_subquery(viewer_tg_id: int, reshow_days: int, now: datetime):
+    """Pairs hidden from feed. Sleep does not create a Like — only like/dislike/message do.
+
+    reshow_days == 0 → hide forever after any rating.
+    reshow_days > 0 → hide only while Like.created_at is within the window.
+    """
+    q = select(Like.to_user_id).where(Like.from_user_id == viewer_tg_id)
+    if reshow_days > 0:
+        cutoff = now - timedelta(days=reshow_days)
+        q = q.where(Like.created_at >= cutoff)
+    return q
+
+
 async def next_profile(
     session: AsyncSession,
     viewer: User,
     viewer_profile: Profile,
 ) -> Profile | None:
     """Nearest available profile: expand through radius tiers up to max_distance_km."""
-    from services.settings_service import get_max_distance_km
+    from services.settings_service import get_max_distance_km, get_profile_reshow_days
 
     if (
         viewer_profile.lat is None
@@ -57,13 +70,15 @@ async def next_profile(
         return None
 
     max_km = await get_max_distance_km(session)
+    reshow_days = await get_profile_reshow_days(session)
     tiers = [r for r in RADIUS_TIERS_KM if r <= max_km]
     if not tiers and max_km > 0:
         tiers = [max_km]
     elif tiers and tiers[-1] < max_km:
         tiers.append(max_km)
 
-    rated = select(Like.to_user_id).where(Like.from_user_id == viewer.tg_id)
+    now = datetime.now(UTC)
+    rated = recently_rated_subquery(viewer.tg_id, reshow_days, now)
 
     gender_filter = True
     if viewer_profile.looking_for == LookingFor.male:
@@ -76,7 +91,6 @@ async def next_profile(
         Profile.looking_for == LookingFor(viewer_profile.gender.value),
     )
 
-    now = datetime.now(UTC)
     q = (
         select(Profile)
         .join(User, User.tg_id == Profile.user_id)

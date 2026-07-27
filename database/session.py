@@ -40,6 +40,12 @@ async def init_db() -> None:
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT FALSE"
             )
         )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_likes_from_created "
+                "ON likes (from_user_id, created_at)"
+            )
+        )
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

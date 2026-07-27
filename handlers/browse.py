@@ -28,6 +28,16 @@ from states.profile import ProfileStates
 router = Router()
 
 
+async def strip_card_keyboard(message: Message | None) -> None:
+    """Remove inline buttons from the shown profile card after a reaction."""
+    if message is None:
+        return
+    try:
+        await message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+
 async def start_browse(message: Message, session: AsyncSession, user) -> None:
     lang = user.language
     if user.is_blocked:
@@ -109,6 +119,7 @@ async def cb_msg(callback: CallbackQuery, session: AsyncSession, state: FSMConte
     await state.update_data(msg_target=target_id)
     await callback.answer()
     assert callback.message
+    await strip_card_keyboard(callback.message)
     await callback.message.answer(t("ask_message", user.language))
 
 
@@ -136,9 +147,11 @@ async def send_message_text(
 
 @router.callback_query(F.data == "b:sleep")
 async def cb_sleep(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Pause browsing: strip buttons only. Does NOT record Like — card can reappear."""
     user = await load_user(session, callback.from_user.id)
     assert user and callback.message
     await callback.answer()
+    await strip_card_keyboard(callback.message)
     await show_main_menu(callback.message, user)
 
 
@@ -159,7 +172,7 @@ async def cb_report(callback: CallbackQuery, session: AsyncSession, bot: Bot) ->
             pass
         if just_blocked:
             target = await load_user(session, target_id)
-            if target:
+            if target and not target.is_test:
                 try:
                     await bot.send_message(
                         target_id, t("you_are_blocked", target.language or "ru")
@@ -168,6 +181,7 @@ async def cb_report(callback: CallbackQuery, session: AsyncSession, bot: Bot) ->
                     pass
     else:
         await callback.answer(t("report_dup", user.language), show_alert=True)
+    await strip_card_keyboard(callback.message)
     await start_browse(callback.message, session, user)
 
 
@@ -183,6 +197,7 @@ async def _rate(
         await callback.answer(t("limit_reached", user.language), show_alert=True)
         return
     await callback.answer()
+    await strip_card_keyboard(callback.message)
     if like and action in (LikeAction.like, LikeAction.message):
         await notify_like_batch(bot, session, target_id)
     await start_browse(callback.message, session, user)

@@ -42,6 +42,7 @@ from services.settings_service import (
     get_daily_like_limit,
     get_max_distance_km,
     get_payment_info,
+    get_profile_reshow_days,
     is_registration_only,
     set_setting,
 )
@@ -143,6 +144,7 @@ def create_app() -> FastAPI:
         ctx = {
             "limit": await get_daily_like_limit(session),
             "distance": await get_max_distance_km(session),
+            "reshow_days": await get_profile_reshow_days(session),
             "registration_only": await is_registration_only(session),
             "manager": pay["manager"],
             "payment_card": pay["card"],
@@ -235,6 +237,7 @@ def create_app() -> FastAPI:
         request: Request,
         daily_like_limit: int = Form(...),
         max_distance_km: float = Form(...),
+        profile_reshow_days: int = Form(...),
         manager_contact: str = Form(...),
         payment_card: str = Form(...),
         payment_check_time: str = Form(...),
@@ -246,6 +249,9 @@ def create_app() -> FastAPI:
         await set_setting(session, "daily_like_limit", str(daily_like_limit))
         capped = min(max(float(max_distance_km), 1.0), 20000.0)
         await set_setting(session, "max_distance_km", str(capped))
+        await set_setting(
+            session, "profile_reshow_days", str(max(0, int(profile_reshow_days)))
+        )
         await set_setting(session, "manager_contact", manager_contact.strip())
         await set_setting(session, "payment_card", payment_card.strip())
         await set_setting(session, "payment_check_time", payment_check_time.strip())

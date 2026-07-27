@@ -41,6 +41,8 @@ class Settings(BaseSettings):
 
     default_daily_like_limit: int = 50
     default_max_distance_km: float = 20000.0
+    # Days before a previously rated profile can appear in feed again (0 = never).
+    default_profile_reshow_days: int = 60
     like_notify_interval_minutes: int = 30
     registration_only_default: bool = True
 

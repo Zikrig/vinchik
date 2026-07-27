@@ -10,6 +10,7 @@ from database.models import PremiumPlan, Setting
 DEFAULTS = {
     "daily_like_limit": str(settings.default_daily_like_limit),
     "max_distance_km": str(settings.default_max_distance_km),
+    "profile_reshow_days": str(settings.default_profile_reshow_days),
     "registration_only": "true" if settings.registration_only_default else "false",
     "manager_contact": settings.manager_contact,
     "payment_card": settings.payment_card or "укажите карту в админке",
@@ -58,6 +59,17 @@ async def get_daily_like_limit(session: AsyncSession) -> int:
 
 async def get_max_distance_km(session: AsyncSession) -> float:
     return float(await get_setting(session, "max_distance_km", "20000"))
+
+
+async def get_profile_reshow_days(session: AsyncSession) -> int:
+    """0 = never reshow rated profiles; default 60 (~2 months)."""
+    raw = await get_setting(
+        session, "profile_reshow_days", str(settings.default_profile_reshow_days)
+    )
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return settings.default_profile_reshow_days
 
 
 async def is_registration_only(session: AsyncSession) -> bool:

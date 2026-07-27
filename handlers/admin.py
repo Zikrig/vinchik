@@ -18,6 +18,7 @@ from services.settings_service import (
     get_daily_like_limit,
     get_max_distance_km,
     get_payment_info,
+    get_profile_reshow_days,
     is_registration_only,
     set_setting,
 )
@@ -37,6 +38,7 @@ async def admin_cmd(message: Message, session: AsyncSession) -> None:
         return
     limit = await get_daily_like_limit(session)
     dist = await get_max_distance_km(session)
+    reshow = await get_profile_reshow_days(session)
     reg_only = await is_registration_only(session)
     pay = await get_payment_info(session)
     pending = await list_pending_orders(session)
@@ -44,6 +46,7 @@ async def admin_cmd(message: Message, session: AsyncSession) -> None:
         f"Админка\n"
         f"Лимит лайков/сутки UTC: {limit}\n"
         f"Радиус км: {dist}\n"
+        f"Повтор анкеты (дней): {reshow} (0=никогда)\n"
         f"Только регистрация: {reg_only}\n"
         f"Карта: {pay['card']}\n"
         f"Время проверки: {pay['check_time']}\n"
@@ -63,6 +66,8 @@ async def admin_cmd(message: Message, session: AsyncSession) -> None:
             [InlineKeyboardButton(text="📍 Радиус 1000 км", callback_data="adm:dist:1000")],
             [InlineKeyboardButton(text="📍 Радиус 5000 км", callback_data="adm:dist:5000")],
             [InlineKeyboardButton(text="📍 Радиус 20000 км", callback_data="adm:dist:20000")],
+            [InlineKeyboardButton(text="🔁 Повтор = 60 дн", callback_data="adm:reshow:60")],
+            [InlineKeyboardButton(text="🔁 Повтор = 30 дн", callback_data="adm:reshow:30")],
             [InlineKeyboardButton(text="🚫 Заблокированные", callback_data="adm:blocked")],
         ]
     )
@@ -233,3 +238,13 @@ async def adm_dist(callback: CallbackQuery, session: AsyncSession) -> None:
     capped = min(max(float(value), 1.0), 20000.0)
     await set_setting(session, "max_distance_km", str(capped))
     await callback.answer(f"distance={capped}")
+
+
+@router.callback_query(F.data.startswith("adm:reshow:"))
+async def adm_reshow(callback: CallbackQuery, session: AsyncSession) -> None:
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(t("no_access", "ru"), show_alert=True)
+        return
+    value = max(0, int(callback.data.split(":")[2]))  # type: ignore[union-attr]
+    await set_setting(session, "profile_reshow_days", str(value))
+    await callback.answer(f"reshow_days={value}")

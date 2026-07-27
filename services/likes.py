@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,22 +63,51 @@ async def record_action(
     action: LikeAction,
     message_text: str | None = None,
 ) -> Like | None:
-    existing = await session.execute(
-        select(Like).where(Like.from_user_id == from_user.tg_id, Like.to_user_id == to_user_id)
-    )
-    if existing.scalar_one_or_none():
-        return None
+    """Save like/dislike/message. Sleep must never call this.
+
+    One row per pair (unique). After profile_reshow_days the pair may appear in feed
+    again; a new reaction updates the same row and resets created_at (cooldown).
+    """
+    from services.settings_service import get_profile_reshow_days
+
+    existing = (
+        await session.execute(
+            select(Like).where(
+                Like.from_user_id == from_user.tg_id, Like.to_user_id == to_user_id
+            )
+        )
+    ).scalar_one_or_none()
+
+    now = datetime.now(UTC)
+    if existing is not None:
+        reshow_days = await get_profile_reshow_days(session)
+        if reshow_days <= 0:
+            return None
+        created = existing.created_at
+        if created is not None and created.tzinfo is None:
+            created = created.replace(tzinfo=UTC)
+        if created is not None and now - created < timedelta(days=reshow_days):
+            return None
 
     if action in (LikeAction.like, LikeAction.message):
         if not await can_like(session, from_user, from_profile):
             raise PermissionError("limit")
         await increment_like_count(session, from_user.tg_id)
 
+    if existing is not None:
+        existing.action = action
+        existing.message_text = message_text
+        existing.created_at = now
+        existing.is_seen = False
+        await session.commit()
+        return existing
+
     like = Like(
         from_user_id=from_user.tg_id,
         to_user_id=to_user_id,
         action=action,
         message_text=message_text,
+        created_at=now,
     )
     session.add(like)
     await session.commit()
@@ -86,7 +116,7 @@ async def record_action(
 
 async def notify_like_batch(bot: Bot, session: AsyncSession, to_user_id: int) -> None:
     target = await session.get(User, to_user_id)
-    if target is None:
+    if target is None or target.is_test or to_user_id <= 0:
         return
 
     n = await unseen_likes_count(session, to_user_id)
@@ -116,10 +146,15 @@ async def notify_like_batch(bot: Bot, session: AsyncSession, to_user_id: int) ->
                 message_id=target.likes_notify_message_id,
                 reply_markup=None,
             )
-        except Exception:
+        except TelegramAPIError:
             pass
 
-    msg = await bot.send_message(to_user_id, text, reply_markup=kb)
+    try:
+        msg = await bot.send_message(to_user_id, text, reply_markup=kb)
+    except TelegramAPIError:
+        # Blocked bot / deleted chat / never started — like is already saved.
+        return
+
     target.likes_notify_message_id = msg.message_id
     target.last_like_notify_at = now
     await session.commit()

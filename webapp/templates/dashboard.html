@@ -90,11 +90,15 @@
         <label>Радиус км (макс. 20000)
           <input type="number" step="1" name="max_distance_km" value="{{ distance }}" min="1" max="20000" required>
         </label>
+        <label>Повтор анкеты (дней)
+          <input type="number" name="profile_reshow_days" value="{{ reshow_days }}" min="0" required>
+        </label>
         <label class="check">
           <input type="checkbox" name="registration_only" {% if registration_only %}checked{% endif %}>
           Только регистрация (soft-launch)
         </label>
       </div>
+      <p class="hint">Повтор: через сколько дней снова показывать анкету после ❤️/👎/💌. <code>0</code> — никогда. 💤 не считает просмотром.</p>
       <h3>Оплата Премиум</h3>
       <div class="row">
         <label style="flex:1;min-width:220px">Карта для приёма платежей
