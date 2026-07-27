@@ -76,8 +76,23 @@ TEXTS = {
     "channels_ok": "Олӣ, акнун анкетаҳоро дидан мумкин аст.",
     "channels_fail": "Обуна ҳанӯз ёфт нашуд. Обуна шав ва боз пахш кун.",
     "premium_title": "Премиум",
-    "premium_active_until": "Премиум то {dt} фаъол аст",
+    "premium_active_until": "⭐ Премиум то {dt} фаъол аст",
+    "premium_inactive": "Премиум ҳоло фаъол нест.",
     "premium_choose": "Тарифро интихоб кун:",
+    "btn_premium_history": "📜 Таърих",
+    "premium_history_title": "Таърихи дархостҳо:",
+    "premium_history_empty": "Дархостҳо ҳанӯз нестанд.",
+    "premium_order_status_pending": "интизор",
+    "premium_order_status_approved": "тасдиқ шуд",
+    "premium_order_status_rejected": "рад шуд",
+    "premium_order_detail": (
+        "Дархост #{order_id}\n"
+        "Тариф: {plan}\n"
+        "Ҳолат: {status}\n"
+        "Сохта шуд: {created}\n"
+        "{processed_line}"
+    ),
+    "premium_order_processed": "Коркард шуд: {processed}",
     "premium_pay": (
         "Дархост #{order_id}\n\n"
         "Корт барои пардохт:\n{card}\n\n"

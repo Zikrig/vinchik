@@ -76,8 +76,23 @@ TEXTS = {
     "channels_ok": "Отлично, можно смотреть анкеты.",
     "channels_fail": "Подписка ещё не найдена. Подпишись и нажми снова.",
     "premium_title": "Премиум",
-    "premium_active_until": "Премиум активен до {dt}",
+    "premium_active_until": "⭐ Премиум активен до {dt}",
+    "premium_inactive": "Премиум сейчас не активен.",
     "premium_choose": "Выбери тариф:",
+    "btn_premium_history": "📜 История",
+    "premium_history_title": "История заявок:",
+    "premium_history_empty": "Заявок пока нет.",
+    "premium_order_status_pending": "ожидает",
+    "premium_order_status_approved": "одобрена",
+    "premium_order_status_rejected": "отклонена",
+    "premium_order_detail": (
+        "Заявка #{order_id}\n"
+        "Тариф: {plan}\n"
+        "Статус: {status}\n"
+        "Создана: {created}\n"
+        "{processed_line}"
+    ),
+    "premium_order_processed": "Обработана: {processed}",
     "premium_pay": (
         "Заявка #{order_id}\n\n"
         "Карта для оплаты:\n{card}\n\n"

@@ -78,6 +78,33 @@ async def revoke_premium(session: AsyncSession, user_id: int) -> User | None:
     return user
 
 
+async def list_user_orders(
+    session: AsyncSession, user_id: int, *, limit: int = 20
+) -> list[tuple[PremiumOrder, PremiumPlan | None]]:
+    result = await session.execute(
+        select(PremiumOrder, PremiumPlan)
+        .outerjoin(PremiumPlan, PremiumPlan.id == PremiumOrder.plan_id)
+        .where(PremiumOrder.user_id == user_id)
+        .order_by(PremiumOrder.created_at.desc())
+        .limit(limit)
+    )
+    return [(order, plan) for order, plan in result.all()]
+
+
+async def get_order_with_plan(
+    session: AsyncSession, order_id: int, user_id: int
+) -> tuple[PremiumOrder, PremiumPlan | None] | None:
+    result = await session.execute(
+        select(PremiumOrder, PremiumPlan)
+        .outerjoin(PremiumPlan, PremiumPlan.id == PremiumOrder.plan_id)
+        .where(PremiumOrder.id == order_id, PremiumOrder.user_id == user_id)
+    )
+    row = result.first()
+    if row is None:
+        return None
+    return row[0], row[1]
+
+
 async def list_pending_orders(session: AsyncSession) -> list[PremiumOrder]:
     result = await session.execute(
         select(PremiumOrder)
