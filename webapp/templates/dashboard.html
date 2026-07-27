@@ -1,32 +1,22 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Vinchik Admin</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; }
-    section { border-top: 1px solid #ddd; padding: 1rem 0; margin-top: 1rem; }
-    input, button { padding: .45rem .6rem; margin: .2rem 0; }
-    table { width: 100%; border-collapse: collapse; }
-    td, th { border-bottom: 1px solid #eee; padding: .4rem; text-align: left; }
-    .row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
-    a { color: #0b57d0; }
-  </style>
-</head>
-<body>
-  <p><a href="{{ url('/logout') }}">Выйти</a></p>
-  <h1>Vinchik — админка</h1>
-  {% if flash == "geo_saved" %}<p style="color:#0a7;">Геолокация админа сохранена.</p>{% endif %}
-  {% if flash == "bad_admin" %}<p style="color:#a00;">Неверный admin id.</p>{% endif %}
-  {% if flash and flash.startswith("test_created_") %}<p style="color:#0a7;">Создано тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
-  {% if flash and flash.startswith("test_cleared_") %}<p style="color:#0a7;">Удалено тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
+{% extends "base.html" %}
+{% block title %}Vinchik Admin{% endblock %}
+{% block body %}
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">Vinchik <span>Admin</span></div>
+    <a href="{{ url('/logout') }}">Выйти</a>
+  </div>
 
-  <section>
+  {% if flash == "geo_saved" %}<p class="flash-ok">Геолокация админа сохранена.</p>{% endif %}
+  {% if flash == "bad_admin" %}<p class="flash-err">Неверный admin id.</p>{% endif %}
+  {% if flash and flash.startswith("test_created_") %}<p class="flash-ok">Создано тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
+  {% if flash and flash.startswith("test_cleared_") %}<p class="flash-ok">Удалено тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
+
+  <section class="panel">
     <h2>Моя геолокация</h2>
     <p>Координаты профиля админа для ленты. По умолчанию — Душанбе.</p>
     {% if not admin_ids %}
-    <p style="color:#a00;">В <code>ADMIN_IDS</code> никого нет.</p>
+    <p class="flash-err">В <code>ADMIN_IDS</code> никого нет.</p>
     {% else %}
     <form method="post" action="{{ url('/admin-geo') }}">
       <div class="row">
@@ -49,33 +39,33 @@
         <label>Город
           <input type="text" name="city_name" value="{{ dushanbe_city }}" required>
         </label>
+        <button type="submit">Сохранить</button>
       </div>
-      <button type="submit">Сохранить координаты</button>
     </form>
     {% endif %}
   </section>
 
-  <section>
+  <section class="panel">
     <h2>Тестовые пользователи</h2>
     <p>Сейчас в базе: <strong>{{ test_users_count }}</strong>. Фото: <code>data/test.png</code>.
-      Координаты случайные по Таджикистану и окрестностям. Снимите «видимы в ленте», чтобы создать невидимых (<code>is_active=false</code>).</p>
+      Снимите «видимы в ленте», чтобы создать невидимых (<code>is_active=false</code>).</p>
     <form method="post" action="{{ url('/test-users/create') }}" class="row">
       <label>Сколько
         <input type="number" name="count" value="10" min="1" max="100" required>
       </label>
-      <label>
+      <label class="check">
         <input type="checkbox" name="visible" checked>
         Видимы в ленте
       </label>
       <button type="submit">Добавить</button>
     </form>
-    <form method="post" action="{{ url('/test-users/clear') }}" style="margin-top:.6rem;"
+    <form method="post" action="{{ url('/test-users/clear') }}" style="margin-top:.75rem;"
           onsubmit="return confirm('Удалить всех тестовых пользователей?');">
-      <button type="submit">Удалить всех тестовых</button>
+      <button type="submit" class="secondary">Удалить всех тестовых</button>
     </form>
   </section>
 
-  <section>
+  <section class="panel">
     <h2>Настройки</h2>
     <form method="post" action="{{ url('/settings') }}">
       <div class="row">
@@ -85,34 +75,34 @@
         <label>Радиус км
           <input type="number" step="0.1" name="max_distance_km" value="{{ distance }}" min="1" required>
         </label>
-        <label>
+        <label class="check">
           <input type="checkbox" name="registration_only" {% if registration_only %}checked{% endif %}>
           Только регистрация (soft-launch)
         </label>
       </div>
       <h3>Оплата Премиум</h3>
       <div class="row">
-        <label style="flex:1">Карта для приёма платежей
-          <input type="text" name="payment_card" value="{{ payment_card }}" required style="width:100%">
+        <label style="flex:1;min-width:220px">Карта для приёма платежей
+          <input type="text" name="payment_card" value="{{ payment_card }}" required>
         </label>
       </div>
       <div class="row">
-        <label style="flex:1">Время проверки оплаты
-          <input type="text" name="payment_check_time" value="{{ payment_check_time }}" required style="width:100%"
+        <label style="flex:1;min-width:220px">Время проверки оплаты
+          <input type="text" name="payment_check_time" value="{{ payment_check_time }}" required
                  placeholder="например: ежедневно 10:00–18:00 (UTC+5)">
         </label>
       </div>
       <div class="row">
-        <label style="flex:1">Контакты менеджера
-          <input type="text" name="manager_contact" value="{{ manager }}" required style="width:100%"
+        <label style="flex:1;min-width:220px">Контакты менеджера
+          <input type="text" name="manager_contact" value="{{ manager }}" required
                  placeholder="@manager или телефон">
         </label>
+        <button type="submit">Сохранить</button>
       </div>
-      <button type="submit">Сохранить</button>
     </form>
   </section>
 
-  <section>
+  <section class="panel">
     <h2>Обязательные каналы</h2>
     <table>
       <tr><th>ID</th><th>Название</th><th>Ссылка</th><th>Активен</th><th></th></tr>
@@ -123,8 +113,8 @@
         <td>{{ ch.invite_link }}</td>
         <td>{{ ch.is_active }}</td>
         <td class="row">
-          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/toggle') }}"><button type="submit">on/off</button></form>
-          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/delete') }}"><button type="submit">удалить</button></form>
+          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/toggle') }}"><button type="submit" class="secondary">on/off</button></form>
+          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/delete') }}"><button type="submit" class="danger">удалить</button></form>
         </td>
       </tr>
       {% endfor %}
@@ -138,9 +128,9 @@
     </form>
   </section>
 
-  <section>
+  <section class="panel">
     <h2>Заявки на Премиум</h2>
-    {% if not pending %}<p>Нет заявок.</p>{% endif %}
+    {% if not pending %}<p class="hint">Нет заявок.</p>{% endif %}
     <table>
       {% for o in pending %}
       <tr>
@@ -149,14 +139,14 @@
         <td>plan {{ o.plan_id }}</td>
         <td class="row">
           <form method="post" action="{{ url('/orders/' ~ o.id ~ '/approve') }}"><button type="submit">OK</button></form>
-          <form method="post" action="{{ url('/orders/' ~ o.id ~ '/reject') }}"><button type="submit">Reject</button></form>
+          <form method="post" action="{{ url('/orders/' ~ o.id ~ '/reject') }}"><button type="submit" class="secondary">Reject</button></form>
         </td>
       </tr>
       {% endfor %}
     </table>
   </section>
 
-  <section>
+  <section class="panel">
     <h2>Активный Премиум</h2>
     <table>
       {% for u in premiums %}
@@ -165,43 +155,41 @@
         <td>@{{ u.username or '-' }}</td>
         <td>{{ u.premium_until }}</td>
       </tr>
+      {% else %}
+      <tr><td colspan="3" class="hint">Пока никого.</td></tr>
       {% endfor %}
     </table>
   </section>
 
-  <section>
+  <section class="panel">
     <h2>Заблокированные</h2>
     <p>Автоблок: больше 5 жалоб за 3 месяца. Жалоба — один раз с одного аккаунта.</p>
-    {% if not blocked %}<p>Список пуст.</p>{% endif %}
+    {% if not blocked %}<p class="hint">Список пуст.</p>{% endif %}
     {% for u, profile, reports_n in blocked %}
-    <article style="border:1px solid #eee; padding:1rem; margin:.8rem 0;">
-      <div class="row" style="align-items:flex-start;">
-        {% if profile and profile.photo_file_id %}
-        <img src="{{ url('/users/' ~ u.tg_id ~ '/photo') }}" alt="photo"
-             style="width:140px;height:140px;object-fit:cover;background:#f2f2f2;">
-        {% else %}
-        <div style="width:140px;height:140px;background:#f2f2f2;display:flex;align-items:center;justify-content:center;">нет фото</div>
+    <article class="blocked-card">
+      {% if profile and profile.photo_file_id %}
+      <img src="{{ url('/users/' ~ u.tg_id ~ '/photo') }}" alt="photo">
+      {% else %}
+      <div class="ph">нет фото</div>
+      {% endif %}
+      <div>
+        <p><strong>ID:</strong> {{ u.tg_id }}
+          {% if u.username %} · <a href="https://t.me/{{ u.username }}" target="_blank">@{{ u.username }}</a>{% endif %}
+        </p>
+        <p><strong>Жалоб за 3 мес:</strong> {{ reports_n }}</p>
+        <p><strong>Заблокирован:</strong> {{ u.blocked_at }}</p>
+        {% if profile %}
+        <p><strong>Имя:</strong> {{ profile.name }} · <strong>Возраст:</strong> {{ profile.age }} · <strong>Город:</strong> {{ profile.city_name }}</p>
+        <p><strong>Пол:</strong> {{ profile.gender }} · <strong>Ищет:</strong> {{ profile.looking_for }}</p>
+        <p><strong>Координаты:</strong> {{ profile.lat }}, {{ profile.lon }}</p>
+        <p><strong>О себе:</strong> {{ profile.description or '—' }}</p>
         {% endif %}
-        <div>
-          <p><strong>ID:</strong> {{ u.tg_id }}
-            {% if u.username %} · <a href="https://t.me/{{ u.username }}" target="_blank">@{{ u.username }}</a>{% endif %}
-          </p>
-          <p><strong>Жалоб за 3 мес:</strong> {{ reports_n }}</p>
-          <p><strong>Заблокирован:</strong> {{ u.blocked_at }}</p>
-          {% if profile %}
-          <p><strong>Имя:</strong> {{ profile.name }} · <strong>Возраст:</strong> {{ profile.age }} · <strong>Город:</strong> {{ profile.city_name }}</p>
-          <p><strong>Пол:</strong> {{ profile.gender }} · <strong>Ищет:</strong> {{ profile.looking_for }}</p>
-          <p><strong>Координаты:</strong> {{ profile.lat }}, {{ profile.lon }}</p>
-          <p><strong>О себе:</strong> {{ profile.description or '—' }}</p>
-          <p><strong>Анкета активна:</strong> {{ profile.is_active }} · <strong>Заполнена:</strong> {{ profile.is_complete }}</p>
-          {% endif %}
-          <form method="post" action="{{ url('/users/' ~ u.tg_id ~ '/unban') }}">
-            <button type="submit">Разбанить</button>
-          </form>
-        </div>
+        <form method="post" action="{{ url('/users/' ~ u.tg_id ~ '/unban') }}">
+          <button type="submit">Разбанить</button>
+        </form>
       </div>
     </article>
     {% endfor %}
   </section>
-</body>
-</html>
+</div>
+{% endblock %}

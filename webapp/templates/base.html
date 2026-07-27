@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Vinchik Admin{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f3f6f4;
+      --bg-accent: #e7efe9;
+      --surface: #ffffff;
+      --ink: #1a2420;
+      --muted: #5c6b64;
+      --line: #d5e0da;
+      --brand: #1f6b4f;
+      --brand-hover: #18553f;
+      --danger: #b42318;
+      --ok: #067647;
+      --shadow: 0 10px 30px rgba(26, 36, 32, 0.06);
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "IBM Plex Sans", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(900px 420px at 10% -10%, #d9ebe2 0%, transparent 55%),
+        radial-gradient(700px 380px at 100% 0%, #e8f0ea 0%, transparent 50%),
+        var(--bg);
+    }
+    h1, h2, h3 {
+      font-family: Manrope, system-ui, sans-serif;
+      letter-spacing: -0.02em;
+      margin: 0 0 .5rem;
+    }
+    a { color: var(--brand); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      font-size: .9em;
+      background: var(--bg-accent);
+      padding: .1rem .35rem;
+      border-radius: 6px;
+    }
+    .wrap {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 3rem;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+    .brand {
+      font-family: Manrope, sans-serif;
+      font-weight: 700;
+      font-size: 1.35rem;
+    }
+    .brand span { color: var(--brand); }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.15rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .panel h2 {
+      font-size: 1.05rem;
+      margin-bottom: .35rem;
+    }
+    .panel > p, .hint {
+      color: var(--muted);
+      font-size: .95rem;
+      margin: 0 0 1rem;
+      line-height: 1.45;
+    }
+    .row {
+      display: flex;
+      gap: .75rem;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: .35rem;
+      font-size: .85rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    input[type="text"],
+    input[type="password"],
+    input[type="number"],
+    select {
+      min-width: 140px;
+      padding: .55rem .7rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+    }
+    input:focus, select:focus {
+      outline: 2px solid rgba(31, 107, 79, .25);
+      border-color: var(--brand);
+    }
+    button, .btn {
+      appearance: none;
+      border: 0;
+      border-radius: 10px;
+      padding: .6rem 1rem;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--brand);
+      color: #fff;
+    }
+    button:hover { background: var(--brand-hover); }
+    button.secondary {
+      background: var(--bg-accent);
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+    button.danger { background: var(--danger); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .95rem;
+    }
+    th, td {
+      text-align: left;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+    .flash-ok { color: var(--ok); font-weight: 600; }
+    .flash-err, .err { color: var(--danger); font-weight: 600; }
+    .check {
+      flex-direction: row;
+      align-items: center;
+      gap: .45rem;
+      margin-bottom: .4rem;
+    }
+    .blocked-card {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      padding: 1rem 0;
+      border-top: 1px solid var(--line);
+    }
+    .blocked-card:first-of-type { border-top: 0; }
+    .blocked-card img, .ph {
+      width: 120px;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 12px;
+      background: var(--bg-accent);
+    }
+    .ph {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: .85rem;
+    }
+    .login-shell {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
+    .login-card {
+      width: min(400px, 100%);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 1.5rem;
+    }
+    .login-card h1 { margin-bottom: .25rem; }
+    .login-card .hint { margin-bottom: 1.25rem; }
+    .login-card input, .login-card button { width: 100%; }
+    .login-card label { margin-bottom: .75rem; }
+    h3 { font-size: .95rem; margin: 1rem 0 .6rem; color: var(--muted); }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% block body %}{% endblock %}
+</body>
+</html>

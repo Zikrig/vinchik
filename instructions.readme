@@ -87,7 +87,25 @@ docker compose logs -f bot
 
 В логах должно быть: `listening on 0.0.0.0:8081/vinchik/webhook` (не 8180).
 
+Если в логах `POST /webhook/bot ... 404` — nginx **переписывает** путь. Нужно так:
+
+```nginx
+location = /vinchik/webhook {
+    proxy_pass http://127.0.0.1:8181;   # без /webhook/bot в конце!
+    ...
+}
+```
+
+См. [`deploy/nginx-vinchik.snippet.conf`](deploy/nginx-vinchik.snippet.conf).
+
 Админка: https://krigz.com/vinchik/login
+
+## Где лежат данные
+
+Всё пользовательское — в **PostgreSQL** (Docker-том `pgdata`):
+анкеты, лайки, жалобы, премиум, настройки, каналы.
+Фото анкет — как Telegram `file_id` (файлы на диск бота не копируются, кроме тестовых `data/test.png`).
+FSM (шаг диалога) — в **Redis**, это не анкеты.
 
 ## Бэкап Postgres
 
