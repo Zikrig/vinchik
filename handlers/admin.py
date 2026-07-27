@@ -11,6 +11,7 @@ from services.premium import (
     approve_order,
     list_pending_orders,
     list_premium_users,
+    notify_premium_activated,
     reject_order,
 )
 from services.reports import list_blocked_users, unban_user
@@ -172,10 +173,7 @@ async def adm_ok(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> No
     await callback.answer("OK")
     if result:
         order, user = result
-        try:
-            await bot.send_message(user.tg_id, t("premium_activated", user.language))
-        except Exception:
-            pass
+        await notify_premium_activated(bot, user)
         assert callback.message
         await callback.message.edit_text(f"Заявка #{order.id} одобрена")
 

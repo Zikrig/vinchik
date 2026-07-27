@@ -1,11 +1,45 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
+from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import OrderStatus, PremiumOrder, PremiumPlan, User
+from locales import t
+
+_TZ = ZoneInfo("Asia/Dushanbe")
+
+
+def _fmt_dt(dt: datetime | None) -> str:
+    if dt is None:
+        return "—"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(_TZ).strftime("%d.%m.%Y %H:%M")
+
+
+async def notify_premium_activated(bot: Bot, user: User) -> None:
+    lang = user.language or "ru"
+    text = t("premium_activated", lang, dt=_fmt_dt(user.premium_until))
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=t("btn_premium_ok", lang),
+                    callback_data="menu:root",
+                )
+            ]
+        ]
+    )
+    try:
+        await bot.send_message(user.tg_id, text, reply_markup=kb)
+    except TelegramAPIError:
+        pass
 
 
 async def list_active_plans(session: AsyncSession) -> list[PremiumPlan]:

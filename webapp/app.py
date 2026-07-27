@@ -34,6 +34,7 @@ from services.premium import (
     approve_order,
     list_pending_orders,
     list_premium_users,
+    notify_premium_activated,
     reject_order,
 )
 from services.reports import list_blocked_users, unban_user
@@ -311,7 +312,14 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        await approve_order(session, order_id, admin_id=0)
+        result = await approve_order(session, order_id, admin_id=0)
+        if result:
+            _, user = result
+            bot = Bot(token=settings.bot_token)
+            try:
+                await notify_premium_activated(bot, user)
+            finally:
+                await bot.session.close()
         return RedirectResponse(settings.abs_path("/"), status_code=303)
 
     @app.post("/orders/{order_id}/reject")
