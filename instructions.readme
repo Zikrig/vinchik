@@ -20,16 +20,19 @@
 docker compose up --build -d
 ```
 
-Сервисы:
+Сервисы (порты на хосте — чтобы не пересечься с другими ботами на 8080/8085):
 
-| Сервис | Порт | Назначение |
-|--------|------|------------|
-| bot | 8081 | Telegram (polling по умолчанию; webhook-порт при `USE_WEBHOOK=true`) |
-| web | 8080 | Админка |
+| Сервис | Хост → контейнер | Назначение |
+|--------|------------------|------------|
+| bot | **8181** → 8081 | Telegram webhook (при `USE_WEBHOOK=true`) |
+| web | **8180** → 8080 | Админка |
 | db | — | PostgreSQL |
 | redis | — | FSM |
 
-Админка: http://localhost:8080  
+Админка локально: http://localhost:8180  
+На сервере через nginx, например: `https://krigz.com/vinchik/` → `127.0.0.1:8180`  
+Webhook: `https://krigz.com/vinchik/webhook` → `127.0.0.1:8181` (+ путь из `WEBHOOK_PATH`)
+
 В боте: `/admin`
 
 Логи:
@@ -44,16 +47,18 @@ docker compose logs -f bot
 
 Чтобы включить **webhook**:
 
-1. Нужен HTTPS-домен (nginx/Caddy → `bot:8081`)
+1. HTTPS-домен (nginx → `127.0.0.1:8181`)
 2. В `.env`:
    ```
    USE_WEBHOOK=true
-   WEBHOOK_BASE_URL=https://your.domain
+   WEBHOOK_BASE_URL=https://krigz.com
    WEBHOOK_PATH=/webhook/bot
    WEBHOOK_SECRET=длинный-секрет
    ```
-3. Проксируй `https://your.domain/webhook/bot` → `http://bot:8081/webhook/bot`
-4. `docker compose up -d --build bot`
+3. В nginx, например:
+   - `/vinchik/webhook` → `http://127.0.0.1:8181/webhook/bot`
+   - `/vinchik/` → `http://127.0.0.1:8180/`
+4. `docker compose up -d --build`
 
 Без публичного HTTPS Telegram webhook не примет.
 
