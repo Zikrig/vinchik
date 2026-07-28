@@ -177,8 +177,10 @@
     <p>
       Статус:
       <span data-premium-status>
-      {% if u.premium_until %}
+      {% if premium_active and u.premium_until %}
       <strong class="flash-ok">активен до {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC</strong>
+      {% elif u.premium_until %}
+      <span class="meta">снят · дата {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC</span>
       {% else %}
       <span class="meta">нет</span>
       {% endif %}
@@ -189,7 +191,7 @@
           class="js-ajax js-confirm-changes" data-ajax="premium-save"
           data-confirm-labels='{"premium_until":"дата окончания премиума"}'>
       <input type="hidden" name="action" value="set">
-      <label>Дата окончания (YYYY-MM-DD или YYYY-MM-DD HH:MM; пусто = снять)
+      <label>Дата окончания (YYYY-MM-DD или YYYY-MM-DD HH:MM; пусто = снять → 2004-01-01)
         <input type="text" name="premium_until"
                value="{% if u.premium_until %}{{ u.premium_until.strftime('%Y-%m-%d %H:%M') }}{% endif %}"
                placeholder="2026-08-01 00:00">
@@ -219,7 +221,7 @@
         <button type="submit" class="secondary">+30 дней</button>
       </form>
       <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
-            data-confirm="Вы уверены, что хотите сохранить новое значение: снять премиум?">
+            data-confirm="Вы уверены, что хотите снять премиум (дата → 2004-01-01)?">
         <input type="hidden" name="action" value="clear">
         <button type="submit" class="danger">Снять премиум</button>
       </form>

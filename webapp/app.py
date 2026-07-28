@@ -37,7 +37,7 @@ from services.accounts import (
     update_account_profile,
     update_account_user,
 )
-from services.users import load_user_with_profile
+from services.users import load_user_with_profile, is_premium
 from services.media import local_photo_path
 from services.premium import (
     approve_order,
@@ -162,7 +162,7 @@ def serialize_account_hero(user) -> dict:
         "is_blocked": bool(user.is_blocked),
         "is_active": bool(p.is_active) if p else False,
         "is_complete": bool(p.is_complete) if p else False,
-        "has_premium": user.premium_until is not None,
+        "has_premium": is_premium(user),
         "has_photo": bool(p and p.photo_file_id),
     }
 
@@ -308,6 +308,7 @@ def create_app() -> FastAPI:
                 "p": user.profile,
                 "likes": likes,
                 "is_admin": user_id in settings.admin_id_set,
+                "premium_active": is_premium(user),
                 "flash": flash,
             },
         )
@@ -470,6 +471,7 @@ def create_app() -> FastAPI:
             settings.abs_path(f"/accounts/{user_id}?flash=saved"),
             message="Сохранено.",
             premium_until=premium_until_out,
+            premium_active=is_premium(updated),
             fields={"premium_until": premium_until_out or ""},
             hero=serialize_account_hero(updated),
         )

@@ -13,6 +13,9 @@ from services.users import load_user_with_profile
 
 MAP_MARKERS_LIMIT = 50
 
+# Admin "снять премиум" — дата в прошлом: is_premium() = false, поле не пустое.
+PREMIUM_REVOKED_UNTIL = datetime(2004, 1, 1, 0, 0, tzinfo=UTC)
+
 
 def _parse_bool(raw: str | None) -> bool | None:
     if raw is None or raw == "" or raw == "any":
@@ -245,7 +248,7 @@ async def set_account_premium(
 
     now = datetime.now(UTC)
     if clear:
-        user.premium_until = None
+        user.premium_until = PREMIUM_REVOKED_UNTIL
     elif add_days is not None and add_days > 0:
         base = user.premium_until
         if base is not None and base.tzinfo is None:
@@ -256,7 +259,7 @@ async def set_account_premium(
     elif premium_until_raw is not None:
         raw = (premium_until_raw or "").strip()
         if not raw:
-            user.premium_until = None
+            user.premium_until = PREMIUM_REVOKED_UNTIL
         else:
             try:
                 normalized = raw.replace("T", " ")

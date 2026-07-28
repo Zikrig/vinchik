@@ -534,18 +534,22 @@
           form.reset();
         } else if (kind === "premium-save") {
           const status = document.querySelector("[data-premium-status]");
+          const until = data.premium_until || "";
           if (status) {
-            if (data.premium_until) {
+            if (data.premium_active && until) {
               status.innerHTML =
                 '<strong class="flash-ok">активен до ' +
-                escapeHtml(data.premium_until) +
+                escapeHtml(until) +
                 " UTC</strong>";
+            } else if (until) {
+              status.innerHTML =
+                '<span class="meta">снят · дата ' + escapeHtml(until) + " UTC</span>";
             } else {
               status.innerHTML = '<span class="meta">нет</span>';
             }
           }
           const dateForm = document.querySelector("#premium form.js-confirm-changes");
-          const dateFields = { premium_until: data.premium_until || "" };
+          const dateFields = { premium_until: until };
           if (dateForm) window.applyFormFields(dateForm, dateFields);
           else window.applyFormFields(form, data.fields || dateFields);
           if (dateForm && typeof dateForm._ajaxAfter === "function" && dateForm !== form) {
