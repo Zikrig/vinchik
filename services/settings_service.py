@@ -12,6 +12,7 @@ DEFAULTS = {
     "max_distance_km": str(settings.default_max_distance_km),
     "profile_reshow_days": str(settings.default_profile_reshow_days),
     "registration_only": "true" if settings.registration_only_default else "false",
+    "test_users_visible": "true",
     "manager_contact": settings.manager_contact,
     "payment_card": settings.payment_card or "укажите карту в админке",
     "payment_check_time": settings.payment_check_time,
@@ -74,6 +75,15 @@ async def get_profile_reshow_days(session: AsyncSession) -> int:
 
 async def is_registration_only(session: AsyncSession) -> bool:
     return (await get_setting(session, "registration_only", "true")).lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+async def are_test_users_visible_setting(session: AsyncSession) -> bool:
+    return (await get_setting(session, "test_users_visible", "true")).lower() in {
         "1",
         "true",
         "yes",

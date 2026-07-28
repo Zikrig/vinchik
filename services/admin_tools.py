@@ -90,7 +90,9 @@ async def _next_test_tg_id(session: AsyncSession) -> int:
 
 async def create_test_users(session: AsyncSession, count: int) -> int:
     count = max(0, min(int(count), 100))
-    visible = await are_test_users_visible(session)
+    from services.settings_service import are_test_users_visible_setting
+
+    visible = await are_test_users_visible_setting(session)
     center_lat, center_lon, city = await _test_spawn_center(session)
     created = 0
     for _ in range(count):
@@ -140,20 +142,15 @@ async def count_test_users(session: AsyncSession) -> int:
 
 
 async def are_test_users_visible(session: AsyncSession) -> bool:
-    """True if there are no test users yet, or all test profiles are active in feed."""
-    total = await count_test_users(session)
-    if total == 0:
-        return True
-    result = await session.execute(
-        select(func.count())
-        .select_from(Profile)
-        .join(User, User.tg_id == Profile.user_id)
-        .where(User.is_test.is_(True), Profile.is_active.is_(True))
-    )
-    return int(result.scalar_one()) == total
+    """Admin switch state (setting). Profiles are synced when the switch flips."""
+    from services.settings_service import are_test_users_visible_setting
+
+    return await are_test_users_visible_setting(session)
 
 
 async def set_test_users_visible(session: AsyncSession, visible: bool) -> int:
+    from services.settings_service import set_setting
+
     result = await session.execute(
         select(Profile)
         .join(User, User.tg_id == Profile.user_id)
@@ -163,6 +160,7 @@ async def set_test_users_visible(session: AsyncSession, visible: bool) -> int:
     for p in profiles:
         p.is_active = visible
     await session.commit()
+    await set_setting(session, "test_users_visible", "true" if visible else "false")
     return len(profiles)
 
 async def clear_test_users(session: AsyncSession) -> int:

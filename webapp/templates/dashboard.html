@@ -22,7 +22,6 @@
   <nav class="jump">
     <a href="#status">Режимы</a>
     <a href="#accounts">Аккаунты</a>
-    <a href="#tests">Тесты</a>
     <a href="#settings">Настройки</a>
     <a href="#channels">Каналы</a>
     <a href="#orders">Заявки</a>
@@ -33,14 +32,13 @@
 
   <section class="panel" id="status">
     <h2>Режимы</h2>
-    <p>Мгновенные переключатели. Зелёный = включено, красный = выключено.</p>
     <div class="switch-list">
       <div class="switch-row">
         <div>
           <div class="label">Soft-launch</div>
           <p class="hint">ON — только регистрация, лента закрыта. OFF — бот работает полностью.</p>
         </div>
-        <form method="post" action="{{ url('/settings/soft-launch') }}">
+        <form method="post" action="{{ url('/settings/soft-launch') }}" class="js-ajax" data-ajax="soft-launch">
           <input type="hidden" name="registration_only" value="{{ '0' if registration_only else '1' }}">
           <button type="submit" class="status-pill {{ 'on' if registration_only else 'off' }}">
             <span class="dot"></span>
@@ -51,12 +49,10 @@
       <div class="switch-row">
         <div>
           <div class="label">Тестовые в ленте</div>
-          <p class="hint">Показать или скрыть все тестовые анкеты сразу (сейчас {{ test_users_count }}).</p>
+          <p class="hint">Показать или скрыть все тестовые анкеты сразу (сейчас <span data-test-count>{{ test_users_count }}</span>).</p>
         </div>
-        <form method="post" action="{{ url('/test-users/visibility') }}">
-          {% if not test_users_visible %}
-          <input type="hidden" name="visible" value="1">
-          {% endif %}
+        <form method="post" action="{{ url('/test-users/visibility') }}" class="js-ajax" data-ajax="test-visibility">
+          <input type="hidden" name="visible" value="{{ '0' if test_users_visible else '1' }}">
           <button type="submit" class="status-pill {{ 'on' if test_users_visible else 'off' }}">
             <span class="dot"></span>
             {% if test_users_visible %}ON{% else %}OFF{% endif %}
@@ -68,28 +64,24 @@
 
   <section class="panel" id="accounts">
     <h2>Аккаунты</h2>
-    <p>Поиск, фильтры, карта, карточка с премиумом и лайками.</p>
-    <p><a class="btn" href="{{ url('/accounts') }}">Открыть список аккаунтов</a></p>
-  </section>
-
-  <section class="panel" id="tests">
-    <h2>Тестовые пользователи</h2>
-    <p>Фото: <code>data/test.png</code>. Новые — в радиусе ~15 км от гео админа (или Душанбе).</p>
-    <form method="post" action="{{ url('/test-users/create') }}" class="row">
+    <p><a class="btn" href="{{ url('/accounts') }}">Открыть список</a></p>
+    <h3>Тестовые</h3>
+    <p class="hint">Сейчас: <strong data-test-count>{{ test_users_count }}</strong></p>
+    <form method="post" action="{{ url('/test-users/create') }}" class="row js-ajax" data-ajax="test-create">
       <label>Сколько
         <input type="number" name="count" value="10" min="1" max="100" required>
       </label>
       <button type="submit">Добавить</button>
     </form>
-    <form method="post" action="{{ url('/test-users/clear') }}" style="margin-top:.75rem;"
-          onsubmit="return confirm('Удалить всех тестовых пользователей?');">
+    <form method="post" action="{{ url('/test-users/clear') }}" class="js-ajax" data-ajax="test-clear"
+          data-confirm="Удалить всех тестовых пользователей?" style="margin-top:.75rem;">
       <button type="submit" class="secondary">Удалить всех тестовых</button>
     </form>
   </section>
 
   <section class="panel" id="settings">
     <h2>Настройки</h2>
-    <form method="post" action="{{ url('/settings') }}">
+    <form method="post" action="{{ url('/settings') }}" class="js-ajax">
       <div class="row">
         <label>Лимит лайков / сутки UTC
           <input type="number" name="daily_like_limit" value="{{ limit }}" min="1" required>
@@ -129,7 +121,7 @@
     <table>
       <tr><th>ID</th><th>Название</th><th>Ссылка</th><th>Статус</th><th></th></tr>
       {% for ch in channels %}
-      <tr>
+      <tr data-channel-id="{{ ch.id }}">
         <td>{{ ch.channel_id }}</td>
         <td>{{ ch.title }}</td>
         <td>{{ ch.invite_link }}</td>
@@ -140,13 +132,14 @@
           </span>
         </td>
         <td class="row">
-          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/toggle') }}">
+          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/toggle') }}" class="js-ajax" data-ajax="channel-toggle">
             <button type="submit" class="status-pill {{ 'on' if ch.is_active else 'off' }}">
               <span class="dot"></span>
               {% if ch.is_active %}Выкл{% else %}Вкл{% endif %}
             </button>
           </form>
-          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/delete') }}">
+          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/delete') }}" class="js-ajax" data-ajax="channel-delete"
+                data-confirm="Удалить канал?">
             <button type="submit" class="danger">удалить</button>
           </form>
         </td>
@@ -154,7 +147,7 @@
       {% endfor %}
     </table>
     <h3>Добавить канал</h3>
-    <form method="post" action="{{ url('/channels/add') }}" class="row">
+    <form method="post" action="{{ url('/channels/add') }}" class="row js-ajax" data-ajax="channel-add">
       <input name="channel_id" placeholder="@channel или -100..." required>
       <input name="title" placeholder="Название">
       <input name="invite_link" placeholder="https://t.me/...">
@@ -172,8 +165,8 @@
         <td>user {{ o.user_id }}</td>
         <td>plan {{ o.plan_id }}</td>
         <td class="row">
-          <form method="post" action="{{ url('/orders/' ~ o.id ~ '/approve') }}"><button type="submit">OK</button></form>
-          <form method="post" action="{{ url('/orders/' ~ o.id ~ '/reject') }}"><button type="submit" class="secondary">Reject</button></form>
+          <form method="post" action="{{ url('/orders/' ~ o.id ~ '/approve') }}" class="js-ajax" data-ajax="order"><button type="submit">OK</button></form>
+          <form method="post" action="{{ url('/orders/' ~ o.id ~ '/reject') }}" class="js-ajax" data-ajax="order"><button type="submit" class="secondary">Reject</button></form>
         </td>
       </tr>
       {% endfor %}
@@ -218,7 +211,7 @@
         <p><strong>Координаты:</strong> {{ row.profile.lat }}, {{ row.profile.lon }}</p>
         <p><strong>О себе:</strong> {{ row.profile.description or '—' }}</p>
         {% endif %}
-        <form method="post" action="{{ url('/users/' ~ row.tg_id ~ '/unban') }}">
+        <form method="post" action="{{ url('/users/' ~ row.tg_id ~ '/unban') }}" class="js-ajax" data-ajax="unban">
           <button type="submit">Разбанить</button>
         </form>
       </div>
@@ -232,7 +225,7 @@
     {% if not admin_ids %}
     <p class="flash-err">В <code>ADMIN_IDS</code> никого нет.</p>
     {% else %}
-    <form method="post" action="{{ url('/admin-geo') }}">
+    <form method="post" action="{{ url('/admin-geo') }}" class="js-ajax">
       <div class="row">
         <label>Admin Telegram ID
           <select name="admin_tg_id" required>

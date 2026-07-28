@@ -175,14 +175,17 @@
     <h2>Премиум</h2>
     <p>
       Статус:
+      <span data-premium-status>
       {% if u.premium_until %}
       <strong class="flash-ok">активен до {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC</strong>
       {% else %}
       <span class="meta">нет</span>
       {% endif %}
+      </span>
     </p>
 
-    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-confirm-changes"
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
+          class="js-ajax js-confirm-changes" data-ajax="premium-save"
           data-confirm-labels='{"premium_until":"дата окончания премиума"}'>
       <input type="hidden" name="action" value="set">
       <label>Дата окончания (YYYY-MM-DD или YYYY-MM-DD HH:MM; пусто = снять)
@@ -196,26 +199,26 @@
     </form>
 
     <div class="actions" style="margin-top:.5rem">
-      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
-            onsubmit="return confirm('Вы уверены, что хотите сохранить новое значение: премиум +2 дня?');">
+      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
+            data-confirm="Вы уверены, что хотите сохранить новое значение: премиум +2 дня?">
         <input type="hidden" name="action" value="extend">
         <input type="hidden" name="add_days" value="2">
         <button type="submit" class="secondary">+2 дня</button>
       </form>
-      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
-            onsubmit="return confirm('Вы уверены, что хотите сохранить новое значение: премиум +7 дней?');">
+      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
+            data-confirm="Вы уверены, что хотите сохранить новое значение: премиум +7 дней?">
         <input type="hidden" name="action" value="extend">
         <input type="hidden" name="add_days" value="7">
         <button type="submit" class="secondary">+7 дней</button>
       </form>
-      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
-            onsubmit="return confirm('Вы уверены, что хотите сохранить новое значение: премиум +30 дней?');">
+      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
+            data-confirm="Вы уверены, что хотите сохранить новое значение: премиум +30 дней?">
         <input type="hidden" name="action" value="extend">
         <input type="hidden" name="add_days" value="30">
         <button type="submit" class="secondary">+30 дней</button>
       </form>
-      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
-            onsubmit="return confirm('Вы уверены, что хотите сохранить новое значение: снять премиум?');">
+      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
+            data-confirm="Вы уверены, что хотите сохранить новое значение: снять премиум?">
         <input type="hidden" name="action" value="clear">
         <button type="submit" class="danger">Снять премиум</button>
       </form>
@@ -225,13 +228,13 @@
   <section class="panel danger-zone" id="likes">
     <h2>Лайки</h2>
     <div class="stat-row">
-      <span>Отправлено: <strong>{{ likes.sent }}</strong></span>
-      <span>Получено: <strong>{{ likes.received }}</strong></span>
-      <span>Дневной счётчик (сумма): <strong>{{ likes.daily_used }}</strong></span>
+      <span>Отправлено: <strong data-likes-sent>{{ likes.sent }}</strong></span>
+      <span>Получено: <strong data-likes-received>{{ likes.received }}</strong></span>
+      <span>Дневной счётчик (сумма): <strong data-likes-daily>{{ likes.daily_used }}</strong></span>
     </div>
     <p class="hint">Удаление лайков снова покажет этих людей в ленте (иначе — после «Повтор анкеты» дней).</p>
-    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}"
-          onsubmit="return confirm('Удалить выбранные записи о лайках?');">
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}" class="js-ajax"
+          data-confirm="Удалить выбранные записи о лайках?">
       <label class="check"><input type="checkbox" name="clear_sent" checked> исходящие (likes from)</label>
       <label class="check"><input type="checkbox" name="clear_received" checked> входящие (likes to)</label>
       <label class="check"><input type="checkbox" name="clear_daily" checked> дневные лимиты (daily_like_stats)</label>
@@ -243,7 +246,7 @@
 
   <section class="panel" id="user">
     <h2>Аккаунт</h2>
-    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/user') }}" class="js-confirm-changes"
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/user') }}" class="js-ajax js-confirm-changes"
           data-confirm-labels='{"username":"Username","language":"язык","reengage_level":"reengage level","is_test":"test","is_blocked":"забанен"}'>
       <div class="grid2">
         <label>Username
@@ -277,7 +280,7 @@
 
   <section class="panel" id="profile">
     <h2>Анкета</h2>
-    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/profile') }}" class="js-confirm-changes"
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/profile') }}" class="js-ajax js-confirm-changes"
           data-confirm-labels='{"name":"имя","age":"возраст","city_name":"город","gender":"пол","looking_for":"ищет","lat":"lat","lon":"lon","photo_file_id":"photo_file_id","description":"описание","is_active":"анкета активна","is_complete":"анкета готова","clear_photo":"очистить фото"}'>
       <div class="grid2">
         <label>Имя
@@ -347,9 +350,10 @@
 
   document.querySelectorAll("form.js-confirm-changes").forEach(function (form) {
     const labels = JSON.parse(form.getAttribute("data-confirm-labels") || "{}");
-    const initial = snapshot(form);
+    form._confirmInitial = snapshot(form);
 
     form.addEventListener("submit", function (e) {
+      const initial = form._confirmInitial || {};
       const current = snapshot(form);
       const changed = [];
       Object.keys(current).forEach(function (name) {
@@ -360,12 +364,22 @@
       });
       if (!changed.length) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         alert("Нет изменений.");
         return;
       }
       const msg = "Вы уверены, что хотите сохранить новое значение: " + changed.join(", ") + "?";
-      if (!confirm(msg)) e.preventDefault();
-    });
+      if (!confirm(msg)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    }, true);
+
+    form._ajaxAfter = function () {
+      form._confirmInitial = snapshot(form);
+      const clearPhoto = form.querySelector('input[name="clear_photo"]');
+      if (clearPhoto) clearPhoto.checked = false;
+    };
   });
 })();
 </script>

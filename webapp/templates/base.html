@@ -273,10 +273,223 @@
     }
     .status-badge.on .dot { background: var(--ok); }
     .status-badge.off .dot { background: var(--danger); }
+    .toast-host {
+      position: fixed;
+      right: 1rem;
+      bottom: 1rem;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: .5rem;
+      max-width: min(360px, calc(100vw - 2rem));
+      pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      padding: .7rem .9rem;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      box-shadow: var(--shadow);
+      font-size: .9rem;
+      font-weight: 600;
+      color: var(--ink);
+      animation: toast-in .18s ease-out;
+    }
+    .toast.ok { border-color: #b7e4c7; color: var(--ok); }
+    .toast.err { border-color: #f3c4bf; color: var(--danger); }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
+    button:disabled, .status-pill:disabled { opacity: .6; cursor: wait; }
   </style>
   {% block head %}{% endblock %}
 </head>
 <body>
   {% block body %}{% endblock %}
+  <div class="toast-host" id="toast-host" aria-live="polite"></div>
+  <script>
+  (function () {
+    const host = document.getElementById("toast-host");
+
+    window.showToast = function (message, ok) {
+      if (!message) return;
+      const el = document.createElement("div");
+      el.className = "toast " + (ok === false ? "err" : "ok");
+      el.textContent = message;
+      host.appendChild(el);
+      setTimeout(function () {
+        el.remove();
+      }, 3200);
+    };
+
+    window.setPill = function (btn, on, onLabel, offLabel) {
+      if (!btn) return;
+      btn.classList.toggle("on", !!on);
+      btn.classList.toggle("off", !on);
+      const label = on ? (onLabel || "ON") : (offLabel || "OFF");
+      const dot = btn.querySelector(".dot");
+      btn.textContent = "";
+      if (dot) btn.appendChild(dot);
+      else {
+        const d = document.createElement("span");
+        d.className = "dot";
+        btn.appendChild(d);
+      }
+      btn.appendChild(document.createTextNode(" " + label));
+    };
+
+    window.ajaxSubmit = async function (form) {
+      const res = await fetch(form.action, {
+        method: (form.method || "POST").toUpperCase(),
+        body: new FormData(form),
+        headers: {
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        credentials: "same-origin",
+      });
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (_) {
+        data = { ok: false, error: "Некорректный ответ сервера" };
+      }
+      if (res.status === 401) {
+        window.location.href = form.action.replace(/\/[^/]*$/, "/login") || "/login";
+        throw new Error("auth");
+      }
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || "Ошибка");
+      }
+      return data;
+    };
+
+    function updateTestCount(count) {
+      document.querySelectorAll("[data-test-count]").forEach(function (el) {
+        el.textContent = String(count);
+      });
+    }
+
+    function channelUrls(channelId) {
+      const sample = document.querySelector('form[data-ajax="channel-toggle"]');
+      if (sample && sample.action) {
+        const base = sample.action.replace(/\/\d+\/toggle\/?$/, "");
+        return {
+          toggle: base + "/" + channelId + "/toggle",
+          del: base + "/" + channelId + "/delete",
+        };
+      }
+      const add = document.querySelector('form[data-ajax="channel-add"]');
+      const root = add ? add.action.replace(/\/channels\/add\/?$/, "") : "";
+      return {
+        toggle: root + "/channels/" + channelId + "/toggle",
+        del: root + "/channels/" + channelId + "/delete",
+      };
+    }
+
+    function channelRowHtml(ch) {
+      const urls = channelUrls(ch.id);
+      const on = !!ch.is_active;
+      return (
+        '<tr data-channel-id="' + ch.id + '">' +
+        "<td>" + escapeHtml(ch.channel_id || "") + "</td>" +
+        "<td>" + escapeHtml(ch.title || "") + "</td>" +
+        "<td>" + escapeHtml(ch.invite_link || "") + "</td>" +
+        '<td><span class="status-badge ' + (on ? "on" : "off") + '"><span class="dot"></span> ' +
+        (on ? "ON" : "OFF") + "</span></td>" +
+        '<td class="row">' +
+        '<form method="post" action="' + urls.toggle + '" class="js-ajax" data-ajax="channel-toggle">' +
+        '<button type="submit" class="status-pill ' + (on ? "on" : "off") + '"><span class="dot"></span> ' +
+        (on ? "Выкл" : "Вкл") + "</button></form>" +
+        '<form method="post" action="' + urls.del + '" class="js-ajax" data-ajax="channel-delete" data-confirm="Удалить канал?">' +
+        '<button type="submit" class="danger">удалить</button></form>' +
+        "</td></tr>"
+      );
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    document.addEventListener("submit", async function (e) {
+      const form = e.target.closest("form.js-ajax");
+      if (!form) return;
+      e.preventDefault();
+      if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) return;
+
+      const kind = form.dataset.ajax || "generic";
+      const btn = form.querySelector('button[type="submit"], button:not([type])');
+      if (btn) btn.disabled = true;
+
+      try {
+        const data = await window.ajaxSubmit(form);
+
+        if (kind === "soft-launch") {
+          const on = !!data.on;
+          const pill = form.querySelector(".status-pill");
+          window.setPill(pill, on, "ON", "OFF");
+          const hidden = form.querySelector('input[name="registration_only"]');
+          if (hidden) hidden.value = on ? "0" : "1";
+        } else if (kind === "test-visibility") {
+          const on = !!data.visible;
+          const pill = form.querySelector(".status-pill");
+          window.setPill(pill, on, "ON", "OFF");
+          const hidden = form.querySelector('input[name="visible"]');
+          if (hidden) hidden.value = on ? "0" : "1";
+          if (typeof data.count === "number") updateTestCount(data.count);
+        } else if (kind === "test-create" || kind === "test-clear") {
+          if (typeof data.count === "number") updateTestCount(data.count);
+        } else if (kind === "channel-toggle") {
+          const row = form.closest("tr");
+          const active = !!data.active;
+          const pill = form.querySelector(".status-pill");
+          window.setPill(pill, active, "Выкл", "Вкл");
+          const badge = row && row.querySelector(".status-badge");
+          if (badge) {
+            badge.classList.toggle("on", active);
+            badge.classList.toggle("off", !active);
+            badge.innerHTML = '<span class="dot"></span> ' + (active ? "ON" : "OFF");
+          }
+        } else if (kind === "channel-delete" || kind === "order" || kind === "unban") {
+          const row = form.closest("tr, article.blocked-card");
+          if (row) row.remove();
+        } else if (kind === "channel-add" && data.channel) {
+          const table = document.querySelector("#channels table");
+          if (table) table.insertAdjacentHTML("beforeend", channelRowHtml(data.channel));
+          form.reset();
+        } else if (kind === "premium-save" && data.premium_until !== undefined) {
+          const status = document.querySelector("[data-premium-status]");
+          if (status) {
+            if (data.premium_until) {
+              status.innerHTML =
+                '<strong class="flash-ok">активен до ' +
+                escapeHtml(data.premium_until) +
+                " UTC</strong>";
+            } else {
+              status.innerHTML = '<span class="meta">нет</span>';
+            }
+          }
+          const input = document.querySelector('input[name="premium_until"]');
+          if (input) input.value = data.premium_until || "";
+        }
+
+        if (typeof form._ajaxAfter === "function") form._ajaxAfter(data);
+        window.showToast(data.message || "Готово.", true);
+      } catch (err) {
+        if (err && err.message !== "auth") {
+          window.showToast(err.message || "Ошибка", false);
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+  })();
+  </script>
 </body>
 </html>

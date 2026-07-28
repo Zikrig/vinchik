@@ -6,7 +6,7 @@ from pathlib import Path
 import httpx
 from aiogram import Bot
 from fastapi import Depends, FastAPI, Form, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select
@@ -80,8 +80,33 @@ def is_logged_in(request: Request) -> bool:
 
 def require_auth(request: Request):
     if not is_logged_in(request):
+        if wants_json(request):
+            return JSONResponse({"ok": False, "error": "auth"}, status_code=401)
         return RedirectResponse(settings.abs_path("/login"), status_code=303)
     return None
+
+
+def wants_json(request: Request) -> bool:
+    accept = request.headers.get("accept", "")
+    return "application/json" in accept or (
+        request.headers.get("x-requested-with") == "XMLHttpRequest"
+    )
+
+
+def form_truthy(value: str | None) -> bool:
+    return (value or "").lower() in {"1", "true", "on", "yes"}
+
+
+def ok_response(request: Request, redirect: str, **payload):
+    if wants_json(request):
+        return JSONResponse({"ok": True, **payload})
+    return RedirectResponse(redirect, status_code=303)
+
+
+def err_response(request: Request, redirect: str, error: str = "error", **payload):
+    if wants_json(request):
+        return JSONResponse({"ok": False, "error": error, **payload}, status_code=400)
+    return RedirectResponse(redirect, status_code=303)
 
 
 def create_app() -> FastAPI:
@@ -253,13 +278,19 @@ def create_app() -> FastAPI:
                 reengage_level=reengage_level,
             )
         except Exception:
-            return RedirectResponse(
-                settings.abs_path(f"/accounts/{user_id}?flash=error"), status_code=303
+            return err_response(
+                request,
+                settings.abs_path(f"/accounts/{user_id}?flash=error"),
+                error="Не удалось сохранить",
             )
         if updated is None:
-            return RedirectResponse(settings.abs_path("/accounts"), status_code=303)
-        return RedirectResponse(
-            settings.abs_path(f"/accounts/{user_id}?flash=saved"), status_code=303
+            return err_response(
+                request, settings.abs_path("/accounts"), error="not_found"
+            )
+        return ok_response(
+            request,
+            settings.abs_path(f"/accounts/{user_id}?flash=saved"),
+            message="Сохранено.",
         )
 
     @app.post("/accounts/{user_id}/profile")
@@ -319,13 +350,19 @@ def create_app() -> FastAPI:
                 clear_photo=clear_photo is not None,
             )
         except Exception:
-            return RedirectResponse(
-                settings.abs_path(f"/accounts/{user_id}?flash=error"), status_code=303
+            return err_response(
+                request,
+                settings.abs_path(f"/accounts/{user_id}?flash=error"),
+                error="Не удалось сохранить",
             )
         if updated is None:
-            return RedirectResponse(settings.abs_path("/accounts"), status_code=303)
-        return RedirectResponse(
-            settings.abs_path(f"/accounts/{user_id}?flash=saved"), status_code=303
+            return err_response(
+                request, settings.abs_path("/accounts"), error="not_found"
+            )
+        return ok_response(
+            request,
+            settings.abs_path(f"/accounts/{user_id}?flash=saved"),
+            message="Сохранено.",
         )
 
     @app.post("/accounts/{user_id}/premium")
@@ -351,15 +388,27 @@ def create_app() -> FastAPI:
                     session, user_id, premium_until_raw=premium_until
                 )
         except Exception:
-            return RedirectResponse(
-                settings.abs_path(f"/accounts/{user_id}?flash=error"), status_code=303
+            return err_response(
+                request,
+                settings.abs_path(f"/accounts/{user_id}?flash=error"),
+                error="Не удалось сохранить",
             )
         if updated is None:
-            return RedirectResponse(
-                settings.abs_path(f"/accounts/{user_id}?flash=error"), status_code=303
+            return err_response(
+                request,
+                settings.abs_path(f"/accounts/{user_id}?flash=error"),
+                error="Не удалось сохранить",
             )
-        return RedirectResponse(
-            settings.abs_path(f"/accounts/{user_id}?flash=saved"), status_code=303
+        premium_until_out = (
+            updated.premium_until.strftime("%Y-%m-%d %H:%M")
+            if updated.premium_until
+            else None
+        )
+        return ok_response(
+            request,
+            settings.abs_path(f"/accounts/{user_id}?flash=saved"),
+            message="Сохранено.",
+            premium_until=premium_until_out,
         )
 
     @app.post("/accounts/{user_id}/clear-likes")
@@ -375,7 +424,9 @@ def create_app() -> FastAPI:
             return redir
         user = await load_user_with_profile(session, user_id)
         if user is None:
-            return RedirectResponse(settings.abs_path("/accounts"), status_code=303)
+            return err_response(
+                request, settings.abs_path("/accounts"), error="not_found"
+            )
         n = await clear_user_likes(
             session,
             user_id,
@@ -383,9 +434,11 @@ def create_app() -> FastAPI:
             received=clear_received is not None,
             daily_stats=clear_daily is not None,
         )
-        return RedirectResponse(
+        return ok_response(
+            request,
             settings.abs_path(f"/accounts/{user_id}?flash=likes_cleared_{n}"),
-            status_code=303,
+            message=f"Удалено записей: {n}.",
+            n=n,
         )
 
     @app.get("/users/{user_id}/photo")
@@ -424,12 +477,14 @@ def create_app() -> FastAPI:
         await unban_user(session, user_id)
         referer = request.headers.get("referer") or ""
         if f"/accounts/{user_id}" in referer:
-            return RedirectResponse(
-                settings.abs_path(f"/accounts/{user_id}?flash=saved"), status_code=303
-            )
-        if "/accounts" in referer:
-            return RedirectResponse(settings.abs_path("/accounts"), status_code=303)
-        return RedirectResponse(settings.abs_path("/"), status_code=303)
+            dest = settings.abs_path(f"/accounts/{user_id}?flash=saved")
+        elif "/accounts" in referer:
+            dest = settings.abs_path("/accounts")
+        else:
+            dest = settings.abs_path("/")
+        return ok_response(
+            request, dest, message="Разбанен.", remove=True, user_id=user_id
+        )
 
     @app.post("/settings")
     async def save_settings(
@@ -453,7 +508,9 @@ def create_app() -> FastAPI:
         await set_setting(session, "manager_contact", manager_contact.strip())
         await set_setting(session, "payment_card", payment_card.strip())
         await set_setting(session, "payment_check_time", payment_check_time.strip())
-        return RedirectResponse(settings.abs_path("/"), status_code=303)
+        return ok_response(
+            request, settings.abs_path("/"), message="Настройки сохранены."
+        )
 
     @app.post("/settings/soft-launch")
     async def toggle_soft_launch(
@@ -463,10 +520,15 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        on = registration_only in {"1", "true", "on", "yes"}
+        on = form_truthy(registration_only)
         await set_setting(session, "registration_only", "true" if on else "false")
         flash = "soft_on" if on else "soft_off"
-        return RedirectResponse(settings.abs_path(f"/?flash={flash}"), status_code=303)
+        return ok_response(
+            request,
+            settings.abs_path(f"/?flash={flash}"),
+            on=on,
+            message="Soft-launch включён." if on else "Soft-launch выключен — лента открыта.",
+        )
 
     @app.post("/channels/add")
     async def add_channel(
@@ -478,16 +540,27 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        session.add(
-            RequiredChannel(
-                channel_id=channel_id.strip(),
-                title=title.strip(),
-                invite_link=invite_link.strip(),
-                is_active=True,
-            )
+        ch = RequiredChannel(
+            channel_id=channel_id.strip(),
+            title=title.strip(),
+            invite_link=invite_link.strip(),
+            is_active=True,
         )
+        session.add(ch)
         await session.commit()
-        return RedirectResponse(settings.abs_path("/"), status_code=303)
+        await session.refresh(ch)
+        return ok_response(
+            request,
+            settings.abs_path("/"),
+            message="Канал добавлен.",
+            channel={
+                "id": ch.id,
+                "channel_id": ch.channel_id,
+                "title": ch.title,
+                "invite_link": ch.invite_link,
+                "is_active": ch.is_active,
+            },
+        )
 
     @app.post("/channels/{channel_pk}/toggle")
     async def toggle_channel(
@@ -496,10 +569,18 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         ch = await session.get(RequiredChannel, channel_pk)
+        active = False
         if ch:
             ch.is_active = not ch.is_active
+            active = ch.is_active
             await session.commit()
-        return RedirectResponse(settings.abs_path("/"), status_code=303)
+        return ok_response(
+            request,
+            settings.abs_path("/"),
+            id=channel_pk,
+            active=active,
+            message="Канал обновлён.",
+        )
 
     @app.post("/channels/{channel_pk}/delete")
     async def delete_channel(
@@ -511,7 +592,13 @@ def create_app() -> FastAPI:
         if ch:
             await session.delete(ch)
             await session.commit()
-        return RedirectResponse(settings.abs_path("/"), status_code=303)
+        return ok_response(
+            request,
+            settings.abs_path("/"),
+            id=channel_pk,
+            remove=True,
+            message="Канал удалён.",
+        )
 
     @app.post("/orders/{order_id}/approve")
     async def order_approve(
@@ -527,7 +614,13 @@ def create_app() -> FastAPI:
                 await notify_premium_activated(bot, user)
             finally:
                 await bot.session.close()
-        return RedirectResponse(settings.abs_path("/"), status_code=303)
+        return ok_response(
+            request,
+            settings.abs_path("/"),
+            id=order_id,
+            remove=True,
+            message="Заявка одобрена.",
+        )
 
     @app.post("/orders/{order_id}/reject")
     async def order_reject(
@@ -536,7 +629,13 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         await reject_order(session, order_id, admin_id=0)
-        return RedirectResponse(settings.abs_path("/"), status_code=303)
+        return ok_response(
+            request,
+            settings.abs_path("/"),
+            id=order_id,
+            remove=True,
+            message="Заявка отклонена.",
+        )
 
     @app.post("/admin-geo")
     async def save_admin_geo(
@@ -550,12 +649,16 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         if admin_tg_id not in settings.admin_id_set:
-            return RedirectResponse(
-                settings.abs_path("/?flash=bad_admin"), status_code=303
+            return err_response(
+                request,
+                settings.abs_path("/?flash=bad_admin"),
+                error="Неверный admin id.",
             )
         await set_user_geo(session, admin_tg_id, lat, lon, city_name)
-        return RedirectResponse(
-            settings.abs_path("/?flash=geo_saved"), status_code=303
+        return ok_response(
+            request,
+            settings.abs_path("/?flash=geo_saved"),
+            message="Геолокация админа сохранена.",
         )
 
     @app.post("/test-users/create")
@@ -567,22 +670,37 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         n = await create_test_users(session, count)
-        return RedirectResponse(
-            settings.abs_path(f"/?flash=test_created_{n}"), status_code=303
+        total = await count_test_users(session)
+        return ok_response(
+            request,
+            settings.abs_path(f"/?flash=test_created_{n}"),
+            n=n,
+            count=total,
+            message=f"Создано тестовых: {n}.",
         )
 
     @app.post("/test-users/visibility")
     async def test_users_visibility(
         request: Request,
-        visible: str | None = Form(None),
+        visible: str = Form("0"),
         session: AsyncSession = Depends(get_db),
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        n = await set_test_users_visible(session, bool(visible))
-        flash = "test_shown" if visible else "test_hidden"
-        return RedirectResponse(
-            settings.abs_path(f"/?flash={flash}_{n}"), status_code=303
+        on = form_truthy(visible)
+        n = await set_test_users_visible(session, on)
+        flash = "test_shown" if on else "test_hidden"
+        return ok_response(
+            request,
+            settings.abs_path(f"/?flash={flash}_{n}"),
+            visible=on,
+            n=n,
+            count=await count_test_users(session),
+            message=(
+                f"Тестовые показаны в ленте: {n}."
+                if on
+                else f"Тестовые скрыты из ленты: {n}."
+            ),
         )
 
     @app.post("/test-users/clear")
@@ -592,8 +710,12 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         n = await clear_test_users(session)
-        return RedirectResponse(
-            settings.abs_path(f"/?flash=test_cleared_{n}"), status_code=303
+        return ok_response(
+            request,
+            settings.abs_path(f"/?flash=test_cleared_{n}"),
+            n=n,
+            count=0,
+            message=f"Удалено тестовых: {n}.",
         )
 
     return app
