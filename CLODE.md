@@ -37,6 +37,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Жалобы: кнопка в ленте; >5 уникальных за 3 мес → `is_blocked`; разбан в админке с фото/анкетой.
 - Запуск только Docker (без локального venv).
 - По умолчанию polling; webhook — `USE_WEBHOOK=true` + HTTPS; хост-порт webhook **:8181** (внутри контейнера 8081).
+- Вне FSM любое личное сообщение → главное меню (`handlers/fallback.py`).
 - Массовых рассылок нет.
 
 ## Ловушки
