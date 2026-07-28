@@ -42,9 +42,11 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Вне FSM любое личное сообщение → главное меню (`handlers/fallback.py`).
 - Терминальные ответы (оплата отмечена, премиум включён, пустая лента, soft-launch, список лайков, reengage, лимит) — с `main_menu_kb`.
 - Массовых рассылок нет.
+- Сообщения про лимит / like_sent слать через `bot.send_message(user_id)`, не через `callback.message.answer` (фото / InaccessibleMessage).
 
 ## Ловушки
 
+- Код бота/веба в образе: после правок нужен `docker compose up -d --build` (volume только `./data`).
 - Бот должен быть админом обязательных каналов.
 - `callback_data` ≤ 64 байт.
 - Nominatim только при сохранении гео.

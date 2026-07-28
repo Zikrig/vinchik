@@ -231,11 +231,11 @@
   <section class="panel danger-zone" id="likes">
     <h2>Лайки</h2>
     <div class="stat-row">
-      <span>Отправлено: <strong data-likes-sent>{{ likes.sent }}</strong></span>
+      <span>Отправлено (все): <strong data-likes-sent>{{ likes.sent }}</strong></span>
       <span>Получено: <strong data-likes-received>{{ likes.received }}</strong></span>
-      <span>Дневной счётчик (сумма): <strong data-likes-daily>{{ likes.daily_used }}</strong></span>
+      <span>Сегодня (лимит): <strong data-likes-daily>{{ likes.daily_used }}</strong></span>
     </div>
-    <p class="hint">Удаление лайков снова покажет этих людей в ленте (иначе — после «Повтор анкеты» дней).</p>
+    <p class="hint">Лимит считает только ❤️/💌 за сегодня (UTC), мужчины без премиум. «Отправлено» включает 👎. Удаление лайков снова покажет людей в ленте.</p>
     <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}" class="js-ajax"
           data-ajax="likes-clear" data-confirm="Удалить выбранные записи о лайках?">
       <label class="check"><input type="checkbox" name="clear_sent" checked> исходящие (likes from)</label>

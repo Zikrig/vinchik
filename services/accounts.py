@@ -220,13 +220,21 @@ def filters_from_query(params) -> dict:
 
 
 async def account_like_stats(session: AsyncSession, user_id: int) -> dict[str, int]:
+    from services.limits import utc_today
+
     sent = await session.execute(
         select(func.count()).select_from(Like).where(Like.from_user_id == user_id)
     )
     received = await session.execute(
         select(func.count()).select_from(Like).where(Like.to_user_id == user_id)
     )
-    daily = await session.execute(
+    today = await session.execute(
+        select(func.coalesce(func.sum(DailyLikeStat.count), 0)).where(
+            DailyLikeStat.user_id == user_id,
+            DailyLikeStat.utc_date == utc_today(),
+        )
+    )
+    all_days = await session.execute(
         select(func.coalesce(func.sum(DailyLikeStat.count), 0)).where(
             DailyLikeStat.user_id == user_id
         )
@@ -234,7 +242,8 @@ async def account_like_stats(session: AsyncSession, user_id: int) -> dict[str, i
     return {
         "sent": int(sent.scalar_one()),
         "received": int(received.scalar_one()),
-        "daily_used": int(daily.scalar_one()),
+        "daily_used": int(today.scalar_one() or 0),
+        "daily_all_days": int(all_days.scalar_one()),
     }
 
 
