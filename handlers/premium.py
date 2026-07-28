@@ -234,9 +234,17 @@ async def premium_paid(callback: CallbackQuery, session: AsyncSession, bot: Bot)
         f"Заявка #{order_id}\n"
         f"user: {user.tg_id} {uname}"
     )
+    admin_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"adm:ok:{order_id}"),
+                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"adm:no:{order_id}"),
+            ]
+        ]
+    )
     for aid in settings.admin_id_set:
         try:
-            await bot.send_message(aid, admin_text)
+            await bot.send_message(aid, admin_text, reply_markup=admin_kb)
         except TelegramAPIError:
             pass
 

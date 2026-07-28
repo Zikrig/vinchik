@@ -1,5 +1,6 @@
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,11 +17,22 @@ from services.settings_service import (
     get_daily_like_limit,
     get_max_distance_km,
     get_payment_info,
+    get_profile_reshow_days,
     is_registration_only,
     set_setting,
 )
+from states.admin import AdminStates
 
 router = Router()
+
+_EDIT_PROMPTS = {
+    AdminStates.edit_limit.state: "Новый лимит лайков / сутки UTC (целое ≥ 1):",
+    AdminStates.edit_dist.state: "Новый радиус км (1–20000):",
+    AdminStates.edit_reshow.state: "Повтор анкеты в днях (0 = никогда; на ленту сейчас не влияет):",
+    AdminStates.edit_card.state: "Новая карта для приёма платежей:",
+    AdminStates.edit_check_time.state: "Новое время проверки оплаты:",
+    AdminStates.edit_manager.state: "Новые контакты менеджера:",
+}
 
 
 def _is_admin(user_id: int) -> bool:
@@ -38,6 +50,28 @@ def _root_kb() -> InlineKeyboardMarkup:
     )
 
 
+def _settings_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Лимит лайков", callback_data="adm:edit:limit")],
+            [InlineKeyboardButton(text="Радиус км", callback_data="adm:edit:dist")],
+            [InlineKeyboardButton(text="Повтор анкеты (дней)", callback_data="adm:edit:reshow")],
+            [InlineKeyboardButton(text="Карта оплаты", callback_data="adm:edit:card")],
+            [InlineKeyboardButton(text="Время проверки", callback_data="adm:edit:check_time")],
+            [InlineKeyboardButton(text="Контакты менеджера", callback_data="adm:edit:manager")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")],
+        ]
+    )
+
+
+def _cancel_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="adm:settings")],
+        ]
+    )
+
+
 async def _root_text(session: AsyncSession) -> str:
     pending = await list_pending_orders(session)
     reg_only = await is_registration_only(session)
@@ -45,75 +79,131 @@ async def _root_text(session: AsyncSession) -> str:
         "Админка\n"
         f"Заявок на оплату: {len(pending)}\n"
         f"Soft-launch (только регистрация): {reg_only}\n\n"
-        "Баны и константы оплаты — в веб-админке."
+        "Баны — в веб-админке."
     )
 
 
 async def _settings_text(session: AsyncSession) -> str:
     limit = await get_daily_like_limit(session)
     dist = await get_max_distance_km(session)
+    reshow = await get_profile_reshow_days(session)
+    reg_only = await is_registration_only(session)
     pay = await get_payment_info(session)
     return (
         "⚙️ Настройки\n\n"
         f"Лимит лайков / сутки UTC: {limit}\n"
-        f"Макс. радиус ленты: {dist:g} км\n\n"
-        f"Карта: {pay['card']}\n"
-        f"Время проверки: {pay['check_time']}\n"
-        f"Менеджер: {pay['manager']}\n\n"
-        "Карту / время / менеджера меняй в веб-админке."
-    )
-
-
-def _settings_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Лимит 20", callback_data="adm:limit:20"),
-                InlineKeyboardButton(text="Лимит 50", callback_data="adm:limit:50"),
-                InlineKeyboardButton(text="Лимит 100", callback_data="adm:limit:100"),
-            ],
-            [
-                InlineKeyboardButton(text="100 км", callback_data="adm:dist:100"),
-                InlineKeyboardButton(text="500 км", callback_data="adm:dist:500"),
-                InlineKeyboardButton(text="1000 км", callback_data="adm:dist:1000"),
-            ],
-            [
-                InlineKeyboardButton(text="5000 км", callback_data="adm:dist:5000"),
-                InlineKeyboardButton(text="20000 км", callback_data="adm:dist:20000"),
-            ],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")],
-        ]
+        f"Радиус км (макс. 20000): {dist:g}\n"
+        f"Повтор анкеты (дней): {reshow}\n"
+        f"Только регистрация (soft-launch): {reg_only}\n\n"
+        f"Карта для приёма платежей:\n{pay['card']}\n\n"
+        f"Время проверки оплаты:\n{pay['check_time']}\n\n"
+        f"Контакты менеджера:\n{pay['manager']}"
     )
 
 
 @router.message(Command("admin"))
-async def admin_cmd(message: Message, session: AsyncSession) -> None:
+async def admin_cmd(message: Message, session: AsyncSession, state: FSMContext) -> None:
     assert message.from_user
     if not _is_admin(message.from_user.id):
         await message.answer(t("no_access", "ru"))
         return
+    await state.clear()
     await message.answer(await _root_text(session), reply_markup=_root_kb())
 
 
 @router.callback_query(F.data == "adm:root")
-async def adm_root(callback: CallbackQuery, session: AsyncSession) -> None:
+async def adm_root(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
+    await state.clear()
     await callback.answer()
     assert callback.message
     await callback.message.edit_text(await _root_text(session), reply_markup=_root_kb())
 
 
 @router.callback_query(F.data == "adm:settings")
-async def adm_settings(callback: CallbackQuery, session: AsyncSession) -> None:
+async def adm_settings(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
+    await state.clear()
     await callback.answer()
     assert callback.message
     await callback.message.edit_text(
         await _settings_text(session), reply_markup=_settings_kb()
+    )
+
+
+@router.callback_query(F.data.startswith("adm:edit:"))
+async def adm_edit_start(callback: CallbackQuery, state: FSMContext) -> None:
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(t("no_access", "ru"), show_alert=True)
+        return
+    field = callback.data.split(":")[2]  # type: ignore[union-attr]
+    mapping = {
+        "limit": AdminStates.edit_limit,
+        "dist": AdminStates.edit_dist,
+        "reshow": AdminStates.edit_reshow,
+        "card": AdminStates.edit_card,
+        "check_time": AdminStates.edit_check_time,
+        "manager": AdminStates.edit_manager,
+    }
+    st = mapping.get(field)
+    if st is None:
+        await callback.answer("—", show_alert=True)
+        return
+    await state.set_state(st)
+    await callback.answer()
+    assert callback.message
+    await callback.message.answer(_EDIT_PROMPTS[st.state], reply_markup=_cancel_kb())
+
+
+@router.message(StateFilter(AdminStates), F.text)
+async def adm_edit_value(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> None:
+    assert message.from_user
+    if not _is_admin(message.from_user.id):
+        await state.clear()
+        return
+    current = await state.get_state()
+    raw = (message.text or "").strip()
+    try:
+        if current == AdminStates.edit_limit.state:
+            value = max(1, int(raw))
+            await set_setting(session, "daily_like_limit", str(value))
+        elif current == AdminStates.edit_dist.state:
+            value = min(max(float(raw.replace(",", ".")), 1.0), 20000.0)
+            await set_setting(session, "max_distance_km", str(value))
+        elif current == AdminStates.edit_reshow.state:
+            value = max(0, int(raw))
+            await set_setting(session, "profile_reshow_days", str(value))
+        elif current == AdminStates.edit_card.state:
+            if not raw:
+                raise ValueError("empty")
+            await set_setting(session, "payment_card", raw)
+        elif current == AdminStates.edit_check_time.state:
+            if not raw:
+                raise ValueError("empty")
+            await set_setting(session, "payment_check_time", raw)
+        elif current == AdminStates.edit_manager.state:
+            if not raw:
+                raise ValueError("empty")
+            await set_setting(session, "manager_contact", raw)
+        else:
+            await state.clear()
+            return
+    except ValueError:
+        await message.answer("Некорректное значение. Попробуй ещё раз или отмени.")
+        return
+
+    await state.clear()
+    await message.answer(
+        "✅ Сохранено.\n\n" + await _settings_text(session),
+        reply_markup=_settings_kb(),
     )
 
 
@@ -201,32 +291,3 @@ async def adm_toggle_reg(callback: CallbackQuery, session: AsyncSession) -> None
     await callback.answer(f"registration_only={not current}")
     assert callback.message
     await callback.message.edit_text(await _root_text(session), reply_markup=_root_kb())
-
-
-@router.callback_query(F.data.startswith("adm:limit:"))
-async def adm_limit(callback: CallbackQuery, session: AsyncSession) -> None:
-    if not _is_admin(callback.from_user.id):
-        await callback.answer(t("no_access", "ru"), show_alert=True)
-        return
-    value = callback.data.split(":")[2]  # type: ignore[union-attr]
-    await set_setting(session, "daily_like_limit", value)
-    await callback.answer(f"limit={value}")
-    assert callback.message
-    await callback.message.edit_text(
-        await _settings_text(session), reply_markup=_settings_kb()
-    )
-
-
-@router.callback_query(F.data.startswith("adm:dist:"))
-async def adm_dist(callback: CallbackQuery, session: AsyncSession) -> None:
-    if not _is_admin(callback.from_user.id):
-        await callback.answer(t("no_access", "ru"), show_alert=True)
-        return
-    value = callback.data.split(":")[2]  # type: ignore[union-attr]
-    capped = min(max(float(value), 1.0), 20000.0)
-    await set_setting(session, "max_distance_km", str(capped))
-    await callback.answer(f"distance={capped:g}")
-    assert callback.message
-    await callback.message.edit_text(
-        await _settings_text(session), reply_markup=_settings_kb()
-    )
