@@ -16,59 +16,65 @@
   {% if flash and flash.startswith("test_cleared_") %}<p class="flash-ok">Удалено тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
   {% if flash and flash.startswith("test_shown_") %}<p class="flash-ok">Тестовые показаны в ленте: {{ flash.split('_')[-1] }}.</p>{% endif %}
   {% if flash and flash.startswith("test_hidden_") %}<p class="flash-ok">Тестовые скрыты из ленты: {{ flash.split('_')[-1] }}.</p>{% endif %}
+  {% if flash == "soft_on" %}<p class="flash-ok">Soft-launch включён.</p>{% endif %}
+  {% if flash == "soft_off" %}<p class="flash-ok">Soft-launch выключен — лента открыта.</p>{% endif %}
 
-  <section class="panel">
-    <h2>Моя геолокация</h2>
-    <p>Координаты профиля админа для ленты. По умолчанию — Душанбе.</p>
-    {% if not admin_ids %}
-    <p class="flash-err">В <code>ADMIN_IDS</code> никого нет.</p>
-    {% else %}
-    <form method="post" action="{{ url('/admin-geo') }}">
-      <div class="row">
-        <label>Admin Telegram ID
-          <select name="admin_tg_id" required>
-            {% for aid in admin_ids %}
-            <option value="{{ aid }}">{{ aid }}
-              {% set g = admin_geo.get(aid) %}
-              {% if g and g.lat is not none %} (сейчас {{ g.lat }}, {{ g.lon }}){% endif %}
-            </option>
-            {% endfor %}
-          </select>
-        </label>
-        <label>Широта (lat)
-          <input type="number" step="any" name="lat" value="{{ dushanbe_lat }}" required>
-        </label>
-        <label>Долгота (lon)
-          <input type="number" step="any" name="lon" value="{{ dushanbe_lon }}" required>
-        </label>
-        <label>Город
-          <input type="text" name="city_name" value="{{ dushanbe_city }}" required>
-        </label>
-        <button type="submit">Сохранить</button>
+  <nav class="jump">
+    <a href="#status">Режимы</a>
+    <a href="#accounts">Аккаунты</a>
+    <a href="#tests">Тесты</a>
+    <a href="#settings">Настройки</a>
+    <a href="#channels">Каналы</a>
+    <a href="#orders">Заявки</a>
+    <a href="#premiums">Премиум</a>
+    <a href="#blocked">Баны</a>
+    <a href="#geo">Гео</a>
+  </nav>
+
+  <section class="panel" id="status">
+    <h2>Режимы</h2>
+    <p>Мгновенные переключатели. Зелёный = включено, красный = выключено.</p>
+    <div class="switch-list">
+      <div class="switch-row">
+        <div>
+          <div class="label">Soft-launch</div>
+          <p class="hint">ON — только регистрация, лента закрыта. OFF — бот работает полностью.</p>
+        </div>
+        <form method="post" action="{{ url('/settings/soft-launch') }}">
+          <input type="hidden" name="registration_only" value="{{ '0' if registration_only else '1' }}">
+          <button type="submit" class="status-pill {{ 'on' if registration_only else 'off' }}">
+            <span class="dot"></span>
+            {% if registration_only %}ON{% else %}OFF{% endif %}
+          </button>
+        </form>
       </div>
-    </form>
-    {% endif %}
+      <div class="switch-row">
+        <div>
+          <div class="label">Тестовые в ленте</div>
+          <p class="hint">Показать или скрыть все тестовые анкеты сразу (сейчас {{ test_users_count }}).</p>
+        </div>
+        <form method="post" action="{{ url('/test-users/visibility') }}">
+          {% if not test_users_visible %}
+          <input type="hidden" name="visible" value="1">
+          {% endif %}
+          <button type="submit" class="status-pill {{ 'on' if test_users_visible else 'off' }}">
+            <span class="dot"></span>
+            {% if test_users_visible %}ON{% else %}OFF{% endif %}
+          </button>
+        </form>
+      </div>
+    </div>
   </section>
 
-  <section class="panel">
+  <section class="panel" id="accounts">
     <h2>Аккаунты</h2>
-    <p>Все пользователи, включая тестовые. Поиск и фильтры по полям.</p>
+    <p>Поиск, фильтры, карта, карточка с премиумом и лайками.</p>
     <p><a class="btn" href="{{ url('/accounts') }}">Открыть список аккаунтов</a></p>
   </section>
 
-  <section class="panel">
+  <section class="panel" id="tests">
     <h2>Тестовые пользователи</h2>
-    <p>Сейчас в базе: <strong>{{ test_users_count }}</strong>. Фото: <code>data/test.png</code>.
-      Новые создаются в радиусе ~15 км от гео админа (или Душанбе).
-      Галочка сразу включает или скрывает <em>все</em> тестовые анкеты в ленте.</p>
-    <form method="post" action="{{ url('/test-users/visibility') }}" class="row" style="margin-bottom:.75rem;">
-      <label class="check">
-        <input type="checkbox" name="visible" value="1"
-               {% if test_users_visible %}checked{% endif %}
-               onchange="this.form.submit()">
-        Видимы в ленте (все тестовые)
-      </label>
-    </form>
+    <p>Фото: <code>data/test.png</code>. Новые — в радиусе ~15 км от гео админа (или Душанбе).</p>
     <form method="post" action="{{ url('/test-users/create') }}" class="row">
       <label>Сколько
         <input type="number" name="count" value="10" min="1" max="100" required>
@@ -81,7 +87,7 @@
     </form>
   </section>
 
-  <section class="panel">
+  <section class="panel" id="settings">
     <h2>Настройки</h2>
     <form method="post" action="{{ url('/settings') }}">
       <div class="row">
@@ -94,12 +100,8 @@
         <label>Повтор анкеты (дней)
           <input type="number" name="profile_reshow_days" value="{{ reshow_days }}" min="0" required>
         </label>
-        <label class="check">
-          <input type="checkbox" name="registration_only" {% if registration_only %}checked{% endif %}>
-          Только регистрация (soft-launch)
-        </label>
       </div>
-      <p class="hint">Повтор анкеты (дней) — устаревшая настройка, на ленту не влияет: после ❤️/👎/💌 анкета не показывается снова. 💤 не пишет в likes.</p>
+      <p class="hint">Повтор анкеты: после ❤️/👎/💌 пара скрывается друг от друга в ленте на N дней (0 = навсегда). 💤 в likes не пишет. Soft-launch — в блоке «Режимы».</p>
       <h3>Оплата Премиум</h3>
       <div class="row">
         <label style="flex:1;min-width:220px">Карта для приёма платежей
@@ -122,19 +124,31 @@
     </form>
   </section>
 
-  <section class="panel">
+  <section class="panel" id="channels">
     <h2>Обязательные каналы</h2>
     <table>
-      <tr><th>ID</th><th>Название</th><th>Ссылка</th><th>Активен</th><th></th></tr>
+      <tr><th>ID</th><th>Название</th><th>Ссылка</th><th>Статус</th><th></th></tr>
       {% for ch in channels %}
       <tr>
         <td>{{ ch.channel_id }}</td>
         <td>{{ ch.title }}</td>
         <td>{{ ch.invite_link }}</td>
-        <td>{{ ch.is_active }}</td>
+        <td>
+          <span class="status-badge {{ 'on' if ch.is_active else 'off' }}">
+            <span class="dot"></span>
+            {% if ch.is_active %}ON{% else %}OFF{% endif %}
+          </span>
+        </td>
         <td class="row">
-          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/toggle') }}"><button type="submit" class="secondary">on/off</button></form>
-          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/delete') }}"><button type="submit" class="danger">удалить</button></form>
+          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/toggle') }}">
+            <button type="submit" class="status-pill {{ 'on' if ch.is_active else 'off' }}">
+              <span class="dot"></span>
+              {% if ch.is_active %}Выкл{% else %}Вкл{% endif %}
+            </button>
+          </form>
+          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/delete') }}">
+            <button type="submit" class="danger">удалить</button>
+          </form>
         </td>
       </tr>
       {% endfor %}
@@ -148,8 +162,8 @@
     </form>
   </section>
 
-  <section class="panel">
-    <h2>Заявки на Премиум</h2>
+  <section class="panel" id="orders">
+    <h2>Заявки на Премиум {% if pending %}<span class="meta">({{ pending|length }})</span>{% endif %}</h2>
     {% if not pending %}<p class="hint">Нет заявок.</p>{% endif %}
     <table>
       {% for o in pending %}
@@ -166,14 +180,14 @@
     </table>
   </section>
 
-  <section class="panel">
+  <section class="panel" id="premiums">
     <h2>Активный Премиум</h2>
     <table>
       {% for u in premiums %}
       <tr>
         <td>{{ u.tg_id }}</td>
         <td>@{{ u.username or '-' }}</td>
-        <td>{{ u.premium_until }}</td>
+        <td>до {{ u.premium_until.strftime('%d.%m.%Y %H:%M') if u.premium_until else '—' }}</td>
       </tr>
       {% else %}
       <tr><td colspan="3" class="hint">Пока никого.</td></tr>
@@ -181,7 +195,7 @@
     </table>
   </section>
 
-  <section class="panel">
+  <section class="panel" id="blocked">
     <h2>Заблокированные</h2>
     <p>Автоблок: больше 5 жалоб за 3 месяца. Жалоба — один раз с одного аккаунта.</p>
     {% if not blocked %}<p class="hint">Список пуст.</p>{% endif %}
@@ -210,6 +224,39 @@
       </div>
     </article>
     {% endfor %}
+  </section>
+
+  <section class="panel" id="geo">
+    <h2>Моя геолокация</h2>
+    <p>Координаты профиля админа для ленты и спавна тестов. По умолчанию — Душанбе.</p>
+    {% if not admin_ids %}
+    <p class="flash-err">В <code>ADMIN_IDS</code> никого нет.</p>
+    {% else %}
+    <form method="post" action="{{ url('/admin-geo') }}">
+      <div class="row">
+        <label>Admin Telegram ID
+          <select name="admin_tg_id" required>
+            {% for aid in admin_ids %}
+            <option value="{{ aid }}">{{ aid }}
+              {% set g = admin_geo.get(aid) %}
+              {% if g and g.lat is not none %} (сейчас {{ g.lat }}, {{ g.lon }}){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Широта (lat)
+          <input type="number" step="any" name="lat" value="{{ dushanbe_lat }}" required>
+        </label>
+        <label>Долгота (lon)
+          <input type="number" step="any" name="lon" value="{{ dushanbe_lon }}" required>
+        </label>
+        <label>Город
+          <input type="text" name="city_name" value="{{ dushanbe_city }}" required>
+        </label>
+        <button type="submit">Сохранить</button>
+      </div>
+    </form>
+    {% endif %}
   </section>
 </div>
 {% endblock %}

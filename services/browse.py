@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import func, or_, select
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import func, or_, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -42,9 +44,19 @@ def _looking_matches(looking: LookingFor, gender: Gender) -> bool:
     return looking.value == gender.value
 
 
-def recently_rated_subquery(viewer_tg_id: int):
-    """Pairs hidden from feed forever after like/dislike/message. Sleep does not create a Like."""
-    return select(Like.to_user_id).where(Like.from_user_id == viewer_tg_id)
+def recently_rated_subquery(viewer_tg_id: int, since: datetime | None):
+    """Hide the other user after like/dislike/message in either direction.
+
+    Sleep does not create a Like. If ``since`` is set, only reactions at/after
+    that time count (older pairs can appear again). If ``since`` is None
+    (profile_reshow_days=0), hide forever.
+    """
+    outgoing = select(Like.to_user_id).where(Like.from_user_id == viewer_tg_id)
+    incoming = select(Like.from_user_id).where(Like.to_user_id == viewer_tg_id)
+    if since is not None:
+        outgoing = outgoing.where(Like.created_at >= since)
+        incoming = incoming.where(Like.created_at >= since)
+    return union(outgoing, incoming)
 
 
 def _age_diff(viewer_age: int | None, other_age: int | None) -> int:
@@ -79,7 +91,7 @@ async def next_profile(
     3) ±10, then any age
     Within a band+radius: premium → closer age → closer km.
     """
-    from services.settings_service import get_max_distance_km
+    from services.settings_service import get_max_distance_km, get_profile_reshow_days
 
     if (
         viewer_profile.lat is None
@@ -96,7 +108,13 @@ async def next_profile(
     elif tiers and tiers[-1] < max_km:
         tiers.append(max_km)
 
-    rated = recently_rated_subquery(viewer.tg_id)
+    reshow_days = await get_profile_reshow_days(session)
+    since = (
+        None
+        if reshow_days <= 0
+        else datetime.now(UTC) - timedelta(days=reshow_days)
+    )
+    rated = recently_rated_subquery(viewer.tg_id, since)
 
     gender_filter = True
     if viewer_profile.looking_for == LookingFor.male:

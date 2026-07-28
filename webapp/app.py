@@ -440,7 +440,6 @@ def create_app() -> FastAPI:
         manager_contact: str = Form(...),
         payment_card: str = Form(...),
         payment_check_time: str = Form(...),
-        registration_only: str | None = Form(None),
         session: AsyncSession = Depends(get_db),
     ):
         if (redir := require_auth(request)) is not None:
@@ -454,10 +453,20 @@ def create_app() -> FastAPI:
         await set_setting(session, "manager_contact", manager_contact.strip())
         await set_setting(session, "payment_card", payment_card.strip())
         await set_setting(session, "payment_check_time", payment_check_time.strip())
-        await set_setting(
-            session, "registration_only", "true" if registration_only else "false"
-        )
         return RedirectResponse(settings.abs_path("/"), status_code=303)
+
+    @app.post("/settings/soft-launch")
+    async def toggle_soft_launch(
+        request: Request,
+        registration_only: str = Form("0"),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        on = registration_only in {"1", "true", "on", "yes"}
+        await set_setting(session, "registration_only", "true" if on else "false")
+        flash = "soft_on" if on else "soft_off"
+        return RedirectResponse(settings.abs_path(f"/?flash={flash}"), status_code=303)
 
     @app.post("/channels/add")
     async def add_channel(

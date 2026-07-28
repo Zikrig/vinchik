@@ -65,9 +65,12 @@ async def record_action(
 ) -> Like | None:
     """Save like/dislike/message. Sleep must never call this.
 
-    One row per pair (unique). Already rated pairs stay hidden from the feed forever;
-    a second reaction on the same pair is ignored.
+    One row per directed pair (unique). Hides both users from each other for
+    ``profile_reshow_days`` (0 = forever). After that window a new reaction
+    updates the same row.
     """
+    from services.settings_service import get_profile_reshow_days
+
     existing = (
         await session.execute(
             select(Like).where(
@@ -77,19 +80,35 @@ async def record_action(
     ).scalar_one_or_none()
 
     if existing is not None:
-        return None
+        reshow_days = await get_profile_reshow_days(session)
+        if reshow_days <= 0:
+            return None
+        created = existing.created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=UTC)
+        if datetime.now(UTC) - created < timedelta(days=reshow_days):
+            return None
 
     if action in (LikeAction.like, LikeAction.message):
         if not await can_like(session, from_user, from_profile):
             raise PermissionError("limit")
         await increment_like_count(session, from_user.tg_id)
 
+    now = datetime.now(UTC)
+    if existing is not None:
+        existing.action = action
+        existing.message_text = message_text
+        existing.is_seen = False
+        existing.created_at = now
+        await session.commit()
+        return existing
+
     like = Like(
         from_user_id=from_user.tg_id,
         to_user_id=to_user_id,
         action=action,
         message_text=message_text,
-        created_at=datetime.now(UTC),
+        created_at=now,
     )
     session.add(like)
     await session.commit()

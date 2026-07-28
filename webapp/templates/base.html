@@ -203,7 +203,76 @@
     .login-card .hint { margin-bottom: 1.25rem; }
     .login-card input, .login-card button { width: 100%; }
     .login-card label { margin-bottom: .75rem; }
+    .meta { font-size: .85rem; color: var(--muted); font-weight: 500; }
     h3 { font-size: .95rem; margin: 1rem 0 .6rem; color: var(--muted); }
+    .jump {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem .85rem;
+      margin: 0 0 1rem;
+      font-size: .9rem;
+    }
+    .jump a { color: var(--muted); }
+    .switch-list { display: flex; flex-direction: column; gap: .65rem; }
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      padding: .75rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--bg-accent);
+    }
+    .switch-row .label { font-weight: 600; color: var(--ink); }
+    .switch-row .hint { font-size: .85rem; color: var(--muted); margin: .2rem 0 0; }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      font-size: .85rem;
+      font-weight: 700;
+      padding: .35rem .7rem;
+      border-radius: 999px;
+      border: 0;
+      cursor: pointer;
+      font: inherit;
+    }
+    .status-pill .dot {
+      width: .65rem;
+      height: .65rem;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-pill.on {
+      background: #e3f6ec;
+      color: var(--ok);
+    }
+    .status-pill.on .dot { background: var(--ok); }
+    .status-pill.off {
+      background: #fee4e2;
+      color: var(--danger);
+    }
+    .status-pill.off .dot { background: var(--danger); }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      font-size: .8rem;
+      font-weight: 700;
+      padding: .2rem .55rem;
+      border-radius: 999px;
+    }
+    .status-badge.on { background: #e3f6ec; color: var(--ok); }
+    .status-badge.off { background: #fee4e2; color: var(--danger); }
+    .status-badge .dot {
+      width: .55rem;
+      height: .55rem;
+      border-radius: 50%;
+    }
+    .status-badge.on .dot { background: var(--ok); }
+    .status-badge.off .dot { background: var(--danger); }
   </style>
   {% block head %}{% endblock %}
 </head>

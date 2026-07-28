@@ -70,6 +70,49 @@
     margin: 0 0 1rem;
   }
   .stat-row strong { color: var(--ink); }
+  .label-row {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+  }
+  .help {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.1rem;
+    height: 1.1rem;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--bg-accent);
+    color: var(--muted);
+    font-size: .7rem;
+    font-weight: 700;
+    cursor: help;
+    flex-shrink: 0;
+  }
+  .help:hover, .help:focus { color: var(--brand); border-color: var(--brand); outline: none; }
+  .help .tip {
+    display: none;
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + .4rem);
+    transform: translateX(-50%);
+    width: min(280px, 70vw);
+    padding: .55rem .7rem;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    font-size: .78rem;
+    font-weight: 500;
+    line-height: 1.4;
+    box-shadow: var(--shadow);
+    z-index: 5;
+    white-space: normal;
+    text-align: left;
+  }
+  .help:hover .tip, .help:focus .tip { display: block; }
 </style>
 {% endblock %}
 {% block body %}
@@ -139,7 +182,8 @@
       {% endif %}
     </p>
 
-    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}">
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-confirm-changes"
+          data-confirm-labels='{"premium_until":"дата окончания премиума"}'>
       <input type="hidden" name="action" value="set">
       <label>Дата окончания (YYYY-MM-DD или YYYY-MM-DD HH:MM; пусто = снять)
         <input type="text" name="premium_until"
@@ -152,23 +196,26 @@
     </form>
 
     <div class="actions" style="margin-top:.5rem">
-      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}">
+      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
+            onsubmit="return confirm('Вы уверены, что хотите сохранить новое значение: премиум +2 дня?');">
         <input type="hidden" name="action" value="extend">
         <input type="hidden" name="add_days" value="2">
         <button type="submit" class="secondary">+2 дня</button>
       </form>
-      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}">
+      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
+            onsubmit="return confirm('Вы уверены, что хотите сохранить новое значение: премиум +7 дней?');">
         <input type="hidden" name="action" value="extend">
         <input type="hidden" name="add_days" value="7">
         <button type="submit" class="secondary">+7 дней</button>
       </form>
-      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}">
+      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
+            onsubmit="return confirm('Вы уверены, что хотите сохранить новое значение: премиум +30 дней?');">
         <input type="hidden" name="action" value="extend">
         <input type="hidden" name="add_days" value="30">
         <button type="submit" class="secondary">+30 дней</button>
       </form>
       <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
-            onsubmit="return confirm('Снять премиум?');">
+            onsubmit="return confirm('Вы уверены, что хотите сохранить новое значение: снять премиум?');">
         <input type="hidden" name="action" value="clear">
         <button type="submit" class="danger">Снять премиум</button>
       </form>
@@ -182,7 +229,7 @@
       <span>Получено: <strong>{{ likes.received }}</strong></span>
       <span>Дневной счётчик (сумма): <strong>{{ likes.daily_used }}</strong></span>
     </div>
-    <p class="hint">Удаление лайков снова покажет этих людей в ленте.</p>
+    <p class="hint">Удаление лайков снова покажет этих людей в ленте (иначе — после «Повтор анкеты» дней).</p>
     <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}"
           onsubmit="return confirm('Удалить выбранные записи о лайках?');">
       <label class="check"><input type="checkbox" name="clear_sent" checked> исходящие (likes from)</label>
@@ -196,7 +243,8 @@
 
   <section class="panel" id="user">
     <h2>Аккаунт</h2>
-    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/user') }}">
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/user') }}" class="js-confirm-changes"
+          data-confirm-labels='{"username":"Username","language":"язык","reengage_level":"reengage level","is_test":"test","is_blocked":"забанен"}'>
       <div class="grid2">
         <label>Username
           <input type="text" name="username" value="{{ u.username or '' }}" placeholder="без @">
@@ -207,7 +255,13 @@
             <option value="tg" {% if u.language == 'tg' %}selected{% endif %}>tg</option>
           </select>
         </label>
-        <label>Reengage level (0–3)
+        <label>
+          <span class="label-row">
+            Reengage level (0–3)
+            <span class="help" tabindex="0" aria-label="Справка">?
+              <span class="tip">Счётчик напоминаний неактивным: 0 — ещё не слали; 1 — после 1 дня; 2 — после 3 дней; 3 — после 7 дней (дальше не шлём). При активности сбрасывается в 0.</span>
+            </span>
+          </span>
           <input type="number" name="reengage_level" min="0" max="3" value="{{ u.reengage_level }}">
         </label>
       </div>
@@ -223,7 +277,8 @@
 
   <section class="panel" id="profile">
     <h2>Анкета</h2>
-    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/profile') }}">
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/profile') }}" class="js-confirm-changes"
+          data-confirm-labels='{"name":"имя","age":"возраст","city_name":"город","gender":"пол","looking_for":"ищет","lat":"lat","lon":"lon","photo_file_id":"photo_file_id","description":"описание","is_active":"анкета активна","is_complete":"анкета готова","clear_photo":"очистить фото"}'>
       <div class="grid2">
         <label>Имя
           <input type="text" name="name" value="{{ p.name if p and p.name else '' }}">
@@ -274,4 +329,44 @@
     </form>
   </section>
 </div>
+<script>
+(function () {
+  function fieldValue(el) {
+    if (el.type === "checkbox") return el.checked ? "да" : "нет";
+    return (el.value || "").trim();
+  }
+
+  function snapshot(form) {
+    const data = {};
+    form.querySelectorAll("input[name], select[name], textarea[name]").forEach(function (el) {
+      if (el.type === "hidden") return;
+      data[el.name] = fieldValue(el);
+    });
+    return data;
+  }
+
+  document.querySelectorAll("form.js-confirm-changes").forEach(function (form) {
+    const labels = JSON.parse(form.getAttribute("data-confirm-labels") || "{}");
+    const initial = snapshot(form);
+
+    form.addEventListener("submit", function (e) {
+      const current = snapshot(form);
+      const changed = [];
+      Object.keys(current).forEach(function (name) {
+        if ((initial[name] || "") === current[name]) return;
+        const label = labels[name] || name;
+        const display = current[name] === "" ? "пусто" : current[name];
+        changed.push(label + " = " + display);
+      });
+      if (!changed.length) {
+        e.preventDefault();
+        alert("Нет изменений.");
+        return;
+      }
+      const msg = "Вы уверены, что хотите сохранить новое значение: " + changed.join(", ") + "?";
+      if (!confirm(msg)) e.preventDefault();
+    });
+  });
+})();
+</script>
 {% endblock %}

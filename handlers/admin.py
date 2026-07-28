@@ -34,7 +34,7 @@ _PREMIUMS_PER_PAGE = 8
 _EDIT_PROMPTS = {
     AdminStates.edit_limit.state: "Новый лимит лайков / сутки UTC (целое ≥ 1):",
     AdminStates.edit_dist.state: "Новый радиус км (1–20000):",
-    AdminStates.edit_reshow.state: "Повтор анкеты в днях (0 = никогда; на ленту сейчас не влияет):",
+    AdminStates.edit_reshow.state: "Повтор анкеты в днях (0 = никогда; пауза в обе стороны после ❤️/👎/💌):",
     AdminStates.edit_card.state: "Новая карта для приёма платежей:",
     AdminStates.edit_check_time.state: "Новое время проверки оплаты:",
     AdminStates.edit_manager.state: "Новые контакты менеджера:",
@@ -59,20 +59,32 @@ def _btn(text: str, data: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=text, callback_data=data)
 
 
-def _root_kb() -> InlineKeyboardMarkup:
+def _root_kb(reg_only: bool, pending_n: int) -> InlineKeyboardMarkup:
+    soft = (
+        "🟢 Soft-launch · ON"
+        if reg_only
+        else "🔴 Soft-launch · OFF"
+    )
+    orders = f"📋 Заявки ({pending_n})" if pending_n else "📋 Заявки"
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📋 Заявки Премиум", callback_data="adm:orders:0")],
+            [InlineKeyboardButton(text=orders, callback_data="adm:orders:0")],
             [InlineKeyboardButton(text="⭐ Премиум юзеры", callback_data="adm:premiums:0")],
-            [InlineKeyboardButton(text="🚦 Soft-launch on/off", callback_data="adm:toggle_reg")],
+            [InlineKeyboardButton(text=soft, callback_data="adm:toggle_reg")],
             [InlineKeyboardButton(text="⚙️ Настройки", callback_data="adm:settings")],
         ]
     )
 
 
-def _settings_kb() -> InlineKeyboardMarkup:
+def _settings_kb(reg_only: bool) -> InlineKeyboardMarkup:
+    soft = (
+        "🟢 Soft-launch · ON"
+        if reg_only
+        else "🔴 Soft-launch · OFF"
+    )
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text=soft, callback_data="adm:toggle_reg")],
             [InlineKeyboardButton(text="Лимит лайков", callback_data="adm:edit:limit")],
             [InlineKeyboardButton(text="Радиус км", callback_data="adm:edit:dist")],
             [InlineKeyboardButton(text="Повтор анкеты (дней)", callback_data="adm:edit:reshow")],
@@ -127,33 +139,37 @@ def _order_kb(order_id: int, index: int, total: int) -> InlineKeyboardMarkup:
     )
 
 
-async def _root_text(session: AsyncSession) -> str:
+async def _root_view(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     pending = await list_pending_orders(session)
     reg_only = await is_registration_only(session)
-    return (
-        "Админка\n"
-        f"Заявок на оплату: {len(pending)}\n"
-        f"Soft-launch (только регистрация): {reg_only}\n\n"
-        "Баны — в веб-админке."
+    soft = "🟢 ON (только регистрация)" if reg_only else "🔴 OFF (лента открыта)"
+    text = (
+        "Админка Vinchik\n\n"
+        f"Soft-launch: {soft}\n"
+        f"Заявок на оплату: {len(pending)}\n\n"
+        "Баны и аккаунты — в веб-админке."
     )
+    return text, _root_kb(reg_only, len(pending))
 
 
-async def _settings_text(session: AsyncSession) -> str:
+async def _settings_view(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     limit = await get_daily_like_limit(session)
     dist = await get_max_distance_km(session)
     reshow = await get_profile_reshow_days(session)
     reg_only = await is_registration_only(session)
     pay = await get_payment_info(session)
-    return (
+    soft = "🟢 ON" if reg_only else "🔴 OFF"
+    text = (
         "⚙️ Настройки\n\n"
+        f"Soft-launch: {soft}\n"
         f"Лимит лайков / сутки UTC: {limit}\n"
-        f"Радиус км (макс. 20000): {dist:g}\n"
-        f"Повтор анкеты (дней): {reshow}\n"
-        f"Только регистрация (soft-launch): {reg_only}\n\n"
-        f"Карта для приёма платежей:\n{pay['card']}\n\n"
-        f"Время проверки оплаты:\n{pay['check_time']}\n\n"
-        f"Контакты менеджера:\n{pay['manager']}"
+        f"Радиус км: {dist:g}\n"
+        f"Повтор анкеты (дней): {reshow}\n\n"
+        f"Карта:\n{pay['card']}\n\n"
+        f"Время проверки:\n{pay['check_time']}\n\n"
+        f"Менеджер:\n{pay['manager']}"
     )
+    return text, _settings_kb(reg_only)
 
 
 async def _render_order(
@@ -208,7 +224,8 @@ async def admin_cmd(message: Message, session: AsyncSession, state: FSMContext) 
         await message.answer(t("no_access", "ru"))
         return
     await state.clear()
-    await message.answer(await _root_text(session), reply_markup=_root_kb())
+    text, kb = await _root_view(session)
+    await message.answer(text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "adm:noop")
@@ -224,7 +241,8 @@ async def adm_root(callback: CallbackQuery, session: AsyncSession, state: FSMCon
     await state.clear()
     await callback.answer()
     assert callback.message
-    await callback.message.edit_text(await _root_text(session), reply_markup=_root_kb())
+    text, kb = await _root_view(session)
+    await callback.message.edit_text(text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "adm:settings")
@@ -237,9 +255,8 @@ async def adm_settings(
     await state.clear()
     await callback.answer()
     assert callback.message
-    await callback.message.edit_text(
-        await _settings_text(session), reply_markup=_settings_kb()
-    )
+    text, kb = await _settings_view(session)
+    await callback.message.edit_text(text, reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("adm:edit:"))
@@ -306,10 +323,8 @@ async def adm_edit_value(
         return
 
     await state.clear()
-    await message.answer(
-        "✅ Сохранено.\n\n" + await _settings_text(session),
-        reply_markup=_settings_kb(),
-    )
+    text, kb = await _settings_view(session)
+    await message.answer("✅ Сохранено.\n\n" + text, reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("adm:orders:"))
@@ -381,6 +396,12 @@ async def adm_toggle_reg(callback: CallbackQuery, session: AsyncSession) -> None
         return
     current = await is_registration_only(session)
     await set_setting(session, "registration_only", "false" if current else "true")
-    await callback.answer(f"registration_only={not current}")
+    now_on = not current
+    await callback.answer("Soft-launch ON" if now_on else "Soft-launch OFF")
     assert callback.message
-    await callback.message.edit_text(await _root_text(session), reply_markup=_root_kb())
+    msg = callback.message.text or ""
+    if msg.startswith("⚙️"):
+        text, kb = await _settings_view(session)
+    else:
+        text, kb = await _root_view(session)
+    await callback.message.edit_text(text, reply_markup=kb)
