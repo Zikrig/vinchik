@@ -9,6 +9,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Точка входа бота | `bot.py` |
 | Веб-админка | `web.py`, `webapp/` |
 | Список аккаунтов (поиск/фильтры) | `webapp/` → `/accounts`, `services/accounts.py` |
+| Карточка аккаунта (правка / лайки) | `/accounts/{tg_id}`, `update_account` / `clear_user_likes` |
 | Карта пользователей (≤50, админ красным) | `/accounts` (Leaflet), `map_markers()` |
 | Гео админа / тестовые юзеры | `services/admin_tools.py`, `services/media.py` |
 | Тестовое фото | `data/test.png` |
@@ -31,7 +32,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - `0` в `profile_reshow_days` = никогда не показывать повторно.
 - Реактивация: только через 1 / 3 / 7 суток после `last_activity_at` (не спамить).
 - Симпатии: батч-уведомление ≤1/30 мин; матч не обязателен.
-- Админка: `/admin` в боте + веб на хосте **:8180** (карта оплаты, гео админа по умолч. Душанбе, тестовые юзеры, баны, `/accounts` — все юзеры включая test).
+- Админка: `/admin` в боте + веб на хосте **:8180** (карта оплаты, гео админа по умолч. Душанбе, тестовые юзеры, баны, `/accounts` — все юзеры включая test; клик → `/accounts/{tg_id}` правка и очистка лайков).
 - Тестовые юзеры: `User.is_test`, негативные `tg_id`, фото `data/test.png`; видимость всех сразу — галочка в веб-админке (`is_active`).
 - Жалобы: кнопка в ленте; >5 уникальных за 3 мес → `is_blocked`; разбан в админке с фото/анкетой.
 - Запуск только Docker (без локального venv).

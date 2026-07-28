@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Аккаунт {{ u.tg_id }} — Vinchik Admin{% endblock %}
+{% block head %}
+<style>
+  .wrap { max-width: 960px; }
+  .hero {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .hero img, .hero .ph {
+    width: 140px;
+    height: 140px;
+    border-radius: 14px;
+    object-fit: cover;
+    background: var(--bg-accent);
+  }
+  .tag {
+    display: inline-block;
+    font-size: .75rem;
+    font-weight: 600;
+    padding: .15rem .45rem;
+    border-radius: 6px;
+    background: var(--bg-accent);
+    color: var(--muted);
+    margin-right: .25rem;
+  }
+  .tag.ok { background: #e3f6ec; color: var(--ok); }
+  .tag.warn { background: #fef3c7; color: #92400e; }
+  .tag.danger { background: #fee4e2; color: var(--danger); }
+  textarea {
+    min-width: 100%;
+    min-height: 100px;
+    padding: .55rem .7rem;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--ink);
+    font: inherit;
+    resize: vertical;
+  }
+  .grid2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: .75rem;
+  }
+  .actions { margin-top: 1rem; display: flex; gap: .75rem; flex-wrap: wrap; }
+  .danger-zone {
+    border-color: #f3c4bf;
+    background: #fff8f7;
+  }
+  .meta { font-size: .85rem; color: var(--muted); }
+</style>
+{% endblock %}
+{% block body %}
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">Vinchik <span>Admin</span></div>
+    <div class="nav">
+      <a href="{{ url('/accounts') }}">← Аккаунты</a>
+      <a href="{{ url('/') }}">Дашборд</a>
+      <a href="{{ url('/logout') }}">Выйти</a>
+    </div>
+  </div>
+
+  {% if flash == 'saved' %}
+  <p class="flash-ok">Сохранено.</p>
+  {% elif flash == 'error' %}
+  <p class="flash-err">Не удалось сохранить — проверьте поля.</p>
+  {% elif flash and flash.startswith('likes_cleared_') %}
+  <p class="flash-ok">Удалено записей: {{ flash.replace('likes_cleared_', '') }}.</p>
+  {% endif %}
+
+  <section class="panel">
+    <div class="hero">
+      {% if p and p.photo_file_id %}
+      <img src="{{ url('/users/' ~ u.tg_id ~ '/photo') }}" alt="">
+      {% else %}
+      <div class="ph">нет фото</div>
+      {% endif %}
+      <div>
+        <h2>{{ p.name if p and p.name else 'Без имени' }}
+          {% if p and p.age %}<span class="meta">· {{ p.age }}</span>{% endif %}
+        </h2>
+        <p class="meta" style="margin:0 0 .5rem">
+          <code>{{ u.tg_id }}</code>
+          {% if u.username %} @{{ u.username }}{% endif %}
+          {% if is_admin %} · admin{% endif %}
+        </p>
+        <div>
+          {% if u.is_test %}<span class="tag warn">test</span>{% endif %}
+          {% if u.is_blocked %}<span class="tag danger">ban</span>{% endif %}
+          {% if p and p.is_active %}<span class="tag ok">active</span>{% elif p %}<span class="tag">скрыт</span>{% endif %}
+          {% if p and p.is_complete %}<span class="tag ok">ready</span>{% elif p %}<span class="tag">draft</span>{% endif %}
+          {% if u.premium_until %}<span class="tag ok">premium</span>{% endif %}
+        </div>
+        <p class="meta" style="margin:.75rem 0 0">
+          создан {{ u.created_at }} · активность {{ u.last_activity_at or '—' }}
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Лайки</h2>
+    <p>
+      Отправлено: <strong>{{ likes.sent }}</strong> ·
+      получено: <strong>{{ likes.received }}</strong> ·
+      дневной счётчик (сумма): <strong>{{ likes.daily_used }}</strong>
+    </p>
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}"
+          onsubmit="return confirm('Удалить выбранные записи о лайках?');">
+      <label class="check"><input type="checkbox" name="clear_sent" checked> исходящие (likes from)</label>
+      <label class="check"><input type="checkbox" name="clear_received" checked> входящие (likes to)</label>
+      <label class="check"><input type="checkbox" name="clear_daily" checked> дневные лимиты (daily_like_stats)</label>
+      <div class="actions">
+        <button type="submit" class="danger">Удалить лайки</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Редактирование</h2>
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id) }}">
+      <h3>Пользователь</h3>
+      <div class="grid2">
+        <label>Username
+          <input type="text" name="username" value="{{ u.username or '' }}" placeholder="без @">
+        </label>
+        <label>Язык
+          <select name="language">
+            <option value="ru" {% if u.language == 'ru' %}selected{% endif %}>ru</option>
+            <option value="tg" {% if u.language == 'tg' %}selected{% endif %}>tg</option>
+          </select>
+        </label>
+        <label>Premium до (YYYY-MM-DD или YYYY-MM-DD HH:MM)
+          <input type="text" name="premium_until"
+                 value="{% if u.premium_until %}{{ u.premium_until.strftime('%Y-%m-%d %H:%M') }}{% endif %}"
+                 placeholder="пусто = без премиума">
+        </label>
+        <label>Reengage level (0–3)
+          <input type="number" name="reengage_level" min="0" max="3" value="{{ u.reengage_level }}">
+        </label>
+      </div>
+      <div class="row" style="margin-top:.75rem">
+        <label class="check"><input type="checkbox" name="is_test" {% if u.is_test %}checked{% endif %}> test</label>
+        <label class="check"><input type="checkbox" name="is_blocked" {% if u.is_blocked %}checked{% endif %}> забанен</label>
+      </div>
+
+      <h3>Анкета</h3>
+      <div class="grid2">
+        <label>Имя
+          <input type="text" name="name" value="{{ p.name if p and p.name else '' }}">
+        </label>
+        <label>Возраст
+          <input type="number" name="age" min="14" max="99" value="{{ p.age if p and p.age is not none else '' }}">
+        </label>
+        <label>Город
+          <input type="text" name="city_name" value="{{ p.city_name if p and p.city_name else '' }}">
+        </label>
+        <label>Пол
+          <select name="gender">
+            <option value="" {% if not p or not p.gender %}selected{% endif %}>—</option>
+            <option value="male" {% if p and p.gender and p.gender.value == 'male' %}selected{% endif %}>male</option>
+            <option value="female" {% if p and p.gender and p.gender.value == 'female' %}selected{% endif %}>female</option>
+          </select>
+        </label>
+        <label>Ищет
+          <select name="looking_for">
+            <option value="" {% if not p or not p.looking_for %}selected{% endif %}>—</option>
+            <option value="male" {% if p and p.looking_for and p.looking_for.value == 'male' %}selected{% endif %}>male</option>
+            <option value="female" {% if p and p.looking_for and p.looking_for.value == 'female' %}selected{% endif %}>female</option>
+            <option value="any" {% if p and p.looking_for and p.looking_for.value == 'any' %}selected{% endif %}>any</option>
+          </select>
+        </label>
+        <label>Lat
+          <input type="text" name="lat" value="{{ p.lat if p and p.lat is not none else '' }}">
+        </label>
+        <label>Lon
+          <input type="text" name="lon" value="{{ p.lon if p and p.lon is not none else '' }}">
+        </label>
+        <label>photo_file_id
+          <input type="text" name="photo_file_id" value="{{ p.photo_file_id if p and p.photo_file_id else '' }}">
+        </label>
+      </div>
+      <label style="margin-top:.75rem">Описание
+        <textarea name="description">{{ p.description if p and p.description else '' }}</textarea>
+      </label>
+      <div class="row" style="margin-top:.75rem">
+        <label class="check"><input type="checkbox" name="is_active" {% if p and p.is_active %}checked{% endif %}> анкета активна</label>
+        <label class="check"><input type="checkbox" name="is_complete" {% if p and p.is_complete %}checked{% endif %}> анкета готова</label>
+        <label class="check"><input type="checkbox" name="clear_photo"> очистить фото</label>
+      </div>
+      <div class="actions">
+        <button type="submit">Сохранить</button>
+        <a class="btn secondary" href="{{ url('/accounts') }}">К списку</a>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}

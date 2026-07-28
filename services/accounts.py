@@ -6,7 +6,10 @@ from sqlalchemy import String, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from database.models import Gender, LookingFor, Profile, User
+from sqlalchemy import delete
+
+from database.models import DailyLikeStat, Gender, Like, LookingFor, Profile, User
+from services.users import load_user_with_profile
 
 MAP_MARKERS_LIMIT = 50
 
@@ -178,3 +181,144 @@ def filters_from_query(params) -> dict:
         "language": params.get("language") or None,
         "has_premium": _parse_bool(params.get("has_premium")),
     }
+
+
+async def account_like_stats(session: AsyncSession, user_id: int) -> dict[str, int]:
+    sent = await session.execute(
+        select(func.count()).select_from(Like).where(Like.from_user_id == user_id)
+    )
+    received = await session.execute(
+        select(func.count()).select_from(Like).where(Like.to_user_id == user_id)
+    )
+    daily = await session.execute(
+        select(func.coalesce(func.sum(DailyLikeStat.count), 0)).where(
+            DailyLikeStat.user_id == user_id
+        )
+    )
+    return {
+        "sent": int(sent.scalar_one()),
+        "received": int(received.scalar_one()),
+        "daily_used": int(daily.scalar_one()),
+    }
+
+
+async def clear_user_likes(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    sent: bool = True,
+    received: bool = True,
+    daily_stats: bool = True,
+) -> int:
+    if not sent and not received and not daily_stats:
+        return 0
+    n = 0
+    if sent:
+        r = await session.execute(delete(Like).where(Like.from_user_id == user_id))
+        n += r.rowcount or 0
+    if received:
+        r = await session.execute(delete(Like).where(Like.to_user_id == user_id))
+        n += r.rowcount or 0
+    if daily_stats:
+        r = await session.execute(delete(DailyLikeStat).where(DailyLikeStat.user_id == user_id))
+        n += r.rowcount or 0
+    if sent or received:
+        user = await session.get(User, user_id)
+        if user is not None:
+            user.likes_notify_message_id = None
+            user.last_like_notify_at = None
+    await session.commit()
+    return n
+
+
+async def update_account(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    username: str | None,
+    language: str,
+    is_test: bool,
+    is_blocked: bool,
+    premium_until_raw: str,
+    reengage_level: int,
+    name: str | None,
+    age: int | None,
+    city_name: str | None,
+    lat: float | None,
+    lon: float | None,
+    gender: str | None,
+    looking_for: str | None,
+    description: str | None,
+    photo_file_id: str | None,
+    is_active: bool,
+    is_complete: bool,
+    clear_photo: bool = False,
+) -> User | None:
+    user = await load_user_with_profile(session, user_id)
+    if user is None:
+        return None
+
+    user.username = (username or "").strip() or None
+    user.language = language if language in {"ru", "tg"} else (user.language or "ru")
+    user.is_test = is_test
+    user.reengage_level = max(0, min(3, int(reengage_level)))
+
+    if is_blocked and not user.is_blocked:
+        user.is_blocked = True
+        user.blocked_at = datetime.now(UTC)
+    elif not is_blocked and user.is_blocked:
+        user.is_blocked = False
+        user.blocked_at = None
+
+    raw = (premium_until_raw or "").strip()
+    if not raw:
+        user.premium_until = None
+    else:
+        try:
+            # Accept "YYYY-MM-DD" or "YYYY-MM-DD HH:MM" / ISO
+            normalized = raw.replace("T", " ")
+            if len(normalized) == 10:
+                normalized += " 00:00"
+            dt = datetime.fromisoformat(normalized)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            user.premium_until = dt
+        except ValueError:
+            pass
+
+    if user.profile is None:
+        session.add(Profile(user_id=user.tg_id))
+        await session.flush()
+        user = await load_user_with_profile(session, user_id)
+        assert user and user.profile
+
+    p = user.profile
+    assert p is not None
+    p.name = (name or "").strip() or None
+    p.age = age
+    p.city_name = (city_name or "").strip() or None
+    p.lat = lat
+    p.lon = lon
+    p.description = (description or "").strip() or None
+    p.is_active = is_active
+    p.is_complete = is_complete
+    if clear_photo:
+        p.photo_file_id = None
+    elif photo_file_id is not None:
+        p.photo_file_id = photo_file_id.strip() or None
+
+    if gender in {"male", "female"}:
+        p.gender = Gender(gender)
+    elif gender in {"", "none", None}:
+        p.gender = None
+
+    if looking_for in {"male", "female", "any"}:
+        p.looking_for = LookingFor(looking_for)
+    elif looking_for in {"", "none", None}:
+        p.looking_for = None
+
+    if user.is_blocked and p.is_active:
+        p.is_active = False
+
+    await session.commit()
+    return await load_user_with_profile(session, user_id)

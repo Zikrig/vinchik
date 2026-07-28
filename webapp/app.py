@@ -27,7 +27,14 @@ from services.admin_tools import (
     set_test_users_visible,
     set_user_geo,
 )
-from services.accounts import filters_from_query, map_markers, search_accounts
+from services.accounts import (
+    account_like_stats,
+    clear_user_likes,
+    filters_from_query,
+    map_markers,
+    search_accounts,
+    update_account,
+)
 from services.users import load_user_with_profile
 from services.media import local_photo_path
 from services.premium import (
@@ -197,6 +204,133 @@ def create_app() -> FastAPI:
             },
         )
 
+    @app.get("/accounts/{user_id}", response_class=HTMLResponse)
+    async def account_detail(
+        user_id: int, request: Request, session: AsyncSession = Depends(get_db)
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        user = await load_user_with_profile(session, user_id)
+        if user is None:
+            return RedirectResponse(settings.abs_path("/accounts"), status_code=303)
+        likes = await account_like_stats(session, user_id)
+        flash = request.query_params.get("flash")
+        return TEMPLATES.TemplateResponse(
+            request,
+            "account_detail.html",
+            {
+                "u": user,
+                "p": user.profile,
+                "likes": likes,
+                "is_admin": user_id in settings.admin_id_set,
+                "flash": flash,
+            },
+        )
+
+    @app.post("/accounts/{user_id}")
+    async def account_save(
+        user_id: int,
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+        username: str = Form(""),
+        language: str = Form("ru"),
+        is_test: str | None = Form(None),
+        is_blocked: str | None = Form(None),
+        premium_until: str = Form(""),
+        reengage_level: int = Form(0),
+        name: str = Form(""),
+        age: str = Form(""),
+        city_name: str = Form(""),
+        lat: str = Form(""),
+        lon: str = Form(""),
+        gender: str = Form(""),
+        looking_for: str = Form(""),
+        description: str = Form(""),
+        photo_file_id: str = Form(""),
+        is_active: str | None = Form(None),
+        is_complete: str | None = Form(None),
+        clear_photo: str | None = Form(None),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+
+        def _opt_float(raw: str) -> float | None:
+            raw = (raw or "").strip()
+            if not raw:
+                return None
+            try:
+                return float(raw)
+            except ValueError:
+                return None
+
+        def _opt_int(raw: str) -> int | None:
+            raw = (raw or "").strip()
+            if not raw:
+                return None
+            try:
+                return int(raw)
+            except ValueError:
+                return None
+
+        try:
+            updated = await update_account(
+                session,
+                user_id,
+                username=username,
+                language=language,
+                is_test=is_test is not None,
+                is_blocked=is_blocked is not None,
+                premium_until_raw=premium_until,
+                reengage_level=reengage_level,
+                name=name,
+                age=_opt_int(age),
+                city_name=city_name,
+                lat=_opt_float(lat),
+                lon=_opt_float(lon),
+                gender=gender or None,
+                looking_for=looking_for or None,
+                description=description,
+                photo_file_id=photo_file_id,
+                is_active=is_active is not None,
+                is_complete=is_complete is not None,
+                clear_photo=clear_photo is not None,
+            )
+        except Exception:
+            return RedirectResponse(
+                settings.abs_path(f"/accounts/{user_id}?flash=error"), status_code=303
+            )
+        if updated is None:
+            return RedirectResponse(settings.abs_path("/accounts"), status_code=303)
+        return RedirectResponse(
+            settings.abs_path(f"/accounts/{user_id}?flash=saved"), status_code=303
+        )
+
+    @app.post("/accounts/{user_id}/clear-likes")
+    async def account_clear_likes(
+        user_id: int,
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+        clear_sent: str | None = Form(None),
+        clear_received: str | None = Form(None),
+        clear_daily: str | None = Form(None),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        user = await load_user_with_profile(session, user_id)
+        if user is None:
+            return RedirectResponse(settings.abs_path("/accounts"), status_code=303)
+        n = await clear_user_likes(
+            session,
+            user_id,
+            sent=clear_sent is not None,
+            received=clear_received is not None,
+            daily_stats=clear_daily is not None,
+        )
+        return RedirectResponse(
+            settings.abs_path(f"/accounts/{user_id}?flash=likes_cleared_{n}"),
+            status_code=303,
+        )
+
     @app.get("/users/{user_id}/photo")
     async def user_photo(
         user_id: int, request: Request, session: AsyncSession = Depends(get_db)
@@ -231,6 +365,13 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         await unban_user(session, user_id)
+        referer = request.headers.get("referer") or ""
+        if f"/accounts/{user_id}" in referer:
+            return RedirectResponse(
+                settings.abs_path(f"/accounts/{user_id}?flash=saved"), status_code=303
+            )
+        if "/accounts" in referer:
+            return RedirectResponse(settings.abs_path("/accounts"), status_code=303)
         return RedirectResponse(settings.abs_path("/"), status_code=303)
 
     @app.post("/settings")

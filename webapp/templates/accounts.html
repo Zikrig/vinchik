@@ -48,6 +48,10 @@
   }
   .map-legend .user::before { background: #1f6b4f; }
   .map-legend .admin::before { background: #b42318; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: #f0f7f3; }
+  tr.clickable a.row-link { color: inherit; text-decoration: none; font-weight: 600; }
+  tr.clickable a.row-link:hover { text-decoration: underline; color: var(--brand); }
 </style>
 {% endblock %}
 {% block body %}
@@ -157,7 +161,7 @@
       </thead>
       <tbody>
         {% for u, p in rows %}
-        <tr>
+        <tr class="clickable" data-href="{{ url('/accounts/' ~ u.tg_id) }}">
           <td>
             {% if p and p.photo_file_id %}
             <img src="{{ url('/users/' ~ u.tg_id ~ '/photo') }}" alt="" width="64" height="64"
@@ -167,7 +171,7 @@
             {% endif %}
           </td>
           <td>
-            <div><code>{{ u.tg_id }}</code>{% if u.username %} @{{ u.username }}{% endif %}</div>
+            <div><a class="row-link" href="{{ url('/accounts/' ~ u.tg_id) }}"><code>{{ u.tg_id }}</code></a>{% if u.username %} @{{ u.username }}{% endif %}</div>
             <div class="meta">lang={{ u.language }} · с {{ u.created_at }}</div>
             {% if u.premium_until %}<div class="meta">premium до {{ u.premium_until }}</div>{% endif %}
           </td>
@@ -192,8 +196,10 @@
             {% if p and p.is_complete %}<span class="tag ok">ready</span>{% elif p %}<span class="tag">draft</span>{% endif %}
           </td>
           <td>
+            <a class="btn secondary" href="{{ url('/accounts/' ~ u.tg_id) }}">Открыть</a>
             {% if u.is_blocked %}
-            <form method="post" action="{{ url('/users/' ~ u.tg_id ~ '/unban') }}">
+            <form method="post" action="{{ url('/users/' ~ u.tg_id ~ '/unban') }}" style="margin-top:.4rem"
+                  onclick="event.stopPropagation()">
               <button type="submit" class="secondary">Разбан</button>
             </form>
             {% endif %}
@@ -244,10 +250,12 @@
         m.age || "",
         m.city || "",
       ].filter(Boolean).join(" · ");
+      const detailUrl = {{ url('/accounts/') | tojson }} + encodeURIComponent(m.tg_id);
       const popup = [
         `<strong>${esc(title)}</strong>`,
-        `<div>id: ${esc(m.tg_id)}${m.username ? " @" + esc(m.username) : ""}</div>`,
+        `<div>id: <a href="${detailUrl}">${esc(m.tg_id)}</a>${m.username ? " @" + esc(m.username) : ""}</div>`,
         `<div>${esc(m.lat)}, ${esc(m.lon)}</div>`,
+        `<div><a href="${detailUrl}">Открыть аккаунт</a></div>`,
       ].join("");
       L.marker([m.lat, m.lon], {
         icon: m.is_admin ? adminIcon : userIcon,
@@ -259,6 +267,13 @@
     if (bounds.length) {
       map.fitBounds(bounds, { padding: [28, 28], maxZoom: 12 });
     }
+
+    document.querySelectorAll("tr.clickable[data-href]").forEach(function (tr) {
+      tr.addEventListener("click", function (e) {
+        if (e.target.closest("a, button, form, input")) return;
+        window.location = tr.getAttribute("data-href");
+      });
+    });
   })();
 </script>
 {% endblock %}
