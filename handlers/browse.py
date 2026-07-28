@@ -204,6 +204,8 @@ async def _rate(
     await strip_card_keyboard(callback.message)
     if like and action in (LikeAction.like, LikeAction.message):
         await notify_like_batch(bot, session, target_id)
+    if like and action == LikeAction.like:
+        await callback.message.answer(t("like_sent", user.language))
     await start_browse(callback.message, session, user)
 
 
