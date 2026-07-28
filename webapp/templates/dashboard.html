@@ -81,7 +81,7 @@
 
   <section class="panel" id="settings">
     <h2>Настройки</h2>
-    <form method="post" action="{{ url('/settings') }}" class="js-ajax">
+    <form method="post" action="{{ url('/settings') }}" class="js-ajax" data-ajax="settings">
       <div class="row">
         <label>Лимит лайков / сутки UTC
           <input type="number" name="daily_like_limit" value="{{ limit }}" min="1" required>

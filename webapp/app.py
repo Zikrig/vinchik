@@ -109,6 +109,64 @@ def err_response(request: Request, redirect: str, error: str = "error", **payloa
     return RedirectResponse(redirect, status_code=303)
 
 
+def serialize_account_user(user) -> dict:
+    return {
+        "username": user.username or "",
+        "language": user.language or "ru",
+        "reengage_level": int(user.reengage_level or 0),
+        "is_test": bool(user.is_test),
+        "is_blocked": bool(user.is_blocked),
+    }
+
+
+def serialize_account_profile(user) -> dict:
+    p = user.profile
+    if p is None:
+        return {
+            "name": "",
+            "age": "",
+            "city_name": "",
+            "gender": "",
+            "looking_for": "",
+            "lat": "",
+            "lon": "",
+            "photo_file_id": "",
+            "description": "",
+            "is_active": False,
+            "is_complete": False,
+            "clear_photo": False,
+        }
+    return {
+        "name": p.name or "",
+        "age": "" if p.age is None else p.age,
+        "city_name": p.city_name or "",
+        "gender": p.gender.value if p.gender else "",
+        "looking_for": p.looking_for.value if p.looking_for else "",
+        "lat": "" if p.lat is None else p.lat,
+        "lon": "" if p.lon is None else p.lon,
+        "photo_file_id": p.photo_file_id or "",
+        "description": p.description or "",
+        "is_active": bool(p.is_active),
+        "is_complete": bool(p.is_complete),
+        "clear_photo": False,
+    }
+
+
+def serialize_account_hero(user) -> dict:
+    p = user.profile
+    return {
+        "name": (p.name if p and p.name else "Без имени"),
+        "age": p.age if p and p.age is not None else None,
+        "username": user.username or "",
+        "is_test": bool(user.is_test),
+        "is_blocked": bool(user.is_blocked),
+        "is_active": bool(p.is_active) if p else False,
+        "is_complete": bool(p.is_complete) if p else False,
+        "has_premium": user.premium_until is not None,
+        "has_photo": bool(p and p.photo_file_id),
+    }
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Vinchik Admin", root_path=settings.web_root_path or "")
 
@@ -291,9 +349,10 @@ def create_app() -> FastAPI:
             request,
             settings.abs_path(f"/accounts/{user_id}?flash=saved"),
             message="Сохранено.",
+            fields=serialize_account_user(updated),
+            hero=serialize_account_hero(updated),
+            profile_fields=serialize_account_profile(updated),
         )
-
-    @app.post("/accounts/{user_id}/profile")
     async def account_save_profile(
         user_id: int,
         request: Request,
@@ -363,6 +422,8 @@ def create_app() -> FastAPI:
             request,
             settings.abs_path(f"/accounts/{user_id}?flash=saved"),
             message="Сохранено.",
+            fields=serialize_account_profile(updated),
+            hero=serialize_account_hero(updated),
         )
 
     @app.post("/accounts/{user_id}/premium")
@@ -409,6 +470,8 @@ def create_app() -> FastAPI:
             settings.abs_path(f"/accounts/{user_id}?flash=saved"),
             message="Сохранено.",
             premium_until=premium_until_out,
+            fields={"premium_until": premium_until_out or ""},
+            hero=serialize_account_hero(updated),
         )
 
     @app.post("/accounts/{user_id}/clear-likes")
@@ -434,11 +497,13 @@ def create_app() -> FastAPI:
             received=clear_received is not None,
             daily_stats=clear_daily is not None,
         )
+        likes = await account_like_stats(session, user_id)
         return ok_response(
             request,
             settings.abs_path(f"/accounts/{user_id}?flash=likes_cleared_{n}"),
             message=f"Удалено записей: {n}.",
             n=n,
+            likes=likes,
         )
 
     @app.get("/users/{user_id}/photo")
@@ -509,7 +574,17 @@ def create_app() -> FastAPI:
         await set_setting(session, "payment_card", payment_card.strip())
         await set_setting(session, "payment_check_time", payment_check_time.strip())
         return ok_response(
-            request, settings.abs_path("/"), message="Настройки сохранены."
+            request,
+            settings.abs_path("/"),
+            message="Настройки сохранены.",
+            fields={
+                "daily_like_limit": int(daily_like_limit),
+                "max_distance_km": capped,
+                "profile_reshow_days": max(0, int(profile_reshow_days)),
+                "manager_contact": manager_contact.strip(),
+                "payment_card": payment_card.strip(),
+                "payment_check_time": payment_check_time.strip(),
+            },
         )
 
     @app.post("/settings/soft-launch")

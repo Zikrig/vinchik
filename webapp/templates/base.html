@@ -417,6 +417,75 @@
         .replace(/"/g, "&quot;");
     }
 
+    window.applyFormFields = function (form, fields) {
+      if (!form || !fields) return;
+      Object.keys(fields).forEach(function (name) {
+        const el = form.elements.namedItem(name);
+        if (!el || el instanceof RadioNodeList) {
+          const one = form.querySelector('[name="' + name + '"]');
+          if (!one) return;
+          applyControl(one, fields[name]);
+          return;
+        }
+        applyControl(el, fields[name]);
+      });
+    };
+
+    function applyControl(el, val) {
+      if (el.type === "checkbox") {
+        el.checked = !!val;
+        return;
+      }
+      el.value = val == null ? "" : String(val);
+    }
+
+    function applyHero(hero) {
+      if (!hero) return;
+      const nameEl = document.querySelector("[data-hero-name]");
+      if (nameEl) {
+        let html = escapeHtml(hero.name || "Без имени");
+        if (hero.age != null) {
+          html += ' <span class="meta">· ' + escapeHtml(String(hero.age)) + "</span>";
+        }
+        nameEl.innerHTML = html;
+      }
+      const userMeta = document.querySelector("[data-hero-user]");
+      if (userMeta) {
+        const id = userMeta.getAttribute("data-tg-id") || "";
+        let html = "<code>" + escapeHtml(id) + "</code>";
+        if (hero.username) html += " @" + escapeHtml(hero.username);
+        if (userMeta.getAttribute("data-is-admin") === "1") html += " · admin";
+        userMeta.innerHTML = html;
+      }
+      const tags = document.querySelector("[data-hero-tags]");
+      if (tags) {
+        const parts = [];
+        if (hero.is_test) parts.push('<span class="tag warn">test</span>');
+        if (hero.is_blocked) parts.push('<span class="tag danger">ban</span>');
+        if (hero.is_active) parts.push('<span class="tag ok">active</span>');
+        else parts.push('<span class="tag">скрыт</span>');
+        if (hero.is_complete) parts.push('<span class="tag ok">ready</span>');
+        else parts.push('<span class="tag">draft</span>');
+        if (hero.has_premium) parts.push('<span class="tag ok">premium</span>');
+        tags.innerHTML = parts.join(" ");
+      }
+      // If ban forced is_active off, sync profile checkbox outside the user form.
+      if (hero.is_blocked) {
+        const active = document.querySelector('#profile input[name="is_active"]');
+        if (active) active.checked = !!hero.is_active;
+      }
+    }
+
+    function applyLikes(likes) {
+      if (!likes) return;
+      const sent = document.querySelector("[data-likes-sent]");
+      const received = document.querySelector("[data-likes-received]");
+      const daily = document.querySelector("[data-likes-daily]");
+      if (sent) sent.textContent = String(likes.sent);
+      if (received) received.textContent = String(likes.received);
+      if (daily) daily.textContent = String(likes.daily_used);
+    }
+
     document.addEventListener("submit", async function (e) {
       const form = e.target.closest("form.js-ajax");
       if (!form) return;
@@ -463,7 +532,7 @@
           const table = document.querySelector("#channels table");
           if (table) table.insertAdjacentHTML("beforeend", channelRowHtml(data.channel));
           form.reset();
-        } else if (kind === "premium-save" && data.premium_until !== undefined) {
+        } else if (kind === "premium-save") {
           const status = document.querySelector("[data-premium-status]");
           if (status) {
             if (data.premium_until) {
@@ -475,8 +544,23 @@
               status.innerHTML = '<span class="meta">нет</span>';
             }
           }
-          const input = document.querySelector('input[name="premium_until"]');
-          if (input) input.value = data.premium_until || "";
+          const dateForm = document.querySelector("#premium form.js-confirm-changes");
+          const dateFields = { premium_until: data.premium_until || "" };
+          if (dateForm) window.applyFormFields(dateForm, dateFields);
+          else window.applyFormFields(form, data.fields || dateFields);
+          if (dateForm && typeof dateForm._ajaxAfter === "function" && dateForm !== form) {
+            dateForm._ajaxAfter({ fields: dateFields });
+          }
+          applyHero(data.hero);
+        } else if (kind === "account-user" || kind === "account-profile" || kind === "settings") {
+          window.applyFormFields(form, data.fields);
+          if (kind === "account-user" && data.profile_fields) {
+            const profileForm = document.querySelector("#profile form.js-ajax");
+            if (profileForm) window.applyFormFields(profileForm, data.profile_fields);
+          }
+          applyHero(data.hero);
+        } else if (kind === "likes-clear") {
+          applyLikes(data.likes);
         }
 
         if (typeof form._ajaxAfter === "function") form._ajaxAfter(data);

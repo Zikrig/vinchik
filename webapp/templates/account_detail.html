@@ -149,15 +149,16 @@
       <div class="ph">нет фото</div>
       {% endif %}
       <div>
-        <h2>{{ p.name if p and p.name else 'Без имени' }}
+        <h2 data-hero-name>{{ p.name if p and p.name else 'Без имени' }}
           {% if p and p.age %}<span class="meta">· {{ p.age }}</span>{% endif %}
         </h2>
-        <p class="meta" style="margin:0 0 .5rem">
+        <p class="meta" style="margin:0 0 .5rem" data-hero-user data-tg-id="{{ u.tg_id }}"
+           data-is-admin="{{ '1' if is_admin else '0' }}">
           <code>{{ u.tg_id }}</code>
           {% if u.username %} @{{ u.username }}{% endif %}
           {% if is_admin %} · admin{% endif %}
         </p>
-        <div>
+        <div data-hero-tags>
           {% if u.is_test %}<span class="tag warn">test</span>{% endif %}
           {% if u.is_blocked %}<span class="tag danger">ban</span>{% endif %}
           {% if p and p.is_active %}<span class="tag ok">active</span>{% elif p %}<span class="tag">скрыт</span>{% endif %}
@@ -234,7 +235,7 @@
     </div>
     <p class="hint">Удаление лайков снова покажет этих людей в ленте (иначе — после «Повтор анкеты» дней).</p>
     <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}" class="js-ajax"
-          data-confirm="Удалить выбранные записи о лайках?">
+          data-ajax="likes-clear" data-confirm="Удалить выбранные записи о лайках?">
       <label class="check"><input type="checkbox" name="clear_sent" checked> исходящие (likes from)</label>
       <label class="check"><input type="checkbox" name="clear_received" checked> входящие (likes to)</label>
       <label class="check"><input type="checkbox" name="clear_daily" checked> дневные лимиты (daily_like_stats)</label>
@@ -246,7 +247,8 @@
 
   <section class="panel" id="user">
     <h2>Аккаунт</h2>
-    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/user') }}" class="js-ajax js-confirm-changes"
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/user') }}"
+          class="js-ajax js-confirm-changes" data-ajax="account-user"
           data-confirm-labels='{"username":"Username","language":"язык","reengage_level":"reengage level","is_test":"test","is_blocked":"забанен"}'>
       <div class="grid2">
         <label>Username
@@ -280,7 +282,8 @@
 
   <section class="panel" id="profile">
     <h2>Анкета</h2>
-    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/profile') }}" class="js-ajax js-confirm-changes"
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/profile') }}"
+          class="js-ajax js-confirm-changes" data-ajax="account-profile"
           data-confirm-labels='{"name":"имя","age":"возраст","city_name":"город","gender":"пол","looking_for":"ищет","lat":"lat","lon":"lon","photo_file_id":"photo_file_id","description":"описание","is_active":"анкета активна","is_complete":"анкета готова","clear_photo":"очистить фото"}'>
       <div class="grid2">
         <label>Имя
@@ -375,10 +378,20 @@
       }
     }, true);
 
-    form._ajaxAfter = function () {
+    form._ajaxAfter = function (data) {
+      if (data && data.fields) {
+        window.applyFormFields(form, data.fields);
+      }
       form._confirmInitial = snapshot(form);
       const clearPhoto = form.querySelector('input[name="clear_photo"]');
       if (clearPhoto) clearPhoto.checked = false;
+      if (data && data.profile_fields) {
+        const profileForm = document.querySelector("#profile form.js-confirm-changes");
+        if (profileForm) {
+          window.applyFormFields(profileForm, data.profile_fields);
+          profileForm._confirmInitial = snapshot(profileForm);
+        }
+      }
     };
   });
 })();
