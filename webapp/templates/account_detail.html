@@ -163,7 +163,7 @@
           {% if u.is_blocked %}<span class="tag danger">ban</span>{% endif %}
           {% if p and p.is_active %}<span class="tag ok">active</span>{% elif p %}<span class="tag">скрыт</span>{% endif %}
           {% if p and p.is_complete %}<span class="tag ok">ready</span>{% elif p %}<span class="tag">draft</span>{% endif %}
-          {% if u.premium_until %}<span class="tag ok">premium</span>{% endif %}
+          {% if premium_active %}<span class="tag ok">premium</span>{% endif %}
         </div>
         <p class="meta" style="margin:.75rem 0 0">
           создан {{ u.created_at }} · активность {{ u.last_activity_at or '—' }}
@@ -178,9 +178,9 @@
       Статус:
       <span data-premium-status>
       {% if premium_active and u.premium_until %}
-      <strong class="flash-ok">активен до {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC</strong>
+      <strong class="flash-ok">работает до {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC</strong>
       {% elif u.premium_until %}
-      <span class="meta">снят · дата {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC</span>
+      <span class="meta">не активен (дата {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC уже прошла)</span>
       {% else %}
       <span class="meta">нет</span>
       {% endif %}
@@ -189,13 +189,13 @@
 
     <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
           class="js-ajax js-confirm-changes" data-ajax="premium-save"
-          data-confirm-labels='{"premium_until":"дата окончания премиума"}'>
+          data-confirm-labels='{"premium_until":"премиум работает до"}'>
       <input type="hidden" name="action" value="set">
-      <label>Дата окончания (YYYY-MM-DD или YYYY-MM-DD HH:MM; пусто = снять → 2004-01-01)
-        <input type="text" name="premium_until"
-               value="{% if u.premium_until %}{{ u.premium_until.strftime('%Y-%m-%d %H:%M') }}{% endif %}"
-               placeholder="2026-08-01 00:00">
+      <label>Премиум работает до (UTC). Активен только пока дата в будущем.
+        <input type="datetime-local" name="premium_until"
+               value="{% if u.premium_until %}{{ u.premium_until.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
       </label>
+      <p class="hint">Пустое поле или «Снять» ставит 2004-01-01 — премиум выключен.</p>
       <div class="actions">
         <button type="submit">Сохранить дату</button>
       </div>
@@ -203,25 +203,25 @@
 
     <div class="actions" style="margin-top:.5rem">
       <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
-            data-confirm="Вы уверены, что хотите сохранить новое значение: премиум +2 дня?">
+            data-confirm="Продлить премиум на +2 дня от сейчас (или от текущей даты, если она в будущем)?">
         <input type="hidden" name="action" value="extend">
         <input type="hidden" name="add_days" value="2">
         <button type="submit" class="secondary">+2 дня</button>
       </form>
       <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
-            data-confirm="Вы уверены, что хотите сохранить новое значение: премиум +7 дней?">
+            data-confirm="Продлить премиум на +7 дней?">
         <input type="hidden" name="action" value="extend">
         <input type="hidden" name="add_days" value="7">
         <button type="submit" class="secondary">+7 дней</button>
       </form>
       <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
-            data-confirm="Вы уверены, что хотите сохранить новое значение: премиум +30 дней?">
+            data-confirm="Продлить премиум на +30 дней?">
         <input type="hidden" name="action" value="extend">
         <input type="hidden" name="add_days" value="30">
         <button type="submit" class="secondary">+30 дней</button>
       </form>
       <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
-            data-confirm="Вы уверены, что хотите снять премиум (дата → 2004-01-01)?">
+            data-confirm="Снять премиум (дата → 2004-01-01)?">
         <input type="hidden" name="action" value="clear">
         <button type="submit" class="danger">Снять премиум</button>
       </form>

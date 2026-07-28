@@ -59,6 +59,7 @@ from services.settings_service import (
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 TEMPLATES.env.globals["url"] = settings.abs_path
+TEMPLATES.env.globals["is_premium"] = is_premium
 signer = URLSafeSerializer(settings.web_secret_key, salt="vinchik-admin")
 
 
@@ -462,6 +463,11 @@ def create_app() -> FastAPI:
                 error="Не удалось сохранить",
             )
         premium_until_out = (
+            updated.premium_until.strftime("%Y-%m-%dT%H:%M")
+            if updated.premium_until
+            else None
+        )
+        premium_until_label = (
             updated.premium_until.strftime("%Y-%m-%d %H:%M")
             if updated.premium_until
             else None
@@ -471,6 +477,7 @@ def create_app() -> FastAPI:
             settings.abs_path(f"/accounts/{user_id}?flash=saved"),
             message="Сохранено.",
             premium_until=premium_until_out,
+            premium_until_label=premium_until_label,
             premium_active=is_premium(updated),
             fields={"premium_until": premium_until_out or ""},
             hero=serialize_account_hero(updated),

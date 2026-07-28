@@ -534,22 +534,25 @@
           form.reset();
         } else if (kind === "premium-save") {
           const status = document.querySelector("[data-premium-status]");
-          const until = data.premium_until || "";
+          const untilField = data.premium_until || "";
+          const untilLabel = data.premium_until_label || untilField.replace("T", " ");
           if (status) {
-            if (data.premium_active && until) {
+            if (data.premium_active && untilLabel) {
               status.innerHTML =
-                '<strong class="flash-ok">активен до ' +
-                escapeHtml(until) +
+                '<strong class="flash-ok">работает до ' +
+                escapeHtml(untilLabel) +
                 " UTC</strong>";
-            } else if (until) {
+            } else if (untilLabel) {
               status.innerHTML =
-                '<span class="meta">снят · дата ' + escapeHtml(until) + " UTC</span>";
+                '<span class="meta">не активен (дата ' +
+                escapeHtml(untilLabel) +
+                " UTC уже прошла)</span>";
             } else {
               status.innerHTML = '<span class="meta">нет</span>';
             }
           }
           const dateForm = document.querySelector("#premium form.js-confirm-changes");
-          const dateFields = { premium_until: until };
+          const dateFields = { premium_until: untilField };
           if (dateForm) window.applyFormFields(dateForm, dateFields);
           else window.applyFormFields(form, data.fields || dateFields);
           if (dateForm && typeof dateForm._ajaxAfter === "function" && dateForm !== form) {

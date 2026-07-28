@@ -17,6 +17,39 @@ MAP_MARKERS_LIMIT = 50
 PREMIUM_REVOKED_UNTIL = datetime(2004, 1, 1, 0, 0, tzinfo=UTC)
 
 
+def parse_premium_until(raw: str) -> datetime | None:
+    """Parse admin date into UTC. None = invalid (caller decides empty → revoke)."""
+    text = (raw or "").strip()
+    if not text:
+        return None
+    text = text.replace("T", " ").replace(",", ".")
+    # DD.MM.YYYY[ HH:MM]
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d",
+        "%d.%m.%Y %H:%M:%S",
+        "%d.%m.%Y %H:%M",
+        "%d.%m.%Y",
+        "%d/%m/%Y %H:%M",
+        "%d/%m/%Y",
+    ):
+        try:
+            dt = datetime.strptime(text, fmt)
+            return dt.replace(tzinfo=UTC)
+        except ValueError:
+            continue
+    try:
+        dt = datetime.fromisoformat(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        else:
+            dt = dt.astimezone(UTC)
+        return dt
+    except ValueError:
+        return None
+
+
 def _parse_bool(raw: str | None) -> bool | None:
     if raw is None or raw == "" or raw == "any":
         return None
@@ -261,16 +294,10 @@ async def set_account_premium(
         if not raw:
             user.premium_until = PREMIUM_REVOKED_UNTIL
         else:
-            try:
-                normalized = raw.replace("T", " ")
-                if len(normalized) == 10:
-                    normalized += " 00:00"
-                dt = datetime.fromisoformat(normalized)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=UTC)
-                user.premium_until = dt
-            except ValueError:
+            dt = parse_premium_until(raw)
+            if dt is None:
                 return None
+            user.premium_until = dt
 
     await session.commit()
     return await load_user_with_profile(session, user_id)
