@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import LikeAction
 from handlers.common import load_user, show_main_menu
-from keyboards.inline import browse_kb, channels_kb, empty_feed_kb, main_menu_kb
+from keyboards.inline import browse_kb, channels_kb, main_menu_kb
 from locales import t
 from services.activity import touch_activity
 from services.browse import next_profile, profile_caption
@@ -44,7 +44,7 @@ async def start_browse(message: Message, session: AsyncSession, user) -> None:
         await message.answer(t("you_are_blocked", lang))
         return
     if await is_registration_only(session):
-        await message.answer(t("soft_launch", lang))
+        await message.answer(t("soft_launch", lang), reply_markup=main_menu_kb(lang))
         return
     if not await user_subscribed_all(message.bot, session, user):
         channels = await list_active_channels(session)
@@ -57,7 +57,7 @@ async def start_browse(message: Message, session: AsyncSession, user) -> None:
         await message.answer(t("limit_reached", lang), reply_markup=main_menu_kb(lang))
         return
     if not user.profile or not user.profile.is_complete:
-        await message.answer(t("ask_age", lang))
+        await message.answer(t("ask_age", lang), reply_markup=main_menu_kb(lang))
         return
     if not user.profile.is_active:
         user.profile.is_active = True
@@ -67,7 +67,7 @@ async def start_browse(message: Message, session: AsyncSession, user) -> None:
 
     profile = await next_profile(session, user, user.profile)
     if profile is None:
-        await message.answer(t("empty_feed", lang), reply_markup=empty_feed_kb(lang))
+        await message.answer(t("empty_feed", lang), reply_markup=main_menu_kb(lang))
         return
     caption = profile_caption(profile)
     kb = browse_kb(lang, profile.user_id)
@@ -138,7 +138,10 @@ async def send_message_text(
             session, user, user.profile, target_id, LikeAction.message, message_text=text
         )
     except PermissionError:
-        await message.answer(t("limit_reached", user.language))
+        await message.answer(
+            t("limit_reached", user.language),
+            reply_markup=main_menu_kb(user.language),
+        )
         return
     if like:
         await notify_like_batch(bot, session, target_id)
@@ -216,4 +219,9 @@ async def cb_view_likes(callback: CallbackQuery, session: AsyncSession) -> None:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await callback.message.answer(text, parse_mode="Markdown", disable_web_page_preview=True)
+    await callback.message.answer(
+        text,
+        parse_mode="Markdown",
+        disable_web_page_preview=True,
+        reply_markup=main_menu_kb(user.language),
+    )

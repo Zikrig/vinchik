@@ -6,12 +6,11 @@ from datetime import UTC, datetime, timedelta
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 
-from config import settings
 from database.models import User
 from database.session import async_session_maker
+from keyboards.inline import main_menu_kb
 from locales import t
 
 logger = logging.getLogger(__name__)
@@ -61,30 +60,11 @@ async def process_reengage(bot: Bot) -> None:
         if next_level is None:
             continue
 
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=t("menu_browse", lang),
-                        callback_data="browse:start",
-                    )
-                ]
-            ]
-        )
-        if settings.bot_username:
-            kb.inline_keyboard.append(
-                [
-                    InlineKeyboardButton(
-                        text=t("menu_share", lang),
-                        url=f"https://t.me/{settings.bot_username}",
-                    )
-                ]
-            )
         try:
             await bot.send_message(
                 tg_id,
                 t("reengage_search", lang),
-                reply_markup=kb,
+                reply_markup=main_menu_kb(lang),
             )
         except TelegramAPIError:
             logger.info("reengage skip chat %s", tg_id)

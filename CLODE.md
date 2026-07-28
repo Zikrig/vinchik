@@ -38,6 +38,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Запуск только Docker (без локального venv).
 - По умолчанию polling; webhook — `USE_WEBHOOK=true` + HTTPS; хост-порт webhook **:8181** (внутри контейнера 8081).
 - Вне FSM любое личное сообщение → главное меню (`handlers/fallback.py`).
+- Терминальные ответы (оплата отмечена, премиум включён, пустая лента, soft-launch, список лайков, reengage, лимит) — с `main_menu_kb`.
 - Массовых рассылок нет.
 
 ## Ловушки

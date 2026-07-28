@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 from database.models import OrderStatus, PremiumOrder, PremiumPlan
 from handlers.common import load_user, show_main_menu
+from keyboards.inline import main_menu_kb
 from locales import t
 from services.premium import (
     create_order,
@@ -224,7 +225,8 @@ async def premium_paid(callback: CallbackQuery, session: AsyncSession, bot: Bot)
     except Exception:
         pass
     await callback.message.answer(
-        t("premium_paid_thanks", user.language, order_id=order_id)
+        t("premium_paid_thanks", user.language, order_id=order_id),
+        reply_markup=main_menu_kb(user.language),
     )
     uname = f"@{user.username}" if user.username else "—"
     admin_text = (
