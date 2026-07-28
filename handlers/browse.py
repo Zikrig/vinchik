@@ -142,6 +142,7 @@ async def send_message_text(
         return
     if like:
         await notify_like_batch(bot, session, target_id)
+        await message.answer(t("message_sent", user.language))
     await start_browse(message, session, user)
 
 
