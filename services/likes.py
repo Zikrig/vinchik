@@ -167,10 +167,14 @@ def format_likes_list(rows: list[tuple[User, Profile, Like]], lang: str) -> str:
     for user, profile, like in rows:
         name = profile.name or "—"
         if user.username:
-            link = f"https://t.me/{user.username}"
-            lines.append(f"• [{name}]({link})")
+            # Escape for Markdown links
+            safe_name = name.replace("[", "\\[").replace("]", "\\]")
+            lines.append(f"[{safe_name}](https://t.me/{user.username})")
         else:
-            lines.append(f"• {name}")
+            lines.append(name)
         if like.message_text:
-            lines.append(f"  «{like.message_text}»")
-    return "\n".join(lines)
+            text = like.message_text.replace('"', "'")
+            lines.append(t("likes_list_message", lang, text=text))
+        if len(rows) > 1:
+            lines.append("")
+    return "\n".join(lines).rstrip()
