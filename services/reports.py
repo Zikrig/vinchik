@@ -4,7 +4,6 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from database.models import Profile, Report, User
 
@@ -49,7 +48,9 @@ async def file_report(
     count = await count_reports_recent(session, to_user_id)
     just_blocked = False
     if count > REPORT_BLOCK_THRESHOLD:
-        target = await session.get(User, to_user_id, options=[selectinload(User.profile)])
+        from services.users import load_user_with_profile
+
+        target = await load_user_with_profile(session, to_user_id)
         if target and not target.is_blocked:
             target.is_blocked = True
             target.blocked_at = datetime.now(UTC)
@@ -60,23 +61,45 @@ async def file_report(
     return True, just_blocked
 
 
-async def list_blocked_users(session: AsyncSession) -> list[tuple[User, Profile | None, int]]:
+async def list_blocked_users(session: AsyncSession) -> list[dict]:
+    """Plain dicts for templates — no ORM lazy access after session closes."""
     result = await session.execute(
-        select(User)
+        select(User, Profile)
+        .outerjoin(Profile, Profile.user_id == User.tg_id)
         .where(User.is_blocked.is_(True))
-        .options(selectinload(User.profile))
         .order_by(User.blocked_at.desc().nulls_last())
     )
-    users = list(result.scalars().all())
-    out: list[tuple[User, Profile | None, int]] = []
-    for u in users:
-        n = await count_reports_recent(session, u.tg_id)
-        out.append((u, u.profile, n))
+    out: list[dict] = []
+    for user, profile in result.all():
+        n = await count_reports_recent(session, user.tg_id)
+        out.append(
+            {
+                "tg_id": user.tg_id,
+                "username": user.username,
+                "blocked_at": user.blocked_at,
+                "reports_n": n,
+                "profile": None
+                if profile is None
+                else {
+                    "photo_file_id": profile.photo_file_id,
+                    "name": profile.name,
+                    "age": profile.age,
+                    "city_name": profile.city_name,
+                    "gender": profile.gender.value if profile.gender else None,
+                    "looking_for": profile.looking_for.value if profile.looking_for else None,
+                    "lat": profile.lat,
+                    "lon": profile.lon,
+                    "description": profile.description,
+                },
+            }
+        )
     return out
 
 
 async def unban_user(session: AsyncSession, user_id: int) -> User | None:
-    user = await session.get(User, user_id, options=[selectinload(User.profile)])
+    from services.users import load_user_with_profile
+
+    user = await load_user_with_profile(session, user_id)
     if user is None:
         return None
     user.is_blocked = False

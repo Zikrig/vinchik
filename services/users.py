@@ -2,10 +2,19 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database.models import Profile, User
+
+
+async def load_user_with_profile(session: AsyncSession, tg_id: int) -> User | None:
+    """Always query+selectinload — session.get(options=...) can skip reload from identity map."""
+    result = await session.execute(
+        select(User).where(User.tg_id == tg_id).options(selectinload(User.profile))
+    )
+    return result.scalar_one_or_none()
 
 
 async def get_or_create_user(
@@ -14,18 +23,20 @@ async def get_or_create_user(
     username: str | None,
     language: str | None = None,
 ) -> User:
-    user = await session.get(User, tg_id, options=[selectinload(User.profile)])
+    user = await load_user_with_profile(session, tg_id)
     if user is None:
         user = User(tg_id=tg_id, username=username, language=language or "ru")
         session.add(user)
         session.add(Profile(user_id=tg_id))
         await session.commit()
-        user = await session.get(User, tg_id, options=[selectinload(User.profile)])
+        user = await load_user_with_profile(session, tg_id)
         assert user is not None
         return user
     if username and user.username != username:
         user.username = username
         await session.commit()
+        user = await load_user_with_profile(session, tg_id)
+        assert user is not None
     return user
 
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 from aiogram.types import Message
 from aiogram.types import ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from database.models import Profile, User
 from keyboards.inline import main_menu_kb, my_profile_kb
@@ -14,7 +13,9 @@ from services.settings_service import is_registration_only
 
 
 async def load_user(session: AsyncSession, tg_id: int) -> User | None:
-    return await session.get(User, tg_id, options=[selectinload(User.profile)])
+    from services.users import load_user_with_profile
+
+    return await load_user_with_profile(session, tg_id)
 
 
 async def show_my_profile(message: Message, user: User, profile: Profile) -> None:

@@ -5,6 +5,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 
@@ -38,50 +39,66 @@ async def process_reengage(bot: Bot) -> None:
             select(User).where(
                 User.last_activity_at.is_not(None),
                 User.reengage_level < 3,
+                User.is_test.is_(False),
+                User.tg_id > 0,
+                User.is_blocked.is_(False),
             )
         )
-        users = list(result.scalars().all())
-        for user in users:
-            assert user.last_activity_at is not None
-            idle = _idle_days(user.last_activity_at, now)
-            next_level = None
-            for days, level in REENGAGE_STEPS:
-                if idle >= days and user.reengage_level < level:
-                    next_level = level
-                    break
-            if next_level is None:
-                continue
-            lang = user.language or "ru"
-            kb = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text=t("menu_browse", lang),
-                            callback_data="browse:start",
-                        )
-                    ]
+        # Snapshot scalars — do not touch ORM after rollback/commit of other rows.
+        candidates = [
+            (u.tg_id, u.last_activity_at, u.reengage_level, u.language or "ru")
+            for u in result.scalars().all()
+        ]
+
+    for tg_id, last_activity_at, reengage_level, lang in candidates:
+        assert last_activity_at is not None
+        idle = _idle_days(last_activity_at, now)
+        next_level = None
+        for days, level in REENGAGE_STEPS:
+            if idle >= days and reengage_level < level:
+                next_level = level
+                break
+        if next_level is None:
+            continue
+
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=t("menu_browse", lang),
+                        callback_data="browse:start",
+                    )
+                ]
+            ]
+        )
+        if settings.bot_username:
+            kb.inline_keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        text=t("menu_share", lang),
+                        url=f"https://t.me/{settings.bot_username}",
+                    )
                 ]
             )
-            if settings.bot_username:
-                kb.inline_keyboard.append(
-                    [
-                        InlineKeyboardButton(
-                            text=t("menu_share", lang),
-                            url=f"https://t.me/{settings.bot_username}",
-                        )
-                    ]
-                )
-            try:
-                await bot.send_message(
-                    user.tg_id,
-                    t("reengage_search", lang),
-                    reply_markup=kb,
-                )
-                user.reengage_level = next_level
-                await session.commit()
-            except Exception:
-                logger.exception("reengage failed for %s", user.tg_id)
-                await session.rollback()
+        try:
+            await bot.send_message(
+                tg_id,
+                t("reengage_search", lang),
+                reply_markup=kb,
+            )
+        except TelegramAPIError:
+            logger.info("reengage skip chat %s", tg_id)
+            continue
+        except Exception:
+            logger.exception("reengage failed for %s", tg_id)
+            continue
+
+        async with async_session_maker() as session:
+            user = await session.get(User, tg_id)
+            if user is None:
+                continue
+            user.reengage_level = next_level
+            await session.commit()
 
 
 async def reengage_loop(bot: Bot) -> None:

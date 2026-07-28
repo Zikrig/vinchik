@@ -4,7 +4,6 @@ from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from database.models import Gender, LookingFor, User
 from handlers.common import after_profile_ready, load_user, show_my_profile
@@ -218,7 +217,7 @@ async def keep_photo(callback: CallbackQuery, session: AsyncSession, state: FSMC
     await session.commit()
     await callback.answer()
     await state.clear()
-    user = await session.get(User, user.tg_id, options=[selectinload(User.profile)])
+    user = await load_user(session, user.tg_id)
     assert user
     await after_profile_ready(callback.message, session, user)
 
@@ -268,7 +267,7 @@ async def _save_photo_and_finish(
         user.username = message.from_user.username
     await session.commit()
     await state.clear()
-    user = await session.get(User, user.tg_id, options=[selectinload(User.profile)])
+    user = await load_user(session, user.tg_id)
     assert user
     await after_profile_ready(message, session, user)
 

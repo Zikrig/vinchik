@@ -11,10 +11,9 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from config import settings
-from database.models import RequiredChannel, User
+from database.models import RequiredChannel
 from database.session import async_session_maker
 from services.admin_tools import (
     DUSHANBE_CITY,
@@ -29,6 +28,7 @@ from services.admin_tools import (
     set_user_geo,
 )
 from services.accounts import filters_from_query, map_markers, search_accounts
+from services.users import load_user_with_profile
 from services.media import local_photo_path
 from services.premium import (
     approve_order,
@@ -203,7 +203,7 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        user = await session.get(User, user_id, options=[selectinload(User.profile)])
+        user = await load_user_with_profile(session, user_id)
         if not user or not user.profile or not user.profile.photo_file_id:
             return Response(status_code=404)
         local = local_photo_path(user.profile.photo_file_id)

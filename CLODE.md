@@ -43,7 +43,9 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Бот должен быть админом обязательных каналов.
 - `callback_data` ≤ 64 байт.
 - Nominatim только при сохранении гео.
-- `BOT_TOKEN` и `ADMIN_WEB_PASSWORD` только в `.env`.
+- `session.get(User, …, options=[selectinload])` ненадёжен (identity map) — грузить через `load_user_with_profile` / `select`+`selectinload`.
+- После `rollback` ORM-объекты expire → lazy load в async = MissingGreenlet; не трогать expired instance.
+- Reengage: не слать тестовым (`is_test` / `tg_id<=0`).
 - БД: в `.env` только `POSTGRES_*`; URL собирает `config/settings.py`.
 - В `.env` без `$` — Compose портит пароль при подстановке.
 - Webhook без публичного HTTPS не работает.

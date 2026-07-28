@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from config import settings
 from database.models import Gender, LookingFor, Profile, User
@@ -187,11 +186,11 @@ async def clear_test_users(session: AsyncSession) -> int:
 
 
 async def get_user_geo(session: AsyncSession, tg_id: int) -> dict[str, float | str | None]:
-    user = await session.get(User, tg_id, options=[selectinload(User.profile)])
-    if not user or not user.profile:
+    """Read coordinates via columns only — never touch User.profile (no lazy IO)."""
+    result = await session.execute(
+        select(Profile.lat, Profile.lon, Profile.city_name).where(Profile.user_id == tg_id)
+    )
+    row = result.first()
+    if row is None:
         return {"lat": None, "lon": None, "city_name": None}
-    return {
-        "lat": user.profile.lat,
-        "lon": user.profile.lon,
-        "city_name": user.profile.city_name,
-    }
+    return {"lat": row[0], "lon": row[1], "city_name": row[2]}

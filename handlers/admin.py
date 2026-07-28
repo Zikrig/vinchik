@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from locales import t
-from services.browse import profile_caption
 from services.media import as_photo_input
 from services.premium import (
     approve_order,
@@ -86,29 +85,32 @@ async def adm_blocked(callback: CallbackQuery, session: AsyncSession) -> None:
     if not rows:
         await callback.message.answer("Заблокированных нет.")
         return
-    for user, profile, reports_n in rows[:30]:
+    for row in rows[:30]:
+        profile = row["profile"]
         caption = (
-            f"🚫 {user.tg_id} @{user.username or '-'}\n"
-            f"Жалоб за 3 мес: {reports_n}\n"
-            f"blocked_at: {user.blocked_at}\n"
+            f"🚫 {row['tg_id']} @{row['username'] or '-'}\n"
+            f"Жалоб за 3 мес: {row['reports_n']}\n"
+            f"blocked_at: {row['blocked_at']}\n"
         )
         if profile:
-            caption += profile_caption(profile)
             caption += (
-                f"\nпол: {profile.gender}\nищет: {profile.looking_for}\n"
-                f"geo: {profile.lat}, {profile.lon}"
+                f"{profile.get('name') or '?'}, {profile.get('age') or '?'}, "
+                f"{profile.get('city_name') or '?'}\n"
+                f"{(profile.get('description') or '').strip()}\n"
+                f"пол: {profile.get('gender')}\nищет: {profile.get('looking_for')}\n"
+                f"geo: {profile.get('lat')}, {profile.get('lon')}"
             )
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
                         text="🔓 Разбанить",
-                        callback_data=f"adm:unban:{user.tg_id}",
+                        callback_data=f"adm:unban:{row['tg_id']}",
                     )
                 ]
             ]
         )
-        photo = as_photo_input(profile.photo_file_id) if profile else None
+        photo = as_photo_input(profile["photo_file_id"]) if profile else None
         if photo is not None:
             await callback.message.answer_photo(
                 photo, caption=caption[:1024], reply_markup=kb
