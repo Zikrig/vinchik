@@ -19,7 +19,7 @@ DUSHANBE_LON = 68.7870
 DUSHANBE_CITY = "Душанбе"
 
 # Spawn test profiles near center (not across whole TJ).
-TEST_SPAWN_RADIUS_KM = 15.0
+TEST_SPAWN_RADIUS_KM = 60.0
 
 _TEST_NAMES = (
     "Али",

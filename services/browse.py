@@ -8,8 +8,9 @@ from sqlalchemy.orm import selectinload
 
 from database.models import Gender, Like, LookingFor, Profile, User
 from services.geo import haversine_km
+from services.users import is_premium
 
-# Implicit for viewer: expand only through these tiers, then stop at max_distance_km.
+# Distance expansion (km), capped by max_distance_km.
 RADIUS_TIERS_KM = (
     10,
     25,
@@ -23,6 +24,9 @@ RADIUS_TIERS_KM = (
     10000,
     20000,
 )
+
+# Within a radius, prefer closer ages first, then widen.
+AGE_TOLERANCE_YEARS = (2, 5, 10, 999)
 
 
 def profile_caption(profile: Profile) -> str:
@@ -53,12 +57,38 @@ def recently_rated_subquery(viewer_tg_id: int, reshow_days: int, now: datetime):
     return q
 
 
+def _age_diff(viewer_age: int | None, other_age: int | None) -> int:
+    if viewer_age is None or other_age is None:
+        return 99
+    return abs(viewer_age - other_age)
+
+
+def _pick_best(
+    pool: list[tuple[float, Profile]],
+    viewer_age: int | None,
+) -> Profile:
+    """Premium first, then smaller age gap, then closer distance."""
+
+    def key(item: tuple[float, Profile]) -> tuple:
+        dist, p = item
+        premium = 0 if (p.user and is_premium(p.user)) else 1
+        return (premium, _age_diff(viewer_age, p.age), dist)
+
+    return min(pool, key=key)[1]
+
+
 async def next_profile(
     session: AsyncSession,
     viewer: User,
     viewer_profile: Profile,
 ) -> Profile | None:
-    """Nearest available profile: expand through radius tiers up to max_distance_km."""
+    """Match by age band first, then distance circles.
+
+    1) all radii with ±2 years (10 → 25 → …)
+    2) all radii with ±5
+    3) ±10, then any age
+    Within a band+radius: premium → closer age → closer km.
+    """
     from services.settings_service import get_max_distance_km, get_profile_reshow_days
 
     if (
@@ -106,16 +136,14 @@ async def next_profile(
             looking_back,
         )
         .options(selectinload(Profile.user))
-        .order_by(
-            (User.premium_until.is_not(None) & (User.premium_until > now)).desc(),
-            func.random(),
-        )
+        .order_by(func.random())
         .limit(1000)
     )
     result = await session.execute(q)
     candidates = list(result.scalars().all())
 
     assert viewer_profile.lat is not None and viewer_profile.lon is not None
+    viewer_age = viewer_profile.age
     with_dist: list[tuple[float, Profile]] = []
     for p in candidates:
         if not p.gender or not _looking_matches(viewer_profile.looking_for, p.gender):
@@ -124,8 +152,14 @@ async def next_profile(
         d = haversine_km(viewer_profile.lat, viewer_profile.lon, p.lat, p.lon)
         with_dist.append((d, p))
 
-    for radius in tiers:
-        in_tier = [p for d, p in with_dist if d <= radius]
-        if in_tier:
-            return in_tier[0]
+    # Age band outer: finish ±2 on every circle before allowing ±5, etc.
+    for age_tol in AGE_TOLERANCE_YEARS:
+        for radius in tiers:
+            matched = [
+                (d, p)
+                for d, p in with_dist
+                if d <= radius and _age_diff(viewer_age, p.age) <= age_tol
+            ]
+            if matched:
+                return _pick_best(matched, viewer_age)
     return None
