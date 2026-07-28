@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from locales import t
-from services.media import as_photo_input
 from services.premium import (
     approve_order,
     list_pending_orders,
@@ -13,7 +12,6 @@ from services.premium import (
     notify_premium_activated,
     reject_order,
 )
-from services.reports import list_blocked_users, unban_user
 from services.settings_service import (
     get_daily_like_limit,
     get_max_distance_km,
@@ -29,106 +27,94 @@ def _is_admin(user_id: int) -> bool:
     return user_id in settings.admin_id_set
 
 
+def _root_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📋 Заявки Премиум", callback_data="adm:orders")],
+            [InlineKeyboardButton(text="⭐ Премиум юзеры", callback_data="adm:premiums")],
+            [InlineKeyboardButton(text="🚦 Soft-launch on/off", callback_data="adm:toggle_reg")],
+            [InlineKeyboardButton(text="⚙️ Настройки", callback_data="adm:settings")],
+        ]
+    )
+
+
+async def _root_text(session: AsyncSession) -> str:
+    pending = await list_pending_orders(session)
+    reg_only = await is_registration_only(session)
+    return (
+        "Админка\n"
+        f"Заявок на оплату: {len(pending)}\n"
+        f"Soft-launch (только регистрация): {reg_only}\n\n"
+        "Баны и константы оплаты — в веб-админке."
+    )
+
+
+async def _settings_text(session: AsyncSession) -> str:
+    limit = await get_daily_like_limit(session)
+    dist = await get_max_distance_km(session)
+    pay = await get_payment_info(session)
+    return (
+        "⚙️ Настройки\n\n"
+        f"Лимит лайков / сутки UTC: {limit}\n"
+        f"Макс. радиус ленты: {dist:g} км\n\n"
+        f"Карта: {pay['card']}\n"
+        f"Время проверки: {pay['check_time']}\n"
+        f"Менеджер: {pay['manager']}\n\n"
+        "Карту / время / менеджера меняй в веб-админке."
+    )
+
+
+def _settings_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Лимит 20", callback_data="adm:limit:20"),
+                InlineKeyboardButton(text="Лимит 50", callback_data="adm:limit:50"),
+                InlineKeyboardButton(text="Лимит 100", callback_data="adm:limit:100"),
+            ],
+            [
+                InlineKeyboardButton(text="100 км", callback_data="adm:dist:100"),
+                InlineKeyboardButton(text="500 км", callback_data="adm:dist:500"),
+                InlineKeyboardButton(text="1000 км", callback_data="adm:dist:1000"),
+            ],
+            [
+                InlineKeyboardButton(text="5000 км", callback_data="adm:dist:5000"),
+                InlineKeyboardButton(text="20000 км", callback_data="adm:dist:20000"),
+            ],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")],
+        ]
+    )
+
+
 @router.message(Command("admin"))
 async def admin_cmd(message: Message, session: AsyncSession) -> None:
     assert message.from_user
     if not _is_admin(message.from_user.id):
         await message.answer(t("no_access", "ru"))
         return
-    limit = await get_daily_like_limit(session)
-    dist = await get_max_distance_km(session)
-    reg_only = await is_registration_only(session)
-    pay = await get_payment_info(session)
-    pending = await list_pending_orders(session)
-    text = (
-        f"Админка\n"
-        f"Лимит лайков/сутки UTC: {limit}\n"
-        f"Радиус км: {dist}\n"
-        f"Повтор анкеты: выкл (оценённые не возвращаются)\n"
-        f"Только регистрация: {reg_only}\n"
-        f"Карта: {pay['card']}\n"
-        f"Время проверки: {pay['check_time']}\n"
-        f"Менеджер: {pay['manager']}\n"
-        f"Заявок на оплату: {len(pending)}\n\n"
-        f"Карту / время / менеджера меняй в веб-админке."
-    )
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📋 Заявки Премиум", callback_data="adm:orders")],
-            [InlineKeyboardButton(text="⭐ Премиум юзеры", callback_data="adm:premiums")],
-            [InlineKeyboardButton(text="🚦 Soft-launch on/off", callback_data="adm:toggle_reg")],
-            [InlineKeyboardButton(text="🔢 Лимит = 50", callback_data="adm:limit:50")],
-            [InlineKeyboardButton(text="🔢 Лимит = 20", callback_data="adm:limit:20")],
-            [InlineKeyboardButton(text="📍 Радиус 100 км", callback_data="adm:dist:100")],
-            [InlineKeyboardButton(text="📍 Радиус 500 км", callback_data="adm:dist:500")],
-            [InlineKeyboardButton(text="📍 Радиус 1000 км", callback_data="adm:dist:1000")],
-            [InlineKeyboardButton(text="📍 Радиус 5000 км", callback_data="adm:dist:5000")],
-            [InlineKeyboardButton(text="📍 Радиус 20000 км", callback_data="adm:dist:20000")],
-            [InlineKeyboardButton(text="🚫 Заблокированные", callback_data="adm:blocked")],
-        ]
-    )
-    await message.answer(text, reply_markup=kb)
+    await message.answer(await _root_text(session), reply_markup=_root_kb())
 
 
-@router.callback_query(F.data == "adm:blocked")
-async def adm_blocked(callback: CallbackQuery, session: AsyncSession) -> None:
+@router.callback_query(F.data == "adm:root")
+async def adm_root(callback: CallbackQuery, session: AsyncSession) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
-    rows = await list_blocked_users(session)
     await callback.answer()
     assert callback.message
-    if not rows:
-        await callback.message.answer("Заблокированных нет.")
-        return
-    for row in rows[:30]:
-        profile = row["profile"]
-        caption = (
-            f"🚫 {row['tg_id']} @{row['username'] or '-'}\n"
-            f"Жалоб за 3 мес: {row['reports_n']}\n"
-            f"blocked_at: {row['blocked_at']}\n"
-        )
-        if profile:
-            caption += (
-                f"{profile.get('name') or '?'}, {profile.get('age') or '?'}, "
-                f"{profile.get('city_name') or '?'}\n"
-                f"{(profile.get('description') or '').strip()}\n"
-                f"пол: {profile.get('gender')}\nищет: {profile.get('looking_for')}\n"
-                f"geo: {profile.get('lat')}, {profile.get('lon')}"
-            )
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="🔓 Разбанить",
-                        callback_data=f"adm:unban:{row['tg_id']}",
-                    )
-                ]
-            ]
-        )
-        photo = as_photo_input(profile["photo_file_id"]) if profile else None
-        if photo is not None:
-            await callback.message.answer_photo(
-                photo, caption=caption[:1024], reply_markup=kb
-            )
-        else:
-            await callback.message.answer(caption, reply_markup=kb)
+    await callback.message.edit_text(await _root_text(session), reply_markup=_root_kb())
 
 
-@router.callback_query(F.data.startswith("adm:unban:"))
-async def adm_unban(callback: CallbackQuery, session: AsyncSession) -> None:
+@router.callback_query(F.data == "adm:settings")
+async def adm_settings(callback: CallbackQuery, session: AsyncSession) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
-    user_id = int(callback.data.split(":")[2])  # type: ignore[union-attr]
-    user = await unban_user(session, user_id)
-    await callback.answer("OK" if user else "fail")
-    if callback.message:
-        try:
-            await callback.message.edit_reply_markup(reply_markup=None)
-        except Exception:
-            pass
-        await callback.message.answer(f"Разбанен {user_id}")
+    await callback.answer()
+    assert callback.message
+    await callback.message.edit_text(
+        await _settings_text(session), reply_markup=_settings_kb()
+    )
 
 
 @router.callback_query(F.data == "adm:orders")
@@ -213,6 +199,8 @@ async def adm_toggle_reg(callback: CallbackQuery, session: AsyncSession) -> None
     current = await is_registration_only(session)
     await set_setting(session, "registration_only", "false" if current else "true")
     await callback.answer(f"registration_only={not current}")
+    assert callback.message
+    await callback.message.edit_text(await _root_text(session), reply_markup=_root_kb())
 
 
 @router.callback_query(F.data.startswith("adm:limit:"))
@@ -223,6 +211,10 @@ async def adm_limit(callback: CallbackQuery, session: AsyncSession) -> None:
     value = callback.data.split(":")[2]  # type: ignore[union-attr]
     await set_setting(session, "daily_like_limit", value)
     await callback.answer(f"limit={value}")
+    assert callback.message
+    await callback.message.edit_text(
+        await _settings_text(session), reply_markup=_settings_kb()
+    )
 
 
 @router.callback_query(F.data.startswith("adm:dist:"))
@@ -233,4 +225,8 @@ async def adm_dist(callback: CallbackQuery, session: AsyncSession) -> None:
     value = callback.data.split(":")[2]  # type: ignore[union-attr]
     capped = min(max(float(value), 1.0), 20000.0)
     await set_setting(session, "max_distance_km", str(capped))
-    await callback.answer(f"distance={capped}")
+    await callback.answer(f"distance={capped:g}")
+    assert callback.message
+    await callback.message.edit_text(
+        await _settings_text(session), reply_markup=_settings_kb()
+    )
