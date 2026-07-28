@@ -110,15 +110,19 @@ async def cb_dislike(callback: CallbackQuery, session: AsyncSession, bot: Bot) -
 @router.callback_query(F.data.startswith("b:msg:"))
 async def cb_msg(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
     user = await load_user(session, callback.from_user.id)
-    assert user and callback.data
+    assert user and callback.data and callback.message
     if not await can_browse(session, user, user.profile):
-        await callback.answer(t("limit_reached", user.language), show_alert=True)
+        await callback.answer()
+        await strip_card_keyboard(callback.message)
+        await callback.message.answer(
+            t("limit_reached", user.language),
+            reply_markup=main_menu_kb(user.language),
+        )
         return
     target_id = int(callback.data.split(":")[2])
     await state.set_state(ProfileStates.send_message)
     await state.update_data(msg_target=target_id)
     await callback.answer()
-    assert callback.message
     await strip_card_keyboard(callback.message)
     await callback.message.answer(t("ask_message", user.language))
 
@@ -198,7 +202,12 @@ async def _rate(
     try:
         like = await record_action(session, user, user.profile, target_id, action)
     except PermissionError:
-        await callback.answer(t("limit_reached", user.language), show_alert=True)
+        await callback.answer()
+        await strip_card_keyboard(callback.message)
+        await callback.message.answer(
+            t("limit_reached", user.language),
+            reply_markup=main_menu_kb(user.language),
+        )
         return
     await callback.answer()
     await strip_card_keyboard(callback.message)
