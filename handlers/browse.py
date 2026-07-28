@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -20,11 +22,13 @@ from services.likes import (
     notify_like_batch,
     record_action,
 )
-from services.limits import can_browse, can_like
+from services.limits import can_browse, can_like, get_like_count_today, is_like_limited
 from services.reports import file_report
-from services.settings_service import is_registration_only
+from services.settings_service import get_daily_like_limit, is_registration_only
+from services.users import is_premium
 from states.profile import ProfileStates
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
@@ -38,8 +42,25 @@ async def strip_card_keyboard(message: Message | None) -> None:
         pass
 
 
-async def notify_limit(bot: Bot, callback: CallbackQuery, lang: str) -> None:
+async def notify_limit(
+    bot: Bot,
+    callback: CallbackQuery,
+    lang: str,
+    session: AsyncSession | None = None,
+    user=None,
+) -> None:
     """Always tell the user the daily limit is over — do not rely on callback.message."""
+    if session is not None and user is not None:
+        limit = await get_daily_like_limit(session)
+        used = await get_like_count_today(session, user.tg_id)
+        logger.info(
+            "like feed_blocked from=%s premium=%s subject_to_limit=%s used=%s/%s",
+            user.tg_id,
+            is_premium(user),
+            await is_like_limited(session, user, user.profile),
+            used,
+            limit,
+        )
     try:
         await callback.answer()
     except Exception:
@@ -140,7 +161,7 @@ async def cb_msg(
     user = await load_user(session, callback.from_user.id)
     assert user and callback.data and callback.message
     if not await can_browse(session, user, user.profile):
-        await notify_limit(bot, callback, user.language or "ru")
+        await notify_limit(bot, callback, user.language or "ru", session, user)
         return
     target_id = int(callback.data.split(":")[2])
     await state.set_state(ProfileStates.send_message)
@@ -194,7 +215,7 @@ async def cb_report(callback: CallbackQuery, session: AsyncSession, bot: Bot) ->
         await callback.answer(t("you_are_blocked", user.language), show_alert=True)
         return
     if not await can_browse(session, user, user.profile):
-        await notify_limit(bot, callback, user.language or "ru")
+        await notify_limit(bot, callback, user.language or "ru", session, user)
         return
     target_id = int(callback.data.split(":")[2])
     created, just_blocked = await file_report(session, user.tg_id, target_id)
@@ -229,13 +250,13 @@ async def _rate(
 
     # Block the whole feed after daily like/message limit (men without premium).
     if not await can_browse(session, user, user.profile):
-        await notify_limit(bot, callback, lang)
+        await notify_limit(bot, callback, lang, session, user)
         return
 
     try:
         like = await record_action(session, user, user.profile, target_id, action)
     except PermissionError:
-        await notify_limit(bot, callback, lang)
+        await notify_limit(bot, callback, lang, session, user)
         return
 
     await callback.answer()
