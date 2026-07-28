@@ -341,8 +341,12 @@
     };
 
     window.ajaxSubmit = async function (form) {
-      const res = await fetch(form.action, {
-        method: (form.method || "POST").toUpperCase(),
+      const actionAttr = form.getAttribute("action");
+      const methodAttr = (form.getAttribute("method") || "POST").toUpperCase();
+      // name="action" / name="method" shadow form.action / form.method in the DOM
+      const url = new URL(actionAttr || window.location.href, window.location.href).href;
+      const res = await fetch(url, {
+        method: methodAttr,
         body: new FormData(form),
         headers: {
           Accept: "application/json",
@@ -357,11 +361,14 @@
         data = { ok: false, error: "Некорректный ответ сервера" };
       }
       if (res.status === 401) {
-        window.location.href = form.action.replace(/\/[^/]*$/, "/login") || "/login";
+        window.location.href = new URL("login", window.location.href).href;
         throw new Error("auth");
       }
+      if (res.status === 405) {
+        throw new Error("Метод не разрешён (проверьте URL формы)");
+      }
       if (!res.ok || data.ok === false) {
-        throw new Error(data.error || "Ошибка");
+        throw new Error(data.error || data.detail || "Ошибка");
       }
       return data;
     };

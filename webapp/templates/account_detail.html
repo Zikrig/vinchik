@@ -190,7 +190,7 @@
     <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
           class="js-ajax js-confirm-changes" data-ajax="premium-save"
           data-confirm-labels='{"premium_until":"премиум работает до"}'>
-      <input type="hidden" name="action" value="set">
+      <input type="hidden" name="premium_action" value="set">
       <label>Премиум работает до (UTC). Активен только пока дата в будущем.
         <input type="datetime-local" name="premium_until"
                value="{% if u.premium_until %}{{ u.premium_until.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
@@ -204,25 +204,25 @@
     <div class="actions" style="margin-top:.5rem">
       <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
             data-confirm="Продлить премиум на +2 дня от сейчас (или от текущей даты, если она в будущем)?">
-        <input type="hidden" name="action" value="extend">
+        <input type="hidden" name="premium_action" value="extend">
         <input type="hidden" name="add_days" value="2">
         <button type="submit" class="secondary">+2 дня</button>
       </form>
       <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
             data-confirm="Продлить премиум на +7 дней?">
-        <input type="hidden" name="action" value="extend">
+        <input type="hidden" name="premium_action" value="extend">
         <input type="hidden" name="add_days" value="7">
         <button type="submit" class="secondary">+7 дней</button>
       </form>
       <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
             data-confirm="Продлить премиум на +30 дней?">
-        <input type="hidden" name="action" value="extend">
+        <input type="hidden" name="premium_action" value="extend">
         <input type="hidden" name="add_days" value="30">
         <button type="submit" class="secondary">+30 дней</button>
       </form>
       <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
             data-confirm="Снять премиум (дата → 2004-01-01)?">
-        <input type="hidden" name="action" value="clear">
+        <input type="hidden" name="premium_action" value="clear">
         <button type="submit" class="danger">Снять премиум</button>
       </form>
     </div>

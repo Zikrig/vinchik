@@ -434,15 +434,15 @@ def create_app() -> FastAPI:
         request: Request,
         session: AsyncSession = Depends(get_db),
         premium_until: str = Form(""),
-        action: str = Form("set"),
+        premium_action: str = Form("set"),
         add_days: int = Form(0),
     ):
         if (redir := require_auth(request)) is not None:
             return redir
         try:
-            if action == "clear":
+            if premium_action == "clear":
                 updated = await set_account_premium(session, user_id, clear=True)
-            elif action == "extend":
+            elif premium_action == "extend":
                 updated = await set_account_premium(
                     session, user_id, add_days=max(0, int(add_days))
                 )
@@ -450,11 +450,11 @@ def create_app() -> FastAPI:
                 updated = await set_account_premium(
                     session, user_id, premium_until_raw=premium_until
                 )
-        except Exception:
+        except Exception as exc:
             return err_response(
                 request,
                 settings.abs_path(f"/accounts/{user_id}?flash=error"),
-                error="Не удалось сохранить",
+                error=f"Не удалось сохранить: {exc}",
             )
         if updated is None:
             return err_response(
