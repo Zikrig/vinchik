@@ -2,6 +2,9 @@ from aiogram import Bot, F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
@@ -25,6 +28,9 @@ from states.admin import AdminStates
 
 router = Router()
 
+_TZ = ZoneInfo("Asia/Dushanbe")
+_PREMIUMS_PER_PAGE = 8
+
 _EDIT_PROMPTS = {
     AdminStates.edit_limit.state: "Новый лимит лайков / сутки UTC (целое ≥ 1):",
     AdminStates.edit_dist.state: "Новый радиус км (1–20000):",
@@ -39,11 +45,25 @@ def _is_admin(user_id: int) -> bool:
     return user_id in settings.admin_id_set
 
 
+def _fmt_dt(dt: datetime | None) -> str:
+    if dt is None:
+        return "—"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(_TZ).strftime("%d.%m.%Y %H:%M")
+
+
+def _btn(text: str, data: str) -> InlineKeyboardButton:
+    if len(text) > 64:
+        text = text[:61] + "…"
+    return InlineKeyboardButton(text=text, callback_data=data)
+
+
 def _root_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📋 Заявки Премиум", callback_data="adm:orders")],
-            [InlineKeyboardButton(text="⭐ Премиум юзеры", callback_data="adm:premiums")],
+            [InlineKeyboardButton(text="📋 Заявки Премиум", callback_data="adm:orders:0")],
+            [InlineKeyboardButton(text="⭐ Премиум юзеры", callback_data="adm:premiums:0")],
             [InlineKeyboardButton(text="🚦 Soft-launch on/off", callback_data="adm:toggle_reg")],
             [InlineKeyboardButton(text="⚙️ Настройки", callback_data="adm:settings")],
         ]
@@ -68,6 +88,41 @@ def _cancel_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="❌ Отмена", callback_data="adm:settings")],
+        ]
+    )
+
+
+def _premiums_page_kb(users, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for u in users:
+        uname = f"@{u.username}" if u.username else str(u.tg_id)
+        label = f"{uname} · до {_fmt_dt(u.premium_until)}"
+        rows.append([_btn(label, "adm:noop")])
+    nav: list[InlineKeyboardButton] = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text="◀️", callback_data=f"adm:premiums:{page - 1}"))
+    nav.append(_btn(f"{page + 1}/{total_pages}", "adm:noop"))
+    if page + 1 < total_pages:
+        nav.append(InlineKeyboardButton(text="▶️", callback_data=f"adm:premiums:{page + 1}"))
+    rows.append(nav)
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _order_kb(order_id: int, index: int, total: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Подтвердить",
+                    callback_data=f"adm:ok:{order_id}:{index}",
+                ),
+                InlineKeyboardButton(
+                    text="❌ Отклонить",
+                    callback_data=f"adm:no:{order_id}:{index}",
+                ),
+            ],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")],
         ]
     )
 
@@ -101,6 +156,51 @@ async def _settings_text(session: AsyncSession) -> str:
     )
 
 
+async def _render_order(
+    session: AsyncSession, index: int
+) -> tuple[str, InlineKeyboardMarkup]:
+    pending = await list_pending_orders(session)
+    if not pending:
+        return (
+            "Нет заявок на оплату.",
+            InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")]
+                ]
+            ),
+        )
+    index = max(0, min(index, len(pending) - 1))
+    order = pending[index]
+    text = (
+        f"Заявка {index + 1}/{len(pending)}\n\n"
+        f"#{order.id}\n"
+        f"user: {order.user_id}\n"
+        f"plan: {order.plan_id}\n"
+        f"создана: {_fmt_dt(order.created_at)}"
+    )
+    return text, _order_kb(order.id, index, len(pending))
+
+
+async def _render_premiums(
+    session: AsyncSession, page: int
+) -> tuple[str, InlineKeyboardMarkup]:
+    users = await list_premium_users(session)
+    if not users:
+        return (
+            "Нет активных премиум.",
+            InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")]
+                ]
+            ),
+        )
+    total_pages = max(1, (len(users) + _PREMIUMS_PER_PAGE - 1) // _PREMIUMS_PER_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    chunk = users[page * _PREMIUMS_PER_PAGE : (page + 1) * _PREMIUMS_PER_PAGE]
+    text = f"⭐ Премиум юзеры · стр. {page + 1}/{total_pages} · всего {len(users)}"
+    return text, _premiums_page_kb(chunk, page, total_pages)
+
+
 @router.message(Command("admin"))
 async def admin_cmd(message: Message, session: AsyncSession, state: FSMContext) -> None:
     assert message.from_user
@@ -109,6 +209,11 @@ async def admin_cmd(message: Message, session: AsyncSession, state: FSMContext) 
         return
     await state.clear()
     await message.answer(await _root_text(session), reply_markup=_root_kb())
+
+
+@router.callback_query(F.data == "adm:noop")
+async def adm_noop(callback: CallbackQuery) -> None:
+    await callback.answer()
 
 
 @router.callback_query(F.data == "adm:root")
@@ -207,34 +312,16 @@ async def adm_edit_value(
     )
 
 
-@router.callback_query(F.data == "adm:orders")
+@router.callback_query(F.data.startswith("adm:orders:"))
 async def adm_orders(callback: CallbackQuery, session: AsyncSession) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
-    pending = await list_pending_orders(session)
+    index = int(callback.data.split(":")[2])  # type: ignore[union-attr]
+    text, kb = await _render_order(session, index)
     await callback.answer()
     assert callback.message
-    if not pending:
-        await callback.message.answer("Нет заявок.")
-        return
-    for order in pending[:20]:
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="✅", callback_data=f"adm:ok:{order.id}"
-                    ),
-                    InlineKeyboardButton(
-                        text="❌", callback_data=f"adm:no:{order.id}"
-                    ),
-                ]
-            ]
-        )
-        await callback.message.answer(
-            f"Заявка #{order.id} user={order.user_id} plan={order.plan_id}",
-            reply_markup=kb,
-        )
+    await callback.message.edit_text(text, reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("adm:ok:"))
@@ -242,14 +329,19 @@ async def adm_ok(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> No
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
-    order_id = int(callback.data.split(":")[2])  # type: ignore[union-attr]
+    parts = callback.data.split(":")  # type: ignore[union-attr]
+    order_id = int(parts[2])
+    index = int(parts[3]) if len(parts) > 3 else 0
     result = await approve_order(session, order_id, callback.from_user.id)
-    await callback.answer("OK")
     if result:
         order, user = result
         await notify_premium_activated(bot, user)
-        assert callback.message
-        await callback.message.edit_text(f"Заявка #{order.id} одобрена")
+        await callback.answer("Одобрено")
+    else:
+        await callback.answer("Уже обработана", show_alert=True)
+    assert callback.message
+    text, kb = await _render_order(session, index)
+    await callback.message.edit_text(text, reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("adm:no:"))
@@ -257,28 +349,29 @@ async def adm_no(callback: CallbackQuery, session: AsyncSession) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
-    order_id = int(callback.data.split(":")[2])  # type: ignore[union-attr]
+    parts = callback.data.split(":")  # type: ignore[union-attr]
+    order_id = int(parts[2])
+    index = int(parts[3]) if len(parts) > 3 else 0
     order = await reject_order(session, order_id, callback.from_user.id)
-    await callback.answer("Rejected")
-    if order and callback.message:
-        await callback.message.edit_text(f"Заявка #{order.id} отклонена")
+    if order:
+        await callback.answer("Отклонено")
+    else:
+        await callback.answer("Уже обработана", show_alert=True)
+    assert callback.message
+    text, kb = await _render_order(session, index)
+    await callback.message.edit_text(text, reply_markup=kb)
 
 
-@router.callback_query(F.data == "adm:premiums")
+@router.callback_query(F.data.startswith("adm:premiums:"))
 async def adm_premiums(callback: CallbackQuery, session: AsyncSession) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
-    users = await list_premium_users(session)
+    page = int(callback.data.split(":")[2])  # type: ignore[union-attr]
+    text, kb = await _render_premiums(session, page)
     await callback.answer()
     assert callback.message
-    if not users:
-        await callback.message.answer("Нет активных премиум.")
-        return
-    lines = [
-        f"{u.tg_id} @{u.username or '-'} до {u.premium_until}" for u in users[:50]
-    ]
-    await callback.message.answer("\n".join(lines))
+    await callback.message.edit_text(text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "adm:toggle_reg")

@@ -141,6 +141,8 @@ async def list_pending_orders(session: AsyncSession) -> list[PremiumOrder]:
 async def list_premium_users(session: AsyncSession) -> list[User]:
     now = datetime.now(UTC)
     result = await session.execute(
-        select(User).where(User.premium_until.is_not(None), User.premium_until > now)
+        select(User)
+        .where(User.premium_until.is_not(None), User.premium_until > now)
+        .order_by(User.premium_until.asc())
     )
     return list(result.scalars().all())

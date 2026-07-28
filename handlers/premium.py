@@ -237,8 +237,8 @@ async def premium_paid(callback: CallbackQuery, session: AsyncSession, bot: Bot)
     admin_kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"adm:ok:{order_id}"),
-                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"adm:no:{order_id}"),
+                InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"adm:ok:{order_id}:0"),
+                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"adm:no:{order_id}:0"),
             ]
         ]
     )

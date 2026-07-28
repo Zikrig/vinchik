@@ -33,7 +33,9 @@ from services.accounts import (
     filters_from_query,
     map_markers,
     search_accounts,
-    update_account,
+    set_account_premium,
+    update_account_profile,
+    update_account_user,
 )
 from services.users import load_user_with_profile
 from services.media import local_photo_path
@@ -227,8 +229,8 @@ def create_app() -> FastAPI:
             },
         )
 
-    @app.post("/accounts/{user_id}")
-    async def account_save(
+    @app.post("/accounts/{user_id}/user")
+    async def account_save_user(
         user_id: int,
         request: Request,
         session: AsyncSession = Depends(get_db),
@@ -236,8 +238,35 @@ def create_app() -> FastAPI:
         language: str = Form("ru"),
         is_test: str | None = Form(None),
         is_blocked: str | None = Form(None),
-        premium_until: str = Form(""),
         reengage_level: int = Form(0),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        try:
+            updated = await update_account_user(
+                session,
+                user_id,
+                username=username,
+                language=language,
+                is_test=is_test is not None,
+                is_blocked=is_blocked is not None,
+                reengage_level=reengage_level,
+            )
+        except Exception:
+            return RedirectResponse(
+                settings.abs_path(f"/accounts/{user_id}?flash=error"), status_code=303
+            )
+        if updated is None:
+            return RedirectResponse(settings.abs_path("/accounts"), status_code=303)
+        return RedirectResponse(
+            settings.abs_path(f"/accounts/{user_id}?flash=saved"), status_code=303
+        )
+
+    @app.post("/accounts/{user_id}/profile")
+    async def account_save_profile(
+        user_id: int,
+        request: Request,
+        session: AsyncSession = Depends(get_db),
         name: str = Form(""),
         age: str = Form(""),
         city_name: str = Form(""),
@@ -273,15 +302,9 @@ def create_app() -> FastAPI:
                 return None
 
         try:
-            updated = await update_account(
+            updated = await update_account_profile(
                 session,
                 user_id,
-                username=username,
-                language=language,
-                is_test=is_test is not None,
-                is_blocked=is_blocked is not None,
-                premium_until_raw=premium_until,
-                reengage_level=reengage_level,
                 name=name,
                 age=_opt_int(age),
                 city_name=city_name,
@@ -301,6 +324,40 @@ def create_app() -> FastAPI:
             )
         if updated is None:
             return RedirectResponse(settings.abs_path("/accounts"), status_code=303)
+        return RedirectResponse(
+            settings.abs_path(f"/accounts/{user_id}?flash=saved"), status_code=303
+        )
+
+    @app.post("/accounts/{user_id}/premium")
+    async def account_save_premium(
+        user_id: int,
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+        premium_until: str = Form(""),
+        action: str = Form("set"),
+        add_days: int = Form(0),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        try:
+            if action == "clear":
+                updated = await set_account_premium(session, user_id, clear=True)
+            elif action == "extend":
+                updated = await set_account_premium(
+                    session, user_id, add_days=max(0, int(add_days))
+                )
+            else:
+                updated = await set_account_premium(
+                    session, user_id, premium_until_raw=premium_until
+                )
+        except Exception:
+            return RedirectResponse(
+                settings.abs_path(f"/accounts/{user_id}?flash=error"), status_code=303
+            )
+        if updated is None:
+            return RedirectResponse(
+                settings.abs_path(f"/accounts/{user_id}?flash=error"), status_code=303
+            )
         return RedirectResponse(
             settings.abs_path(f"/accounts/{user_id}?flash=saved"), status_code=303
         )

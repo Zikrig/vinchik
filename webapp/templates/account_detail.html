@@ -45,12 +45,31 @@
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: .75rem;
   }
-  .actions { margin-top: 1rem; display: flex; gap: .75rem; flex-wrap: wrap; }
-  .danger-zone {
+  .actions { margin-top: 1rem; display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
+  .panel.danger-zone {
     border-color: #f3c4bf;
     background: #fff8f7;
   }
+  .panel.premium-zone {
+    border-color: #c9e0d4;
+    background: #f5faf7;
+  }
   .meta { font-size: .85rem; color: var(--muted); }
+  .jump {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem .85rem;
+    margin: 0 0 1rem;
+    font-size: .9rem;
+  }
+  .jump a { color: var(--muted); }
+  .stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 1.5rem;
+    margin: 0 0 1rem;
+  }
+  .stat-row strong { color: var(--ink); }
 </style>
 {% endblock %}
 {% block body %}
@@ -71,6 +90,13 @@
   {% elif flash and flash.startswith('likes_cleared_') %}
   <p class="flash-ok">Удалено записей: {{ flash.replace('likes_cleared_', '') }}.</p>
   {% endif %}
+
+  <nav class="jump">
+    <a href="#premium">Премиум</a>
+    <a href="#likes">Лайки</a>
+    <a href="#user">Аккаунт</a>
+    <a href="#profile">Анкета</a>
+  </nav>
 
   <section class="panel">
     <div class="hero">
@@ -102,13 +128,61 @@
     </div>
   </section>
 
-  <section class="panel">
-    <h2>Лайки</h2>
+  <section class="panel premium-zone" id="premium">
+    <h2>Премиум</h2>
     <p>
-      Отправлено: <strong>{{ likes.sent }}</strong> ·
-      получено: <strong>{{ likes.received }}</strong> ·
-      дневной счётчик (сумма): <strong>{{ likes.daily_used }}</strong>
+      Статус:
+      {% if u.premium_until %}
+      <strong class="flash-ok">активен до {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC</strong>
+      {% else %}
+      <span class="meta">нет</span>
+      {% endif %}
     </p>
+
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}">
+      <input type="hidden" name="action" value="set">
+      <label>Дата окончания (YYYY-MM-DD или YYYY-MM-DD HH:MM; пусто = снять)
+        <input type="text" name="premium_until"
+               value="{% if u.premium_until %}{{ u.premium_until.strftime('%Y-%m-%d %H:%M') }}{% endif %}"
+               placeholder="2026-08-01 00:00">
+      </label>
+      <div class="actions">
+        <button type="submit">Сохранить дату</button>
+      </div>
+    </form>
+
+    <div class="actions" style="margin-top:.5rem">
+      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}">
+        <input type="hidden" name="action" value="extend">
+        <input type="hidden" name="add_days" value="2">
+        <button type="submit" class="secondary">+2 дня</button>
+      </form>
+      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}">
+        <input type="hidden" name="action" value="extend">
+        <input type="hidden" name="add_days" value="7">
+        <button type="submit" class="secondary">+7 дней</button>
+      </form>
+      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}">
+        <input type="hidden" name="action" value="extend">
+        <input type="hidden" name="add_days" value="30">
+        <button type="submit" class="secondary">+30 дней</button>
+      </form>
+      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
+            onsubmit="return confirm('Снять премиум?');">
+        <input type="hidden" name="action" value="clear">
+        <button type="submit" class="danger">Снять премиум</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel danger-zone" id="likes">
+    <h2>Лайки</h2>
+    <div class="stat-row">
+      <span>Отправлено: <strong>{{ likes.sent }}</strong></span>
+      <span>Получено: <strong>{{ likes.received }}</strong></span>
+      <span>Дневной счётчик (сумма): <strong>{{ likes.daily_used }}</strong></span>
+    </div>
+    <p class="hint">Удаление лайков снова покажет этих людей в ленте.</p>
     <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}"
           onsubmit="return confirm('Удалить выбранные записи о лайках?');">
       <label class="check"><input type="checkbox" name="clear_sent" checked> исходящие (likes from)</label>
@@ -120,10 +194,9 @@
     </form>
   </section>
 
-  <section class="panel">
-    <h2>Редактирование</h2>
-    <form method="post" action="{{ url('/accounts/' ~ u.tg_id) }}">
-      <h3>Пользователь</h3>
+  <section class="panel" id="user">
+    <h2>Аккаунт</h2>
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/user') }}">
       <div class="grid2">
         <label>Username
           <input type="text" name="username" value="{{ u.username or '' }}" placeholder="без @">
@@ -134,11 +207,6 @@
             <option value="tg" {% if u.language == 'tg' %}selected{% endif %}>tg</option>
           </select>
         </label>
-        <label>Premium до (YYYY-MM-DD или YYYY-MM-DD HH:MM)
-          <input type="text" name="premium_until"
-                 value="{% if u.premium_until %}{{ u.premium_until.strftime('%Y-%m-%d %H:%M') }}{% endif %}"
-                 placeholder="пусто = без премиума">
-        </label>
         <label>Reengage level (0–3)
           <input type="number" name="reengage_level" min="0" max="3" value="{{ u.reengage_level }}">
         </label>
@@ -147,8 +215,15 @@
         <label class="check"><input type="checkbox" name="is_test" {% if u.is_test %}checked{% endif %}> test</label>
         <label class="check"><input type="checkbox" name="is_blocked" {% if u.is_blocked %}checked{% endif %}> забанен</label>
       </div>
+      <div class="actions">
+        <button type="submit">Сохранить аккаунт</button>
+      </div>
+    </form>
+  </section>
 
-      <h3>Анкета</h3>
+  <section class="panel" id="profile">
+    <h2>Анкета</h2>
+    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/profile') }}">
       <div class="grid2">
         <label>Имя
           <input type="text" name="name" value="{{ p.name if p and p.name else '' }}">
@@ -193,7 +268,7 @@
         <label class="check"><input type="checkbox" name="clear_photo"> очистить фото</label>
       </div>
       <div class="actions">
-        <button type="submit">Сохранить</button>
+        <button type="submit">Сохранить анкету</button>
         <a class="btn secondary" href="{{ url('/accounts') }}">К списку</a>
       </div>
     </form>

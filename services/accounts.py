@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import String, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -231,7 +231,49 @@ async def clear_user_likes(
     return n
 
 
-async def update_account(
+async def set_account_premium(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    premium_until_raw: str | None = None,
+    clear: bool = False,
+    add_days: int | None = None,
+) -> User | None:
+    user = await session.get(User, user_id)
+    if user is None:
+        return None
+
+    now = datetime.now(UTC)
+    if clear:
+        user.premium_until = None
+    elif add_days is not None and add_days > 0:
+        base = user.premium_until
+        if base is not None and base.tzinfo is None:
+            base = base.replace(tzinfo=UTC)
+        if base is None or base < now:
+            base = now
+        user.premium_until = base + timedelta(days=int(add_days))
+    elif premium_until_raw is not None:
+        raw = (premium_until_raw or "").strip()
+        if not raw:
+            user.premium_until = None
+        else:
+            try:
+                normalized = raw.replace("T", " ")
+                if len(normalized) == 10:
+                    normalized += " 00:00"
+                dt = datetime.fromisoformat(normalized)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                user.premium_until = dt
+            except ValueError:
+                return None
+
+    await session.commit()
+    return await load_user_with_profile(session, user_id)
+
+
+async def update_account_user(
     session: AsyncSession,
     user_id: int,
     *,
@@ -239,20 +281,7 @@ async def update_account(
     language: str,
     is_test: bool,
     is_blocked: bool,
-    premium_until_raw: str,
     reengage_level: int,
-    name: str | None,
-    age: int | None,
-    city_name: str | None,
-    lat: float | None,
-    lon: float | None,
-    gender: str | None,
-    looking_for: str | None,
-    description: str | None,
-    photo_file_id: str | None,
-    is_active: bool,
-    is_complete: bool,
-    clear_photo: bool = False,
 ) -> User | None:
     user = await load_user_with_profile(session, user_id)
     if user is None:
@@ -270,21 +299,33 @@ async def update_account(
         user.is_blocked = False
         user.blocked_at = None
 
-    raw = (premium_until_raw or "").strip()
-    if not raw:
-        user.premium_until = None
-    else:
-        try:
-            # Accept "YYYY-MM-DD" or "YYYY-MM-DD HH:MM" / ISO
-            normalized = raw.replace("T", " ")
-            if len(normalized) == 10:
-                normalized += " 00:00"
-            dt = datetime.fromisoformat(normalized)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=UTC)
-            user.premium_until = dt
-        except ValueError:
-            pass
+    if user.is_blocked and user.profile and user.profile.is_active:
+        user.profile.is_active = False
+
+    await session.commit()
+    return await load_user_with_profile(session, user_id)
+
+
+async def update_account_profile(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    name: str | None,
+    age: int | None,
+    city_name: str | None,
+    lat: float | None,
+    lon: float | None,
+    gender: str | None,
+    looking_for: str | None,
+    description: str | None,
+    photo_file_id: str | None,
+    is_active: bool,
+    is_complete: bool,
+    clear_photo: bool = False,
+) -> User | None:
+    user = await load_user_with_profile(session, user_id)
+    if user is None:
+        return None
 
     if user.profile is None:
         session.add(Profile(user_id=user.tg_id))
