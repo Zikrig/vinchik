@@ -11,6 +11,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -106,6 +107,38 @@ class Profile(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="profile")
+
+
+class Settlement(Base):
+    """Populated place; portable dump → data/settlements/settlements.csv.gz."""
+
+    __tablename__ = "settlements"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)  # GeoNames id
+    display_name: Mapped[str] = mapped_column(String(128))
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+    country_code: Mapped[str] = mapped_column(String(2), default="")
+    admin1: Mapped[str] = mapped_column(String(128), default="")
+
+    aliases: Mapped[list[SettlementAlias]] = relationship(back_populates="settlement")
+
+
+class SettlementAlias(Base):
+    __tablename__ = "settlement_aliases"
+    __table_args__ = (
+        UniqueConstraint("settlement_id", "name_norm", name="uq_settlement_alias"),
+        Index("ix_settlement_aliases_name_norm", "name_norm"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    settlement_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("settlements.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(128))
+    name_norm: Mapped[str] = mapped_column(String(128))
+
+    settlement: Mapped[Settlement] = relationship(back_populates="aliases")
 
 
 class Like(Base):

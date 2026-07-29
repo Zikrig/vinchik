@@ -46,6 +46,12 @@ async def init_db() -> None:
                 "ON likes (from_user_id, created_at)"
             )
         )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_settlement_aliases_name_norm "
+                "ON settlement_aliases (name_norm)"
+            )
+        )
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

@@ -12,6 +12,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Карточка аккаунта (блоки: премиум / лайки / аккаунт / анкета) | `/accounts/{tg_id}`; премиум активен только если `premium_until > now` (`is_premium`); снять → `2004-01-01` |
 | Карта пользователей (≤50, админ красным) | `/accounts` (Leaflet), `map_markers()` |
 | Гео админа / тестовые юзеры | `services/admin_tools.py`, `services/media.py` |
+| Справочник НП (текст+координаты) | `data/settlements/settlements.csv.gz`, `services/settlements*.py`, `scripts/build_settlements_dump.py` |
 | Тестовое фото | `data/test.png` |
 | Роутеры | `handlers/` |
 | Бизнес-логика | `services/` |
@@ -24,6 +25,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 ## Инварианты
 
 - Кнопки пользователя — inline (кроме request_location).
+- Гео в анкете: GPS **или** текст → поиск по `settlements` → подтверждение «A рядом с B и C». Дамп `data/settlements/settlements.csv.gz` копируется с проектом; пустая таблица → автоимпорт при старте бота.
 - Без нумерации на кнопках.
 - Лимит лайков: default 50, сутки **UTC**; у мужчин без Премиум при исчерпании **нельзя смотреть ленту**.
 - Женщины и Премиум — без лимита.
@@ -50,7 +52,8 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Код бота/веба в образе: после правок нужен `docker compose up -d --build` (volume только `./data`).
 - Бот должен быть админом обязательных каналов.
 - `callback_data` ≤ 64 байт.
-- Nominatim только при сохранении гео.
+- Nominatim только при сохранении GPS-гео (текстовый ввод берёт координаты из `settlements`).
+- Дамп населённых пунктов лежит в `data/` (volume) — без `settlements.csv.gz` текстовый поиск гео не работает.
 - `session.get(User, …, options=[selectinload])` ненадёжен (identity map) — грузить через `load_user_with_profile` / `select`+`selectinload`.
 - После `rollback` ORM-объекты expire → lazy load в async = MissingGreenlet; не трогать expired instance.
 - Reengage: не слать тестовым (`is_test` / `tg_id<=0`).

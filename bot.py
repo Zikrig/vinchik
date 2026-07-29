@@ -86,6 +86,9 @@ async def main() -> None:
     await init_db()
     async with async_session_maker() as session:
         await ensure_defaults(session)
+        from services.settlements_import import ensure_settlements_loaded
+
+        await ensure_settlements_loaded(session)
 
     bot = Bot(
         token=settings.bot_token,

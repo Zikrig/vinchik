@@ -12,11 +12,18 @@ from keyboards.inline import (
     gender_kb,
     keep_kb,
     looking_kb,
+    location_confirm_kb,
     location_kb,
     photo_keep_kb,
 )
 from locales import t
 from services.geo import reverse_geocode
+from services.settlements import (
+    format_confirm,
+    get_settlement,
+    nearest_settlements,
+    search_settlements,
+)
 from services.users import get_or_create_user
 from states.profile import ProfileStates
 
@@ -108,8 +115,7 @@ async def set_looking(callback: CallbackQuery, session: AsyncSession, state: FSM
         user.language, has_current=user.profile.lat is not None
     )
     await callback.message.answer(t("ask_location", user.language), reply_markup=reply)
-    if inline:
-        await callback.message.answer(".", reply_markup=inline)
+    await callback.message.answer(".", reply_markup=inline)
 
 
 @router.message(ProfileStates.location, F.location)
@@ -124,6 +130,97 @@ async def set_location(message: Message, session: AsyncSession, state: FSMContex
     await state.set_state(ProfileStates.name)
     kb = keep_kb(user.language, "keep:name") if user.profile.name else None
     await message.answer(t("ask_name", user.language), reply_markup=kb)
+
+
+@router.callback_query(ProfileStates.location, F.data == "loc:text")
+@router.callback_query(ProfileStates.location_text, F.data == "loc:text")
+@router.callback_query(ProfileStates.location_confirm, F.data == "loc:text")
+async def location_text_start(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
+    user = await load_user(session, callback.from_user.id)
+    assert user and callback.message
+    await callback.answer()
+    await state.set_state(ProfileStates.location_text)
+    await callback.message.answer(
+        t("ask_location_text", user.language),
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+@router.message(ProfileStates.location_text, F.location)
+async def location_text_got_gps(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> None:
+    await set_location(message, session, state)
+
+
+@router.message(ProfileStates.location_text, F.text)
+async def location_text_search(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> None:
+    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
+    assert user and user.profile
+    lang = user.language or "ru"
+    hits = await search_settlements(session, message.text or "")
+    if not hits:
+        reply, inline = location_kb(lang, has_current=user.profile.lat is not None)
+        await message.answer(t("location_not_found", lang), reply_markup=reply)
+        await message.answer(".", reply_markup=inline)
+        await state.set_state(ProfileStates.location)
+        return
+    hit = hits[0]
+    neighbours = await nearest_settlements(
+        session, hit.lat, hit.lon, exclude_id=hit.id, limit=2
+    )
+    await state.update_data(pending_settlement_id=hit.id)
+    await state.set_state(ProfileStates.location_confirm)
+    await message.answer(
+        format_confirm(hit, neighbours, lang),
+        reply_markup=location_confirm_kb(lang),
+    )
+
+
+@router.callback_query(ProfileStates.location_confirm, F.data == "loc:yes")
+async def location_confirm_yes(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
+    user = await load_user(session, callback.from_user.id)
+    assert user and user.profile and callback.message
+    data = await state.get_data()
+    sid = data.get("pending_settlement_id")
+    place = await get_settlement(session, int(sid)) if sid else None
+    if place is None:
+        await callback.answer(t("location_not_found", user.language), show_alert=True)
+        await state.set_state(ProfileStates.location_text)
+        return
+    user.profile.lat = place.lat
+    user.profile.lon = place.lon
+    user.profile.city_name = place.display_name[:128]
+    await session.commit()
+    await callback.answer()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await state.set_state(ProfileStates.name)
+    kb = keep_kb(user.language, "keep:name") if user.profile.name else None
+    await callback.message.answer(t("ask_name", user.language), reply_markup=kb)
+
+
+@router.callback_query(ProfileStates.location_confirm, F.data == "loc:no")
+async def location_confirm_no(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
+    user = await load_user(session, callback.from_user.id)
+    assert user and callback.message
+    await callback.answer()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await state.set_state(ProfileStates.location_text)
+    await callback.message.answer(t("ask_location_text", user.language))
 
 
 @router.callback_query(ProfileStates.location, F.data == "keep:location")

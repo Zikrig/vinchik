@@ -42,14 +42,29 @@ def looking_kb(lang: str) -> InlineKeyboardMarkup:
     )
 
 
-def location_kb(lang: str, has_current: bool) -> tuple[ReplyKeyboardMarkup, InlineKeyboardMarkup | None]:
+def location_kb(lang: str, has_current: bool) -> tuple[ReplyKeyboardMarkup, InlineKeyboardMarkup]:
     reply = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=t("send_location", lang), request_location=True)]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
-    inline = keep_kb(lang, "keep:location") if has_current else None
-    return reply, inline
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text=t("btn_location_text", lang), callback_data="loc:text")]
+    ]
+    if has_current:
+        rows.append([InlineKeyboardButton(text=t("keep_current", lang), callback_data="keep:location")])
+    return reply, InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def location_confirm_kb(lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=t("location_yes", lang), callback_data="loc:yes"),
+                InlineKeyboardButton(text=t("location_no", lang), callback_data="loc:no"),
+            ]
+        ]
+    )
 
 
 def about_kb(lang: str, has_current: bool) -> InlineKeyboardMarkup:

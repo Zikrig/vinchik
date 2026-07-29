@@ -7,6 +7,8 @@ class ProfileStates(StatesGroup):
     gender = State()
     looking_for = State()
     location = State()
+    location_text = State()
+    location_confirm = State()
     name = State()
     about = State()
     photo = State()
