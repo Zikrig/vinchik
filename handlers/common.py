@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from aiogram.types import ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +35,12 @@ async def show_main_menu(message: Message, user: User) -> None:
     await message.answer("☰", reply_markup=main_menu_kb(user.language))
 
 
-async def after_profile_ready(message: Message, session: AsyncSession, user: User) -> None:
+async def after_profile_ready(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+    state: FSMContext | None = None,
+) -> None:
     from handlers.browse import start_browse
 
     lang = user.language or "ru"
@@ -56,4 +62,4 @@ async def after_profile_ready(message: Message, session: AsyncSession, user: Use
             t("premium_promo", lang),
             reply_markup=premium_cta_kb(lang),
         )
-    await start_browse(message, session, user)
+    await start_browse(message, session, user, state=state)

@@ -1,6 +1,6 @@
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from handlers.common import load_user, show_main_menu, show_my_profile
@@ -25,13 +25,17 @@ def _settings_channels_text(lang: str, channels, *, premium: bool) -> str:
 
 
 @router.callback_query(F.data == "menu:root")
-async def menu_root(callback: CallbackQuery, session: AsyncSession) -> None:
+async def menu_root(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
     user = await load_user(session, callback.from_user.id)
     assert user and callback.message
     if user.is_blocked:
         await callback.answer(t("you_are_blocked", user.language), show_alert=True)
         return
+    await state.clear()
     await callback.answer()
+    await callback.message.answer("☰", reply_markup=ReplyKeyboardRemove())
     await show_main_menu(callback.message, user)
 
 

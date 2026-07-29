@@ -349,7 +349,7 @@
     <div class="stat-row">
       <span>Отправлено (все): <strong data-likes-sent>{{ likes.sent }}</strong></span>
       <span>Получено: <strong data-likes-received>{{ likes.received }}</strong></span>
-      <span>Сегодня (лимит): <strong data-likes-daily>{{ likes.daily_used }}</strong></span>
+      <span>из них лайков: <strong data-likes-daily>{{ likes.daily_used }}</strong></span>
     </div>
     <p class="hint">Лимит считает только ❤️/💌 за сегодня (UTC), мужчины без премиум. «Отправлено» включает 👎. Удаление лайков снова покажет людей в ленте.</p>
     <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}" class="js-ajax"

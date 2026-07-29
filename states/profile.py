@@ -14,4 +14,3 @@ class ProfileStates(StatesGroup):
     photo = State()
     edit_photo = State()
     edit_text = State()
-    send_message = State()

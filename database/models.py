@@ -18,6 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -155,6 +156,7 @@ class Like(Base):
     to_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id"), index=True)
     action: Mapped[LikeAction] = mapped_column(Enum(LikeAction, native_enum=False, length=16))
     message_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    message_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     is_seen: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

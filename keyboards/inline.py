@@ -105,6 +105,7 @@ def my_profile_kb(lang: str) -> InlineKeyboardMarkup:
 
 
 def browse_kb(lang: str, target_id: int) -> InlineKeyboardMarkup:
+    """Legacy inline browse keyboard (unused by feed; kept for imports)."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -117,6 +118,32 @@ def browse_kb(lang: str, target_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text=t("btn_premium", lang), callback_data="menu:premium"),
                 InlineKeyboardButton(text=t("btn_sleep", lang), callback_data="b:sleep"),
             ],
+        ]
+    )
+
+
+def browse_reply_kb(lang: str) -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text=t("btn_like", lang)),
+                KeyboardButton(text=t("btn_message", lang)),
+                KeyboardButton(text=t("btn_dislike", lang)),
+            ],
+            [
+                KeyboardButton(text=t("btn_report", lang)),
+                KeyboardButton(text=t("btn_premium", lang)),
+                KeyboardButton(text=t("btn_sleep", lang)),
+            ],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def msg_next_kb(lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t("btn_msg_next", lang), callback_data="msg:next")]
         ]
     )
 

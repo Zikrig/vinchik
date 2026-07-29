@@ -353,7 +353,7 @@ async def keep_photo(callback: CallbackQuery, session: AsyncSession, state: FSMC
     await state.clear()
     user = await load_user(session, user.tg_id)
     assert user
-    await after_profile_ready(callback.message, session, user)
+    await after_profile_ready(callback.message, session, user, state)
 
 
 async def _save_photo_and_finish(
@@ -403,7 +403,7 @@ async def _save_photo_and_finish(
     await state.clear()
     user = await load_user(session, user.tg_id)
     assert user
-    await after_profile_ready(message, session, user)
+    await after_profile_ready(message, session, user, state)
 
 
 @router.message(ProfileStates.edit_photo, F.photo)

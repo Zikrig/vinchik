@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
@@ -12,6 +14,25 @@ from config import settings
 from database.models import Like, LikeAction, Profile, User
 from locales import t
 from services.limits import can_like, increment_like_count
+
+MAX_MESSAGE_ATTACHMENTS = 3
+MAX_MESSAGE_ATTACH_BYTES = 10 * 1024 * 1024
+
+
+def empty_message_payload() -> dict[str, Any]:
+    return {
+        "text": None,
+        "voice_file_id": None,
+        "video_note_file_id": None,
+        "attachments": [],
+    }
+
+
+def payload_text(payload: dict | None) -> str | None:
+    if not payload:
+        return None
+    text = (payload.get("text") or "").strip()
+    return text or None
 
 
 async def unseen_likes_count(session: AsyncSession, user_id: int) -> int:
@@ -62,6 +83,7 @@ async def record_action(
     to_user_id: int,
     action: LikeAction,
     message_text: str | None = None,
+    message_payload: dict | None = None,
 ) -> Like | None:
     """Save like/dislike/message. Sleep must never call this.
 
@@ -101,24 +123,31 @@ async def record_action(
             raise PermissionError("limit")
         await increment_like_count(session, from_user.tg_id)
 
+    text = message_text
+    payload = message_payload
+    if payload is not None:
+        text = payload_text(payload) or text
+
     now = datetime.now(UTC)
     if existing is not None:
         existing.action = action
-        existing.message_text = message_text
+        existing.message_text = text
+        existing.message_payload = payload
         existing.is_seen = False
         existing.created_at = now
         await session.commit()
         if action in (LikeAction.like, LikeAction.message):
             from services.moderation import on_like_recorded
 
-            await on_like_recorded(session, from_user.tg_id, action, message_text)
+            await on_like_recorded(session, from_user.tg_id, action, text)
         return existing
 
     like = Like(
         from_user_id=from_user.tg_id,
         to_user_id=to_user_id,
         action=action,
-        message_text=message_text,
+        message_text=text,
+        message_payload=payload,
         created_at=now,
     )
     session.add(like)
@@ -126,7 +155,7 @@ async def record_action(
     if action in (LikeAction.like, LikeAction.message):
         from services.moderation import on_like_recorded
 
-        await on_like_recorded(session, from_user.tg_id, action, message_text)
+        await on_like_recorded(session, from_user.tg_id, action, text)
     return like
 
 
@@ -176,6 +205,19 @@ async def notify_like_batch(bot: Bot, session: AsyncSession, to_user_id: int) ->
     await session.commit()
 
 
+def _like_payload(like: Like) -> dict:
+    raw = like.message_payload
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
 def format_likes_list(rows: list[tuple[User, Profile, Like]], lang: str) -> str:
     if not rows:
         return t("likes_list_empty", lang)
@@ -183,14 +225,44 @@ def format_likes_list(rows: list[tuple[User, Profile, Like]], lang: str) -> str:
     for user, profile, like in rows:
         name = profile.name or "—"
         if user.username:
-            # Escape for Markdown links
             safe_name = name.replace("[", "\\[").replace("]", "\\]")
             lines.append(f"[{safe_name}](https://t.me/{user.username})")
         else:
             lines.append(name)
-        if like.message_text:
-            text = like.message_text.replace('"', "'")
-            lines.append(t("likes_list_message", lang, text=text))
+        payload = _like_payload(like)
+        text = payload_text(payload) or (like.message_text or "").strip()
+        if text:
+            lines.append(t("likes_list_message", lang, text=text.replace('"', "'")))
+        if payload.get("voice_file_id"):
+            lines.append(t("likes_list_voice", lang))
+        if payload.get("video_note_file_id"):
+            lines.append(t("likes_list_video_note", lang))
+        atts = payload.get("attachments") or []
+        if atts:
+            lines.append(t("likes_list_attachment", lang, n=len(atts)))
         if len(rows) > 1:
             lines.append("")
     return "\n".join(lines).rstrip()
+
+
+async def deliver_like_media(bot: Bot, chat_id: int, like: Like) -> None:
+    """Forward stored voice / video note / attachments to the recipient."""
+    payload = _like_payload(like)
+    try:
+        if payload.get("voice_file_id"):
+            await bot.send_voice(chat_id, payload["voice_file_id"])
+        if payload.get("video_note_file_id"):
+            await bot.send_video_note(chat_id, payload["video_note_file_id"])
+        for att in payload.get("attachments") or []:
+            kind = att.get("type")
+            file_id = att.get("file_id")
+            if not file_id:
+                continue
+            if kind == "photo":
+                await bot.send_photo(chat_id, file_id)
+            elif kind == "video":
+                await bot.send_video(chat_id, file_id)
+            else:
+                await bot.send_document(chat_id, file_id)
+    except TelegramAPIError:
+        pass

@@ -77,6 +77,11 @@ async def init_db() -> None:
                 "ALTER TABLE settlements ADD COLUMN IF NOT EXISTS population INTEGER DEFAULT 0"
             )
         )
+        await conn.execute(
+            text(
+                "ALTER TABLE likes ADD COLUMN IF NOT EXISTS message_payload JSONB"
+            )
+        )
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
