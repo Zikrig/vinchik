@@ -25,7 +25,7 @@ RADIUS_TIERS_KM = (
     20000,
 )
 
-# Within a radius, prefer closer ages first, then widen.
+# Age bands paired with radius tiers on a diagonal wave (see next_profile).
 AGE_TOLERANCE_YEARS = (2, 5, 10, 999)
 
 
@@ -84,12 +84,17 @@ async def next_profile(
     viewer: User,
     viewer_profile: Profile,
 ) -> Profile | None:
-    """Match by age band first, then distance circles.
+    """Diagonal expansion of distance × age tolerance.
 
-    1) all radii with ±2 years (10 → 25 → …)
-    2) all radii with ±5
-    3) ±10, then any age
-    Within a band+radius: premium → closer age → closer km.
+    Wave 0: 10 km ±2
+    Wave 1: 10 km ±5  and  25 km ±2
+    Wave 2: 10 km ±10 and  25 km ±5  and  50 km ±2
+    … (radius_index + age_index == wave)
+
+    Each call re-evaluates from scratch over current candidates (no sticky
+    “mode”). New nearby peers of a close age win on the next card.
+
+    Within a wave: premium → closer age → closer km.
     """
     from services.settings_service import get_max_distance_km, get_profile_reshow_days
 
@@ -158,14 +163,22 @@ async def next_profile(
         d = haversine_km(viewer_profile.lat, viewer_profile.lon, p.lat, p.lon)
         with_dist.append((d, p))
 
-    # Age band outer: finish ±2 on every circle before allowing ±5, etc.
-    for age_tol in AGE_TOLERANCE_YEARS:
-        for radius in tiers:
-            matched = [
-                (d, p)
-                for d, p in with_dist
-                if d <= radius and _age_diff(viewer_age, p.age) <= age_tol
-            ]
-            if matched:
-                return _pick_best(matched, viewer_age)
+    n_r = len(tiers)
+    n_a = len(AGE_TOLERANCE_YEARS)
+    for wave in range(n_r + n_a - 1):
+        matched: list[tuple[float, Profile]] = []
+        seen: set[int] = set()
+        for ri, radius in enumerate(tiers):
+            ai = wave - ri
+            if ai < 0 or ai >= n_a:
+                continue
+            age_tol = AGE_TOLERANCE_YEARS[ai]
+            for d, p in with_dist:
+                if p.user_id in seen:
+                    continue
+                if d <= radius and _age_diff(viewer_age, p.age) <= age_tol:
+                    matched.append((d, p))
+                    seen.add(p.user_id)
+        if matched:
+            return _pick_best(matched, viewer_age)
     return None
