@@ -19,6 +19,13 @@
       --brand-hover: #18553f;
       --danger: #b42318;
       --ok: #067647;
+      --warn: #92400e;
+      --male: #2563eb;
+      --male-soft: #dbeafe;
+      --female: #db2777;
+      --female-soft: #fce7f3;
+      --premium: #a16207;
+      --premium-soft: #fef3c7;
       --shadow: 0 10px 30px rgba(26, 36, 32, 0.06);
       --radius: 14px;
     }
@@ -273,6 +280,175 @@
     }
     .status-badge.on .dot { background: var(--ok); }
     .status-badge.off .dot { background: var(--danger); }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: .25rem;
+      font-size: .75rem;
+      font-weight: 600;
+      padding: .18rem .5rem;
+      border-radius: 999px;
+      background: var(--bg-accent);
+      color: var(--muted);
+      margin-right: .25rem;
+      white-space: nowrap;
+    }
+    .tag.ok { background: #e3f6ec; color: var(--ok); }
+    .tag.warn { background: #fef3c7; color: var(--warn); }
+    .tag.danger { background: #fee4e2; color: var(--danger); }
+    .tag.male { background: var(--male-soft); color: var(--male); }
+    .tag.female { background: var(--female-soft); color: var(--female); }
+    .tag.premium { background: var(--premium-soft); color: var(--premium); }
+    .tag.info { background: #e0f2fe; color: #0369a1; }
+    .seg {
+      display: inline-flex;
+      align-items: stretch;
+      flex-wrap: wrap;
+      gap: 3px;
+      padding: 3px;
+      border-radius: 999px;
+      background: #e8eef2;
+      border: 1px solid var(--line);
+      width: fit-content;
+    }
+    .seg input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+      width: 0;
+      height: 0;
+    }
+    .seg label {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: .3rem;
+      margin: 0;
+      padding: .4rem .75rem;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: .85rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: transparent;
+      border: 0;
+      flex-direction: row;
+      min-width: auto;
+      transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+      user-select: none;
+    }
+    .seg label:hover { color: var(--ink); background: rgba(255,255,255,.55); }
+    .seg input:focus-visible + label {
+      outline: 2px solid rgba(31, 107, 79, .35);
+      outline-offset: 1px;
+    }
+    .seg input:checked + label {
+      background: #fff;
+      color: var(--ink);
+      box-shadow: 0 1px 4px rgba(26, 36, 32, .12);
+    }
+    .seg.gender-switch {
+      background: linear-gradient(90deg, var(--male-soft), #f3f4f6 45%, var(--female-soft));
+    }
+    .seg.gender-switch input[value="male"]:checked + label {
+      background: var(--male);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, .35);
+    }
+    .seg.gender-switch input[value="female"]:checked + label {
+      background: var(--female);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(219, 39, 119, .35);
+    }
+    .seg.looking-switch input[value="male"]:checked + label {
+      background: var(--male);
+      color: #fff;
+    }
+    .seg.looking-switch input[value="female"]:checked + label {
+      background: var(--female);
+      color: #fff;
+    }
+    .seg.looking-switch input[value="any"]:checked + label {
+      background: #7c3aed;
+      color: #fff;
+    }
+    .seg.lang-switch input[value="ru"]:checked + label {
+      background: #1d4ed8;
+      color: #fff;
+    }
+    .seg.lang-switch input[value="tg"]:checked + label {
+      background: #0f766e;
+      color: #fff;
+    }
+    .toggle {
+      display: inline-flex;
+      flex-direction: row;
+      align-items: center;
+      gap: .55rem;
+      margin: 0 .75rem .55rem 0;
+      cursor: pointer;
+      font-size: .9rem;
+      font-weight: 500;
+      color: var(--ink);
+      user-select: none;
+    }
+    .toggle input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+    }
+    .toggle-ui {
+      position: relative;
+      width: 2.5rem;
+      height: 1.4rem;
+      border-radius: 999px;
+      background: #d1d5db;
+      border: 1px solid #c4c9d0;
+      transition: background .15s ease, border-color .15s ease;
+      flex-shrink: 0;
+    }
+    .toggle-ui::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 1rem;
+      height: 1rem;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+      transition: transform .15s ease;
+    }
+    .toggle input:checked + .toggle-ui {
+      background: var(--ok);
+      border-color: #059669;
+    }
+    .toggle input:checked + .toggle-ui::after {
+      transform: translateX(1.05rem);
+    }
+    .toggle input:focus-visible + .toggle-ui {
+      outline: 2px solid rgba(31, 107, 79, .35);
+      outline-offset: 2px;
+    }
+    .toggle.danger input:checked + .toggle-ui {
+      background: var(--danger);
+      border-color: #912018;
+    }
+    .toggle.warn input:checked + .toggle-ui {
+      background: #d97706;
+      border-color: #b45309;
+    }
+    .toggle.male-blue input:checked + .toggle-ui {
+      background: var(--male);
+      border-color: #1d4ed8;
+    }
+    .panel-title {
+      display: flex;
+      align-items: center;
+      gap: .45rem;
+    }
     .toast-host {
       position: fixed;
       right: 1rem;
@@ -428,12 +604,14 @@
       if (!form || !fields) return;
       Object.keys(fields).forEach(function (name) {
         const el = form.elements.namedItem(name);
-        if (!el || el instanceof RadioNodeList) {
-          const one = form.querySelector('[name="' + name + '"]');
-          if (!one) return;
-          applyControl(one, fields[name]);
+        if (el instanceof RadioNodeList) {
+          const want = fields[name] == null ? "" : String(fields[name]);
+          Array.prototype.forEach.call(el, function (r) {
+            r.checked = r.value === want;
+          });
           return;
         }
+        if (!el) return;
         applyControl(el, fields[name]);
       });
     };
@@ -443,8 +621,28 @@
         el.checked = !!val;
         return;
       }
+      if (el.type === "radio") {
+        el.checked = el.value === (val == null ? "" : String(val));
+        return;
+      }
       el.value = val == null ? "" : String(val);
     }
+
+    window.heroTagHtml = function (hero) {
+      if (!hero) return "";
+      const parts = [];
+      if (hero.is_test) parts.push('<span class="tag warn">🧪 test</span>');
+      if (hero.is_blocked) parts.push('<span class="tag danger">🚫 ban</span>');
+      if (hero.is_suspicious) parts.push('<span class="tag warn">⚠️ suspicious</span>');
+      if (hero.is_active) parts.push('<span class="tag ok">✅ active</span>');
+      else parts.push('<span class="tag">🙈 скрыт</span>');
+      if (hero.is_complete) parts.push('<span class="tag ok">📋 ready</span>');
+      else parts.push('<span class="tag">📝 draft</span>');
+      if (hero.has_premium) parts.push('<span class="tag premium">⭐ premium</span>');
+      if (hero.gender === "male") parts.push('<span class="tag male">♂ м</span>');
+      if (hero.gender === "female") parts.push('<span class="tag female">♀ ж</span>');
+      return parts.join(" ");
+    };
 
     function applyHero(hero) {
       if (!hero) return;
@@ -465,18 +663,7 @@
         userMeta.innerHTML = html;
       }
       const tags = document.querySelector("[data-hero-tags]");
-      if (tags) {
-        const parts = [];
-        if (hero.is_test) parts.push('<span class="tag warn">test</span>');
-        if (hero.is_blocked) parts.push('<span class="tag danger">ban</span>');
-        if (hero.is_suspicious) parts.push('<span class="tag warn">suspicious</span>');
-        if (hero.is_active) parts.push('<span class="tag ok">active</span>');
-        else parts.push('<span class="tag">скрыт</span>');
-        if (hero.is_complete) parts.push('<span class="tag ok">ready</span>');
-        else parts.push('<span class="tag">draft</span>');
-        if (hero.has_premium) parts.push('<span class="tag ok">premium</span>');
-        tags.innerHTML = parts.join(" ");
-      }
+      if (tags) tags.innerHTML = window.heroTagHtml(hero);
       // If ban forced is_active off, sync profile checkbox outside the user form.
       if (hero.is_blocked) {
         const active = document.querySelector('#profile input[name="is_active"]');

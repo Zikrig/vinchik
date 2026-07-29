@@ -17,11 +17,13 @@
     background: var(--bg-accent);
   }
   .tag {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
     font-size: .75rem;
     font-weight: 600;
-    padding: .15rem .45rem;
-    border-radius: 6px;
+    padding: .18rem .5rem;
+    border-radius: 999px;
     background: var(--bg-accent);
     color: var(--muted);
     margin-right: .25rem;
@@ -29,6 +31,9 @@
   .tag.ok { background: #e3f6ec; color: var(--ok); }
   .tag.warn { background: #fef3c7; color: #92400e; }
   .tag.danger { background: #fee4e2; color: var(--danger); }
+  .tag.male { background: var(--male-soft); color: var(--male); }
+  .tag.female { background: var(--female-soft); color: var(--female); }
+  .tag.premium { background: var(--premium-soft); color: var(--premium); }
   textarea {
     min-width: 100%;
     min-height: 100px;
@@ -121,8 +126,8 @@
     <div class="brand">Vinchik <span>Admin</span></div>
     <div class="nav">
       <a href="{{ url('/accounts') }}">← Аккаунты</a>
-      <a href="{{ url('/bans') }}">Баны</a>
-      <a href="{{ url('/') }}">Дашборд</a>
+      <a href="{{ url('/bans') }}">🚫 Баны</a>
+      <a href="{{ url('/') }}">📊 Дашборд</a>
       <a href="{{ url('/logout') }}">Выйти</a>
     </div>
   </div>
@@ -136,10 +141,10 @@
   {% endif %}
 
   <nav class="jump">
-    <a href="#premium">Премиум</a>
-    <a href="#likes">Лайки</a>
-    <a href="#user">Аккаунт</a>
-    <a href="#profile">Анкета</a>
+    <a href="#premium">⭐ Премиум</a>
+    <a href="#likes">❤️ Лайки</a>
+    <a href="#user">👤 Аккаунт</a>
+    <a href="#profile">📋 Анкета</a>
   </nav>
 
   <section class="panel">
@@ -160,12 +165,14 @@
           {% if is_admin %} · admin{% endif %}
         </p>
         <div data-hero-tags>
-          {% if u.is_test %}<span class="tag warn">test</span>{% endif %}
-          {% if u.is_blocked %}<span class="tag danger">ban</span>{% endif %}
-          {% if u.is_suspicious %}<span class="tag warn">suspicious</span>{% endif %}
-          {% if p and p.is_active %}<span class="tag ok">active</span>{% elif p %}<span class="tag">скрыт</span>{% endif %}
-          {% if p and p.is_complete %}<span class="tag ok">ready</span>{% elif p %}<span class="tag">draft</span>{% endif %}
-          {% if premium_active %}<span class="tag ok">premium</span>{% endif %}
+          {% if u.is_test %}<span class="tag warn">🧪 test</span>{% endif %}
+          {% if u.is_blocked %}<span class="tag danger">🚫 ban</span>{% endif %}
+          {% if u.is_suspicious %}<span class="tag warn">⚠️ suspicious</span>{% endif %}
+          {% if p and p.is_active %}<span class="tag ok">✅ active</span>{% elif p %}<span class="tag">🙈 скрыт</span>{% endif %}
+          {% if p and p.is_complete %}<span class="tag ok">📋 ready</span>{% elif p %}<span class="tag">📝 draft</span>{% endif %}
+          {% if premium_active %}<span class="tag premium">⭐ premium</span>{% endif %}
+          {% if p and p.gender and p.gender.value == 'male' %}<span class="tag male">♂ м</span>{% endif %}
+          {% if p and p.gender and p.gender.value == 'female' %}<span class="tag female">♀ ж</span>{% endif %}
         </div>
         <p class="meta" style="margin:.75rem 0 0">
           создан {{ u.created_at }} · активность {{ u.last_activity_at or '—' }}
@@ -175,7 +182,7 @@
   </section>
 
   <section class="panel premium-zone" id="premium">
-    <h2>Премиум</h2>
+    <h2 class="panel-title">⭐ Премиум</h2>
     <p>
       Статус:
       <span data-premium-status>
@@ -231,7 +238,7 @@
   </section>
 
   <section class="panel danger-zone" id="likes">
-    <h2>Лайки</h2>
+    <h2 class="panel-title">❤️ Лайки</h2>
     <div class="stat-row">
       <span>Отправлено (все): <strong data-likes-sent>{{ likes.sent }}</strong></span>
       <span>Получено: <strong data-likes-received>{{ likes.received }}</strong></span>
@@ -250,7 +257,7 @@
   </section>
 
   <section class="panel" id="user">
-    <h2>Аккаунт</h2>
+    <h2 class="panel-title">👤 Аккаунт</h2>
     <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/user') }}"
           class="js-ajax js-confirm-changes" data-ajax="account-user"
           data-confirm-labels='{"username":"Username","language":"язык","reengage_level":"reengage level","is_test":"test","is_blocked":"забанен","is_suspicious":"подозрительный","suspicious_reason":"причина"}'>
@@ -258,12 +265,15 @@
         <label>Username
           <input type="text" name="username" value="{{ u.username or '' }}" placeholder="без @">
         </label>
-        <label>Язык
-          <select name="language">
-            <option value="ru" {% if u.language == 'ru' %}selected{% endif %}>ru</option>
-            <option value="tg" {% if u.language == 'tg' %}selected{% endif %}>tg</option>
-          </select>
-        </label>
+        <div>
+          <div class="meta" style="margin-bottom:.35rem;font-weight:500">Язык</div>
+          <div class="seg lang-switch" role="radiogroup" aria-label="Язык">
+            <input type="radio" name="language" id="lang-ru" value="ru" {% if u.language == 'ru' %}checked{% endif %}>
+            <label for="lang-ru">🇷🇺 ru</label>
+            <input type="radio" name="language" id="lang-tg" value="tg" {% if u.language == 'tg' %}checked{% endif %}>
+            <label for="lang-tg">🇹🇯 tg</label>
+          </div>
+        </div>
         <label>
           <span class="label-row">
             Reengage level (0–3)
@@ -278,9 +288,21 @@
         </label>
       </div>
       <div class="row" style="margin-top:.75rem">
-        <label class="check"><input type="checkbox" name="is_test" {% if u.is_test %}checked{% endif %}> test</label>
-        <label class="check"><input type="checkbox" name="is_blocked" {% if u.is_blocked %}checked{% endif %}> забанен</label>
-        <label class="check"><input type="checkbox" name="is_suspicious" {% if u.is_suspicious %}checked{% endif %}> подозрительный</label>
+        <label class="toggle warn">
+          <input type="checkbox" name="is_test" {% if u.is_test %}checked{% endif %}>
+          <span class="toggle-ui"></span>
+          🧪 test
+        </label>
+        <label class="toggle danger">
+          <input type="checkbox" name="is_blocked" {% if u.is_blocked %}checked{% endif %}>
+          <span class="toggle-ui"></span>
+          🚫 забанен
+        </label>
+        <label class="toggle warn">
+          <input type="checkbox" name="is_suspicious" {% if u.is_suspicious %}checked{% endif %}>
+          <span class="toggle-ui"></span>
+          ⚠️ подозрительный
+        </label>
       </div>
       <div class="actions">
         <button type="submit">Сохранить аккаунт</button>
@@ -289,7 +311,7 @@
   </section>
 
   <section class="panel" id="profile">
-    <h2>Анкета</h2>
+    <h2 class="panel-title">📋 Анкета</h2>
     <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/profile') }}"
           class="js-ajax js-confirm-changes" data-ajax="account-profile"
           data-confirm-labels='{"name":"имя","age":"возраст","city_name":"город","gender":"пол","looking_for":"ищет","lat":"lat","lon":"lon","photo_file_id":"photo_file_id","description":"описание","is_active":"анкета активна","is_complete":"анкета готова","clear_photo":"очистить фото"}'>
@@ -303,21 +325,37 @@
         <label>Город
           <input type="text" name="city_name" value="{{ p.city_name if p and p.city_name else '' }}">
         </label>
-        <label>Пол
-          <select name="gender">
-            <option value="" {% if not p or not p.gender %}selected{% endif %}>—</option>
-            <option value="male" {% if p and p.gender and p.gender.value == 'male' %}selected{% endif %}>male</option>
-            <option value="female" {% if p and p.gender and p.gender.value == 'female' %}selected{% endif %}>female</option>
-          </select>
-        </label>
-        <label>Ищет
-          <select name="looking_for">
-            <option value="" {% if not p or not p.looking_for %}selected{% endif %}>—</option>
-            <option value="male" {% if p and p.looking_for and p.looking_for.value == 'male' %}selected{% endif %}>male</option>
-            <option value="female" {% if p and p.looking_for and p.looking_for.value == 'female' %}selected{% endif %}>female</option>
-            <option value="any" {% if p and p.looking_for and p.looking_for.value == 'any' %}selected{% endif %}>any</option>
-          </select>
-        </label>
+        <div>
+          <div class="meta" style="margin-bottom:.35rem;font-weight:500">Пол</div>
+          <div class="seg gender-switch" role="radiogroup" aria-label="Пол">
+            <input type="radio" name="gender" id="gender-none" value=""
+                   {% if not p or not p.gender %}checked{% endif %}>
+            <label for="gender-none">—</label>
+            <input type="radio" name="gender" id="gender-male" value="male"
+                   {% if p and p.gender and p.gender.value == 'male' %}checked{% endif %}>
+            <label for="gender-male">♂ М</label>
+            <input type="radio" name="gender" id="gender-female" value="female"
+                   {% if p and p.gender and p.gender.value == 'female' %}checked{% endif %}>
+            <label for="gender-female">♀ Ж</label>
+          </div>
+        </div>
+        <div>
+          <div class="meta" style="margin-bottom:.35rem;font-weight:500">Ищет</div>
+          <div class="seg looking-switch" role="radiogroup" aria-label="Ищет">
+            <input type="radio" name="looking_for" id="look-none" value=""
+                   {% if not p or not p.looking_for %}checked{% endif %}>
+            <label for="look-none">—</label>
+            <input type="radio" name="looking_for" id="look-male" value="male"
+                   {% if p and p.looking_for and p.looking_for.value == 'male' %}checked{% endif %}>
+            <label for="look-male">♂ М</label>
+            <input type="radio" name="looking_for" id="look-any" value="any"
+                   {% if p and p.looking_for and p.looking_for.value == 'any' %}checked{% endif %}>
+            <label for="look-any">◎ всех</label>
+            <input type="radio" name="looking_for" id="look-female" value="female"
+                   {% if p and p.looking_for and p.looking_for.value == 'female' %}checked{% endif %}>
+            <label for="look-female">♀ Ж</label>
+          </div>
+        </div>
         <label>Lat
           <input type="text" name="lat" value="{{ p.lat if p and p.lat is not none else '' }}">
         </label>
@@ -332,9 +370,21 @@
         <textarea name="description">{{ p.description if p and p.description else '' }}</textarea>
       </label>
       <div class="row" style="margin-top:.75rem">
-        <label class="check"><input type="checkbox" name="is_active" {% if p and p.is_active %}checked{% endif %}> анкета активна</label>
-        <label class="check"><input type="checkbox" name="is_complete" {% if p and p.is_complete %}checked{% endif %}> анкета готова</label>
-        <label class="check"><input type="checkbox" name="clear_photo"> очистить фото</label>
+        <label class="toggle">
+          <input type="checkbox" name="is_active" {% if p and p.is_active %}checked{% endif %}>
+          <span class="toggle-ui"></span>
+          ✅ анкета активна
+        </label>
+        <label class="toggle">
+          <input type="checkbox" name="is_complete" {% if p and p.is_complete %}checked{% endif %}>
+          <span class="toggle-ui"></span>
+          📋 анкета готова
+        </label>
+        <label class="toggle danger">
+          <input type="checkbox" name="clear_photo">
+          <span class="toggle-ui"></span>
+          🗑 очистить фото
+        </label>
       </div>
       <div class="actions">
         <button type="submit">Сохранить анкету</button>
@@ -347,6 +397,7 @@
 (function () {
   function fieldValue(el) {
     if (el.type === "checkbox") return el.checked ? "да" : "нет";
+    if (el.type === "radio") return el.checked ? (el.value || "пусто") : null;
     return (el.value || "").trim();
   }
 
@@ -354,6 +405,11 @@
     const data = {};
     form.querySelectorAll("input[name], select[name], textarea[name]").forEach(function (el) {
       if (el.type === "hidden") return;
+      if (el.type === "radio") {
+        if (!Object.prototype.hasOwnProperty.call(data, el.name)) data[el.name] = "пусто";
+        if (el.checked) data[el.name] = el.value === "" ? "пусто" : el.value;
+        return;
+      }
       data[el.name] = fieldValue(el);
     });
     return data;

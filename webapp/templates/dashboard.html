@@ -5,8 +5,8 @@
   <div class="topbar">
     <div class="brand">Vinchik <span>Admin</span></div>
     <div class="nav">
-      <a href="{{ url('/accounts') }}">Все аккаунты</a>
-      <a href="{{ url('/bans') }}">Баны</a>
+      <a href="{{ url('/accounts') }}">👥 Все аккаунты</a>
+      <a href="{{ url('/bans') }}">🚫 Баны</a>
       <a href="{{ url('/logout') }}">Выйти</a>
     </div>
   </div>
@@ -21,22 +21,22 @@
   {% if flash == "soft_off" %}<p class="flash-ok">Soft-launch выключен — лента открыта.</p>{% endif %}
 
   <nav class="jump">
-    <a href="#status">Режимы</a>
-    <a href="#accounts">Аккаунты</a>
-    <a href="#settings">Настройки</a>
-    <a href="#channels">Каналы</a>
-    <a href="#orders">Заявки</a>
-    <a href="#premiums">Премиум</a>
-    <a href="{{ url('/bans') }}">Баны</a>
-    <a href="#geo">Гео</a>
+    <a href="#status">⚙️ Режимы</a>
+    <a href="#accounts">👥 Аккаунты</a>
+    <a href="#settings">🛠 Настройки</a>
+    <a href="#channels">📢 Каналы</a>
+    <a href="#orders">💳 Заявки</a>
+    <a href="#premiums">⭐ Премиум</a>
+    <a href="{{ url('/bans') }}">🚫 Баны</a>
+    <a href="#geo">📍 Гео</a>
   </nav>
 
   <section class="panel" id="status">
-    <h2>Режимы</h2>
+    <h2 class="panel-title">⚙️ Режимы</h2>
     <div class="switch-list">
       <div class="switch-row">
         <div>
-          <div class="label">Soft-launch</div>
+          <div class="label">🚧 Soft-launch</div>
           <p class="hint">ON — только регистрация, лента закрыта. OFF — бот работает полностью.</p>
         </div>
         <form method="post" action="{{ url('/settings/soft-launch') }}" class="js-ajax" data-ajax="soft-launch">
@@ -49,7 +49,7 @@
       </div>
       <div class="switch-row">
         <div>
-          <div class="label">Тестовые в ленте</div>
+          <div class="label">🧪 Тестовые в ленте</div>
           <p class="hint">Показать или скрыть все тестовые анкеты сразу (сейчас <span data-test-count>{{ test_users_count }}</span>).</p>
         </div>
         <form method="post" action="{{ url('/test-users/visibility') }}" class="js-ajax" data-ajax="test-visibility">
@@ -64,9 +64,9 @@
   </section>
 
   <section class="panel" id="accounts">
-    <h2>Аккаунты</h2>
+    <h2 class="panel-title">👥 Аккаунты</h2>
     <p><a class="btn" href="{{ url('/accounts') }}">Открыть список</a></p>
-    <h3>Тестовые</h3>
+    <h3>🧪 Тестовые</h3>
     <p class="hint">Сейчас: <strong data-test-count>{{ test_users_count }}</strong></p>
     <form method="post" action="{{ url('/test-users/create') }}" class="row js-ajax" data-ajax="test-create">
       <label>Сколько
@@ -81,7 +81,7 @@
   </section>
 
   <section class="panel" id="settings">
-    <h2>Настройки</h2>
+    <h2 class="panel-title">🛠 Настройки</h2>
     <form method="post" action="{{ url('/settings') }}" class="js-ajax" data-ajax="settings">
       <div class="row">
         <label>Лимит лайков / сутки UTC
@@ -118,7 +118,7 @@
   </section>
 
   <section class="panel" id="channels">
-    <h2>Обязательные каналы</h2>
+    <h2 class="panel-title">📢 Обязательные каналы</h2>
     <table>
       <tr><th>ID</th><th>Название</th><th>Ссылка</th><th>Статус</th><th></th></tr>
       {% for ch in channels %}
@@ -157,7 +157,7 @@
   </section>
 
   <section class="panel" id="orders">
-    <h2>Заявки на Премиум {% if pending %}<span class="meta">({{ pending|length }})</span>{% endif %}</h2>
+    <h2 class="panel-title">💳 Заявки на Премиум {% if pending %}<span class="meta">({{ pending|length }})</span>{% endif %}</h2>
     {% if not pending %}<p class="hint">Нет заявок.</p>{% endif %}
     <table>
       {% for o in pending %}
@@ -175,7 +175,7 @@
   </section>
 
   <section class="panel" id="premiums">
-    <h2>Активный Премиум</h2>
+    <h2 class="panel-title">⭐ Активный Премиум</h2>
     <table>
       {% for u in premiums %}
       <tr>
@@ -190,7 +190,7 @@
   </section>
 
   <section class="panel" id="geo">
-    <h2>Моя геолокация</h2>
+    <h2 class="panel-title">📍 Моя геолокация</h2>
     <p>Координаты профиля админа для ленты и спавна тестов. По умолчанию — Душанбе.</p>
     {% if not admin_ids %}
     <p class="flash-err">В <code>ADMIN_IDS</code> никого нет.</p>

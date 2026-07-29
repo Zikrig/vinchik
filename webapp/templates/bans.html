@@ -5,8 +5,8 @@
   <div class="topbar">
     <div class="brand">Vinchik <span>Баны</span></div>
     <div class="nav">
-      <a href="{{ url('/') }}">Дашборд</a>
-      <a href="{{ url('/accounts') }}">Аккаунты</a>
+      <a href="{{ url('/') }}">📊 Дашборд</a>
+      <a href="{{ url('/accounts') }}">👥 Аккаунты</a>
       <a href="{{ url('/logout') }}">Выйти</a>
     </div>
   </div>
@@ -16,12 +16,12 @@
   {% if flash == "banned" %}<p class="flash-ok">Пользователь забанен.</p>{% endif %}
 
   <nav class="jump">
-    <a href="#blocked">Заблокированные</a>
-    <a href="#suspicious">Подозрительные</a>
+    <a href="#blocked">🚫 Заблокированные</a>
+    <a href="#suspicious">⚠️ Подозрительные</a>
   </nav>
 
   <section class="panel" id="blocked">
-    <h2>Заблокированные</h2>
+    <h2 class="panel-title">🚫 Заблокированные</h2>
     <p class="hint">Автоблок: больше 5 жалоб за 3 месяца. Жалоба — один раз с одного аккаунта. Пользователь не видит ленту.</p>
     {% if not blocked %}<p class="hint">Список пуст.</p>{% endif %}
     {% for row in blocked %}
@@ -50,7 +50,7 @@
   </section>
 
   <section class="panel" id="suspicious">
-    <h2>Подозрительные</h2>
+    <h2 class="panel-title">⚠️ Подозрительные</h2>
     <p class="hint">Фоновые проверки (пользователю не видны): &gt;150 лайков/сутки, &gt;150 сообщений/сутки, &gt;3 раскладки в одном сообщении. Можно снять флаг или забанить вручную.</p>
     {% if not suspicious %}<p class="hint">Список пуст.</p>{% endif %}
     {% for row in suspicious %}
@@ -64,8 +64,8 @@
         <p>
           <strong>ID:</strong> <a href="{{ url('/accounts/' ~ row.tg_id) }}">{{ row.tg_id }}</a>
           {% if row.username %} · <a href="https://t.me/{{ row.username }}" target="_blank">@{{ row.username }}</a>{% endif %}
-          {% if row.is_blocked %}<span class="tag danger">ban</span>{% endif %}
-          <span class="tag warn">suspicious</span>
+          {% if row.is_blocked %}<span class="tag danger">🚫 ban</span>{% endif %}
+          <span class="tag warn">⚠️ suspicious</span>
         </p>
         <p><strong>Причина:</strong> {{ row.suspicious_reason or '—' }}</p>
         <p><strong>Жалоб за 3 мес:</strong> {{ row.reports_n }}</p>

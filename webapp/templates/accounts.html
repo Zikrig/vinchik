@@ -5,19 +5,6 @@
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
   .wrap { max-width: 1200px; }
-  .tag {
-    display: inline-block;
-    font-size: .75rem;
-    font-weight: 600;
-    padding: .15rem .45rem;
-    border-radius: 6px;
-    background: var(--bg-accent);
-    color: var(--muted);
-    margin-right: .25rem;
-  }
-  .tag.ok { background: #e3f6ec; color: var(--ok); }
-  .tag.warn { background: #fef3c7; color: #92400e; }
-  .tag.danger { background: #fee4e2; color: var(--danger); }
   .table-scroll { overflow-x: auto; }
   .filters label { min-width: 120px; }
   .filters input[type="text"] { min-width: 220px; }
@@ -59,8 +46,8 @@
   <div class="topbar">
     <div class="brand">Vinchik <span>Admin</span></div>
     <div class="nav">
-      <a href="{{ url('/') }}">Дашборд</a>
-      <a href="{{ url('/bans') }}">Баны</a>
+      <a href="{{ url('/') }}">📊 Дашборд</a>
+      <a href="{{ url('/bans') }}">🚫 Баны</a>
       <a href="{{ url('/logout') }}">Выйти</a>
     </div>
   </div>
@@ -115,23 +102,23 @@
       <label>Пол
         <select name="gender">
           <option value="any" {% if f.gender == 'any' %}selected{% endif %}>любой</option>
-          <option value="male" {% if f.gender == 'male' %}selected{% endif %}>м</option>
-          <option value="female" {% if f.gender == 'female' %}selected{% endif %}>ж</option>
+          <option value="male" {% if f.gender == 'male' %}selected{% endif %}>♂ м</option>
+          <option value="female" {% if f.gender == 'female' %}selected{% endif %}>♀ ж</option>
         </select>
       </label>
       <label>Ищет
         <select name="looking_for">
           <option value="any" {% if f.looking_for == 'any' %}selected{% endif %}>любой</option>
-          <option value="male" {% if f.looking_for == 'male' %}selected{% endif %}>м</option>
-          <option value="female" {% if f.looking_for == 'female' %}selected{% endif %}>ж</option>
-          <option value="all" {% if f.looking_for == 'all' %}selected{% endif %}>всех</option>
+          <option value="male" {% if f.looking_for == 'male' %}selected{% endif %}>♂ м</option>
+          <option value="female" {% if f.looking_for == 'female' %}selected{% endif %}>♀ ж</option>
+          <option value="all" {% if f.looking_for == 'all' %}selected{% endif %}>◎ всех</option>
         </select>
       </label>
       <label>Язык
         <select name="language">
           <option value="any" {% if f.language == 'any' %}selected{% endif %}>любой</option>
-          <option value="ru" {% if f.language == 'ru' %}selected{% endif %}>ru</option>
-          <option value="tg" {% if f.language == 'tg' %}selected{% endif %}>tg</option>
+          <option value="ru" {% if f.language == 'ru' %}selected{% endif %}>🇷🇺 ru</option>
+          <option value="tg" {% if f.language == 'tg' %}selected{% endif %}>🇹🇯 tg</option>
         </select>
       </label>
       <label>Премиум
@@ -180,9 +167,14 @@
             {% if p %}
             <div>{{ p.name or '—' }}{% if p.age %}, {{ p.age }}{% endif %}{% if p.city_name %}, {{ p.city_name }}{% endif %}</div>
             <div class="meta">
-              {% if p.gender %}{{ p.gender.value }}{% else %}—{% endif %}
+              {% if p.gender and p.gender.value == 'male' %}<span class="tag male">♂ м</span>
+              {% elif p.gender and p.gender.value == 'female' %}<span class="tag female">♀ ж</span>
+              {% else %}<span class="tag">—</span>{% endif %}
               →
-              {% if p.looking_for %}{{ p.looking_for.value }}{% else %}—{% endif %}
+              {% if p.looking_for and p.looking_for.value == 'male' %}<span class="tag male">♂ м</span>
+              {% elif p.looking_for and p.looking_for.value == 'female' %}<span class="tag female">♀ ж</span>
+              {% elif p.looking_for and p.looking_for.value == 'any' %}<span class="tag info">◎ всех</span>
+              {% else %}<span class="tag">—</span>{% endif %}
             </div>
             {% if p.description %}<div class="meta">{{ p.description[:120] }}{% if p.description|length > 120 %}…{% endif %}</div>{% endif %}
             {% if p.lat is not none %}<div class="meta">{{ p.lat }}, {{ p.lon }}</div>{% endif %}
@@ -191,10 +183,11 @@
             {% endif %}
           </td>
           <td>
-            {% if u.is_test %}<span class="tag warn">test</span>{% endif %}
-            {% if u.is_blocked %}<span class="tag danger">ban</span>{% endif %}
-            {% if p and p.is_active %}<span class="tag ok">active</span>{% elif p %}<span class="tag">скрыт</span>{% endif %}
-            {% if p and p.is_complete %}<span class="tag ok">ready</span>{% elif p %}<span class="tag">draft</span>{% endif %}
+            {% if u.is_test %}<span class="tag warn">🧪 test</span>{% endif %}
+            {% if u.is_blocked %}<span class="tag danger">🚫 ban</span>{% endif %}
+            {% if is_premium(u) %}<span class="tag premium">⭐ premium</span>{% endif %}
+            {% if p and p.is_active %}<span class="tag ok">✅ active</span>{% elif p %}<span class="tag">🙈 скрыт</span>{% endif %}
+            {% if p and p.is_complete %}<span class="tag ok">📋 ready</span>{% elif p %}<span class="tag">📝 draft</span>{% endif %}
           </td>
           <td>
             <a class="btn secondary" href="{{ url('/accounts/' ~ u.tg_id) }}">Открыть</a>

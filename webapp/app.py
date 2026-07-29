@@ -169,6 +169,7 @@ def serialize_account_hero(user) -> dict:
         "is_complete": bool(p.is_complete) if p else False,
         "has_premium": is_premium(user),
         "has_photo": bool(p and p.photo_file_id),
+        "gender": p.gender.value if p and p.gender else "",
     }
 
 
