@@ -96,24 +96,46 @@ def _latin_fold(raw: str) -> str:
     return text.translate(_CYR_TO_LAT)
 
 
+def _ascii_aliases(candidates: list[str]) -> list[str]:
+    out: list[str] = []
+    for n in candidates:
+        if not n.isascii() or " " in n or "-" in n:
+            continue
+        if not n.isalpha():
+            continue
+        if not (4 <= len(n) <= 12):
+            continue
+        out.append(n)
+    return out
+
+
+def _twin_quality(ascii_name: str) -> tuple:
+    """Higher is better — Title-case names like Moscow / Moskva beat Musko."""
+    title = ascii_name[0].isupper() and ascii_name[1:].islower()
+    return (
+        1 if title else 0,
+        1 if 6 <= len(ascii_name) <= 7 else 0,
+        -abs(len(ascii_name) - 6),
+    )
+
+
 def pick_display_name(names: list[str] | set[str], fallback: str = "") -> str:
     """Choose a Cyrillic display label when available, else fallback/Latin."""
-    from difflib import SequenceMatcher
-
     candidates = [n.strip() for n in names if n and n.strip()]
     cyr = [n for n in candidates if is_cyrillic_name(n) and 2 <= len(n) <= 48]
+    ascii_names = _ascii_aliases(candidates)
+    fold_to_ascii: dict[str, list[str]] = {}
+    for a in ascii_names:
+        fold_to_ascii.setdefault(_latin_fold(a), []).append(a)
+
     if cyr:
-        fallback_lat = _latin_fold(fallback) if fallback else ""
-        ascii_refs = sorted(
-            {
-                _latin_fold(n)
-                for n in candidates
-                if n.isascii() and n.replace("-", "").isalpha() and 5 <= len(n) <= 40
-            },
-            key=len,
-            reverse=True,
-        )[:6]
-        refs = [r for r in [fallback_lat, *ascii_refs] if len(r) >= 5]
+        all_folds = list(fold_to_ascii.keys())
+
+        def _family_size(fold: str) -> int:
+            if len(fold) < 4:
+                return 0
+            prefix = fold[:4]
+            return sum(1 for f in all_folds if f.startswith(prefix))
 
         def _key(n: str) -> tuple:
             letters = "".join(c for c in n if c.isalpha())
@@ -121,9 +143,26 @@ def pick_display_name(names: list[str] | set[str], fallback: str = "") -> str:
             rare = sum(1 for c in n.lower() if c in _RARE_CYR)
             length_pen = 0 if 4 <= len(n) <= 12 else abs(len(n) - 8)
             fold = _latin_fold(n)
-            near = max((SequenceMatcher(None, fold, r).ratio() for r in refs), default=0.0)
-            # Ascending: lower is better. Prefer near match to Moscow/Moskva etc.
-            return (-near, -cyrillic_ratio(n), -pure, rare, length_pen, len(n), n)
+            twins = fold_to_ascii.get(fold, [])
+            if twins:
+                tq = max(_twin_quality(t) for t in twins)
+                has_twin = 1
+            else:
+                tq = (0, 0, -99)
+                has_twin = 0
+            family = _family_size(fold)
+            # Ascending: lower is better.
+            # Exact latin twin + largest latin-name family (mosk* >> mask* / musk*).
+            return (
+                -has_twin,
+                -family,
+                tuple(-x for x in tq),
+                -pure,
+                rare,
+                length_pen,
+                len(n),
+                n,
+            )
 
         cyr.sort(key=_key)
         return cyr[0][:128]

@@ -93,9 +93,28 @@ async def import_settlements_from_dump(
 
     # Prefer Cyrillic (ru/tg) display names over Latin GeoNames titles.
     for sid, meta in places.items():
+        namelist = names_by_place.get(sid, [])
+        latin = next(
+            (
+                n
+                for n in namelist
+                if n.isascii() and n.replace("-", "").isalpha() and 4 <= len(n) <= 40
+            ),
+            "",
+        )
+        # Prefer longest Latin title (Moscow over MOW) as fold reference.
+        latin_long = max(
+            (
+                n
+                for n in namelist
+                if n.isascii() and n.replace("-", "").isalpha() and 4 <= len(n) <= 40
+            ),
+            key=len,
+            default=latin,
+        )
         meta["display_name"] = pick_display_name(
-            names_by_place.get(sid, []),
-            meta.get("primary_name") or meta["display_name"],
+            namelist,
+            latin_long or meta.get("primary_name") or meta["display_name"],
         )
 
     if replace:
