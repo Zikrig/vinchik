@@ -61,60 +61,44 @@
   }
   .panel.profile-zone {
     border-color: #cfd4da;
+    transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+  }
+  .panel.profile-zone.is-locked {
     background: #eef0f2;
+    cursor: pointer;
+  }
+  .panel.profile-zone.is-unlocked {
+    background: #fff;
+    border-color: #b7d4c6;
+    box-shadow: 0 0 0 2px rgba(31, 107, 79, .18);
   }
   .panel.profile-zone .hint-lock {
     margin: 0 0 .85rem;
     font-size: .85rem;
     color: var(--muted);
   }
-  .lockable {
-    position: relative;
-    border-radius: 10px;
-    transition: box-shadow .15s ease, background .15s ease;
-  }
-  .lockable.is-locked {
-    cursor: pointer;
-  }
-  .lockable.is-locked input,
-  .lockable.is-locked textarea,
-  .lockable.is-locked .seg,
-  .lockable.is-locked .toggle {
+  .panel.profile-zone.is-locked input,
+  .panel.profile-zone.is-locked textarea,
+  .panel.profile-zone.is-locked .seg,
+  .panel.profile-zone.is-locked .toggle {
     pointer-events: none;
   }
-  .lockable.is-locked input,
-  .lockable.is-locked textarea {
+  .panel.profile-zone.is-locked input,
+  .panel.profile-zone.is-locked textarea {
     background: #e4e7eb;
     color: #4b5563;
     border-color: #c5ccd3;
   }
-  .lockable.is-locked .seg {
+  .panel.profile-zone.is-locked .seg {
     opacity: .85;
     filter: grayscale(.15);
   }
-  .lockable.is-locked .toggle {
+  .panel.profile-zone.is-locked .toggle {
     opacity: .75;
   }
-  .lockable.is-unlocked {
-    box-shadow: 0 0 0 2px rgba(31, 107, 79, .35);
-    background: rgba(255, 255, 255, .55);
-    padding: .15rem;
-  }
-  .lockable.is-unlocked input,
-  .lockable.is-unlocked textarea {
+  .panel.profile-zone.is-unlocked input,
+  .panel.profile-zone.is-unlocked textarea {
     background: #fff;
-  }
-  .settlement-picker .settlement-q {
-    width: 100%;
-    margin-top: .4rem;
-    display: none;
-  }
-  .settlement-picker.is-unlocked .settlement-q {
-    display: block;
-  }
-  .settlement-picker.is-unlocked input[name="city_name"] {
-    background: #e4e7eb;
-    cursor: default;
   }
   .settlement-results {
     display: none;
@@ -125,7 +109,7 @@
     max-height: 220px;
     overflow: auto;
   }
-  .settlement-picker.is-unlocked .settlement-results.is-open {
+  .panel.profile-zone.is-unlocked .settlement-results.is-open {
     display: block;
   }
   .settlement-results button {
@@ -154,7 +138,7 @@
     color: var(--muted);
     line-height: 1.35;
   }
-  .settlement-picker.is-unlocked .settlement-confirm.is-on {
+  .panel.profile-zone.is-unlocked .settlement-confirm.is-on {
     display: block;
   }
   .readonly-field input {
@@ -405,14 +389,14 @@
     </form>
   </section>
 
-  <section class="panel profile-zone" id="profile">
+  <section class="panel profile-zone is-locked" id="profile">
     <h2 class="panel-title">📋 Анкета</h2>
-    <p class="hint-lock">Поля серые — только просмотр. Чтобы изменить, дважды кликните по полю.</p>
+    <p class="hint-lock">Панель серая — только просмотр. Дважды кликните по панели, чтобы редактировать.</p>
     <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/profile') }}"
           class="js-ajax js-confirm-changes js-lockable-form" data-ajax="account-profile"
           data-confirm-labels='{"language":"язык","name":"имя","age":"возраст","city_name":"город","gender":"пол","looking_for":"ищет","lat":"lat","lon":"lon","photo_file_id":"photo_file_id","description":"описание","is_active":"анкета активна","is_complete":"анкета готова","clear_photo":"очистить фото"}'>
       <div class="grid2">
-        <div class="lockable is-locked" data-lock>
+        <div data-lock>
           <div class="meta" style="margin-bottom:.35rem;font-weight:500">Язык</div>
           <div class="seg lang-switch" role="radiogroup" aria-label="Язык">
             <input type="radio" name="language" id="lang-ru" value="ru" {% if u.language == 'ru' %}checked{% endif %}>
@@ -421,22 +405,22 @@
             <label for="lang-tg">🇹🇯 tg</label>
           </div>
         </div>
-        <label class="lockable is-locked" data-lock>Имя
+        <label data-lock>Имя
           <input type="text" name="name" value="{{ p.name if p and p.name else '' }}" readonly>
         </label>
-        <label class="lockable is-locked" data-lock>Возраст
+        <label data-lock>Возраст
           <input type="number" name="age" min="14" max="99" value="{{ p.age if p and p.age is not none else '' }}" readonly>
         </label>
-        <div class="lockable is-locked settlement-picker" data-lock data-settlement-picker
+        <div class="settlement-picker" data-lock data-settlement-picker
              data-search-url="{{ url('/settlements/search') }}">
           <div class="meta" style="margin-bottom:.35rem;font-weight:500">Город (справочник НП)</div>
           <input type="text" name="city_name" value="{{ p.city_name if p and p.city_name else '' }}"
-                 readonly title="Выберите из справочника">
-          <input type="search" class="settlement-q" placeholder="Начните вводить название…" autocomplete="off">
+                 readonly placeholder="Дважды кликните по панели для поиска" autocomplete="off"
+                 title="Дважды кликните по панели, затем введите название">
           <div class="settlement-results" aria-live="polite"></div>
           <div class="settlement-confirm"></div>
         </div>
-        <div class="lockable is-locked" data-lock>
+        <div data-lock>
           <div class="meta" style="margin-bottom:.35rem;font-weight:500">Пол</div>
           <div class="seg gender-switch" role="radiogroup" aria-label="Пол">
             {% if not p or not p.gender %}
@@ -450,7 +434,7 @@
             <label for="gender-female">♀ Ж</label>
           </div>
         </div>
-        <div class="lockable is-locked" data-lock>
+        <div data-lock>
           <div class="meta" style="margin-bottom:.35rem;font-weight:500">Ищет</div>
           <div class="seg looking-switch" role="radiogroup" aria-label="Ищет">
             {% if not p or not p.looking_for %}
@@ -467,35 +451,35 @@
             <label for="look-female">♀ Ж</label>
           </div>
         </div>
-        <label class="lockable is-locked" data-lock>Lat
+        <label data-lock>Lat
           <input type="text" name="lat" value="{{ p.lat if p and p.lat is not none else '' }}" readonly>
         </label>
-        <label class="lockable is-locked" data-lock>Lon
+        <label data-lock>Lon
           <input type="text" name="lon" value="{{ p.lon if p and p.lon is not none else '' }}" readonly>
         </label>
-        <label class="lockable is-locked" data-lock>photo_file_id
+        <label data-lock>photo_file_id
           <input type="text" name="photo_file_id" value="{{ p.photo_file_id if p and p.photo_file_id else '' }}" readonly>
         </label>
       </div>
-      <label class="lockable is-locked" data-lock style="margin-top:.75rem;display:block">Описание
+      <label data-lock style="margin-top:.75rem;display:block">Описание
         <textarea name="description" readonly>{{ p.description if p and p.description else '' }}</textarea>
       </label>
       <div class="row" style="margin-top:.75rem">
-        <div class="lockable is-locked" data-lock>
+        <div data-lock>
           <label class="toggle">
             <input type="checkbox" name="is_active" {% if p and p.is_active %}checked{% endif %}>
             <span class="toggle-ui"></span>
             ✅ анкета активна
           </label>
         </div>
-        <div class="lockable is-locked" data-lock>
+        <div data-lock>
           <label class="toggle">
             <input type="checkbox" name="is_complete" {% if p and p.is_complete %}checked{% endif %}>
             <span class="toggle-ui"></span>
             📋 анкета готова
           </label>
         </div>
-        <div class="lockable is-locked" data-lock>
+        <div data-lock>
           <label class="toggle danger">
             <input type="checkbox" name="clear_photo">
             <span class="toggle-ui"></span>
@@ -532,53 +516,54 @@
     return data;
   }
 
-  function lockField(box) {
-    box.classList.add("is-locked");
-    box.classList.remove("is-unlocked");
-    box.querySelectorAll("input[type='text'], input[type='number'], textarea").forEach(function (el) {
-      el.setAttribute("readonly", "readonly");
-    });
-    const sq = box.querySelector(".settlement-q");
-    if (sq) {
-      sq.value = "";
-      sq.setAttribute("disabled", "disabled");
-    }
-    const results = box.querySelector(".settlement-results");
-    if (results) {
-      results.classList.remove("is-open");
-      results.innerHTML = "";
-    }
-    const conf = box.querySelector(".settlement-confirm");
-    if (conf) {
-      conf.classList.remove("is-on");
-      conf.textContent = "";
-    }
-  }
-
-  function unlockField(box) {
-    box.classList.remove("is-locked");
-    box.classList.add("is-unlocked");
-    box.querySelectorAll("input[type='text'], input[type='number'], textarea").forEach(function (el) {
-      if (box.hasAttribute("data-settlement-picker") && el.name === "city_name") {
-        el.setAttribute("readonly", "readonly");
-        return;
-      }
-      el.removeAttribute("readonly");
-    });
-    const sq = box.querySelector(".settlement-q");
-    if (sq) {
-      sq.removeAttribute("disabled");
-      try { sq.focus(); } catch (_) {}
-      return;
-    }
-    const focusable = box.querySelector("input:not([type='radio']):not([type='checkbox']), textarea, input[type='radio'], input[type='checkbox']");
-    if (focusable) {
-      try { focusable.focus(); } catch (_) {}
-    }
+  function panelOf(form) {
+    return form.closest(".profile-zone");
   }
 
   function lockAll(form) {
-    form.querySelectorAll("[data-lock]").forEach(lockField);
+    const panel = panelOf(form);
+    if (panel) {
+      panel.classList.add("is-locked");
+      panel.classList.remove("is-unlocked");
+    }
+    form.querySelectorAll("input[type='text'], input[type='number'], textarea").forEach(function (el) {
+      el.setAttribute("readonly", "readonly");
+    });
+    form.querySelectorAll("[data-settlement-picker]").forEach(function (box) {
+      const results = box.querySelector(".settlement-results");
+      if (results) {
+        results.classList.remove("is-open");
+        results.innerHTML = "";
+      }
+      const conf = box.querySelector(".settlement-confirm");
+      if (conf) {
+        conf.classList.remove("is-on");
+        conf.textContent = "";
+      }
+      const city = box.querySelector('input[name="city_name"]');
+      if (city) {
+        if (box._settlementSavedCity != null) city.value = box._settlementSavedCity;
+        city.placeholder = "Дважды кликните по панели для поиска";
+      }
+    });
+  }
+
+  function unlockAll(form) {
+    const panel = panelOf(form);
+    if (panel) {
+      panel.classList.remove("is-locked");
+      panel.classList.add("is-unlocked");
+    }
+    form.querySelectorAll("input[type='text'], input[type='number'], textarea").forEach(function (el) {
+      el.removeAttribute("readonly");
+    });
+    form.querySelectorAll("[data-settlement-picker]").forEach(function (box) {
+      const city = box.querySelector('input[name="city_name"]');
+      if (city) {
+        box._settlementSavedCity = city.value;
+        city.placeholder = "Начните вводить название…";
+      }
+    });
   }
 
   function initSettlementPickers(root) {
@@ -586,16 +571,23 @@
       if (box._settlementReady) return;
       box._settlementReady = true;
       const url = box.getAttribute("data-search-url");
-      const qInput = box.querySelector(".settlement-q");
+      const cityInput = box.querySelector('input[name="city_name"]');
       const results = box.querySelector(".settlement-results");
       const confirmEl = box.querySelector(".settlement-confirm");
-      const cityInput = box.querySelector('input[name="city_name"]');
       const form = box.closest("form");
       let timer = null;
       let reqId = 0;
 
+      function panelUnlocked() {
+        const panel = form && form.closest(".profile-zone");
+        return !!(panel && panel.classList.contains("is-unlocked"));
+      }
+
       function setGeo(name, lat, lon, confirmText) {
-        if (cityInput) cityInput.value = name || "";
+        if (cityInput) {
+          cityInput.value = name || "";
+          box._settlementSavedCity = cityInput.value;
+        }
         if (form) {
           const latEl = form.querySelector('input[name="lat"]');
           const lonEl = form.querySelector('input[name="lon"]');
@@ -610,7 +602,6 @@
           results.classList.remove("is-open");
           results.innerHTML = "";
         }
-        if (qInput) qInput.value = "";
         if (window.showToast) window.showToast("Город и координаты подставлены. Сохраните анкету.", true);
       }
 
@@ -665,9 +656,10 @@
         return escapeHtml(s).replace(/'/g, "&#39;");
       }
 
-      qInput.addEventListener("input", function () {
+      cityInput.addEventListener("input", function () {
+        if (!panelUnlocked()) return;
         clearTimeout(timer);
-        timer = setTimeout(function () { runSearch(qInput.value); }, 280);
+        timer = setTimeout(function () { runSearch(cityInput.value); }, 280);
       });
       results.addEventListener("click", function (e) {
         const btn = e.target.closest("button[data-id]");
@@ -685,11 +677,13 @@
   document.querySelectorAll("form.js-lockable-form").forEach(function (form) {
     lockAll(form);
     initSettlementPickers(form);
-    form.addEventListener("dblclick", function (e) {
-      const box = e.target.closest("[data-lock]");
-      if (!box || !form.contains(box)) return;
+    const panel = panelOf(form);
+    if (!panel) return;
+    panel.addEventListener("dblclick", function (e) {
+      if (e.target.closest("button, a, .settlement-results")) return;
+      if (panel.classList.contains("is-unlocked")) return;
       e.preventDefault();
-      unlockField(box);
+      unlockAll(form);
     });
   });
 
