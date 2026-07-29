@@ -316,8 +316,6 @@ async def update_account_user(
     session: AsyncSession,
     user_id: int,
     *,
-    username: str | None,
-    language: str,
     is_test: bool,
     is_blocked: bool,
     reengage_level: int,
@@ -328,8 +326,7 @@ async def update_account_user(
     if user is None:
         return None
 
-    user.username = (username or "").strip() or None
-    user.language = language if language in {"ru", "tg"} else (user.language or "ru")
+    # username is read-only in admin; language lives on the profile form
     user.is_test = is_test
     user.reengage_level = max(0, min(3, int(reengage_level)))
 
@@ -376,6 +373,7 @@ async def update_account_profile(
     is_active: bool,
     is_complete: bool,
     clear_photo: bool = False,
+    language: str | None = None,
 ) -> User | None:
     user = await load_user_with_profile(session, user_id)
     if user is None:
@@ -409,6 +407,10 @@ async def update_account_profile(
     if looking_for in {"male", "female", "any"}:
         p.looking_for = LookingFor(looking_for)
     # empty / omitted — keep current (cannot clear via admin)
+
+    if language in {"ru", "tg"}:
+        user.language = language
+        user.language_chosen = True
 
     if user.is_blocked and p.is_active:
         p.is_active = False

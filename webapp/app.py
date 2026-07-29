@@ -113,8 +113,6 @@ def err_response(request: Request, redirect: str, error: str = "error", **payloa
 
 def serialize_account_user(user) -> dict:
     return {
-        "username": user.username or "",
-        "language": user.language or "ru",
         "reengage_level": int(user.reengage_level or 0),
         "is_test": bool(user.is_test),
         "is_blocked": bool(user.is_blocked),
@@ -125,8 +123,10 @@ def serialize_account_user(user) -> dict:
 
 def serialize_account_profile(user) -> dict:
     p = user.profile
+    lang = user.language or "ru"
     if p is None:
         return {
+            "language": lang,
             "name": "",
             "age": "",
             "city_name": "",
@@ -141,6 +141,7 @@ def serialize_account_profile(user) -> dict:
             "clear_photo": False,
         }
     return {
+        "language": lang,
         "name": p.name or "",
         "age": "" if p.age is None else p.age,
         "city_name": p.city_name or "",
@@ -336,8 +337,6 @@ def create_app() -> FastAPI:
         user_id: int,
         request: Request,
         session: AsyncSession = Depends(get_db),
-        username: str = Form(""),
-        language: str = Form("ru"),
         is_test: str | None = Form(None),
         is_blocked: str | None = Form(None),
         is_suspicious: str | None = Form(None),
@@ -350,8 +349,6 @@ def create_app() -> FastAPI:
             updated = await update_account_user(
                 session,
                 user_id,
-                username=username,
-                language=language,
                 is_test=is_test is not None,
                 is_blocked=is_blocked is not None,
                 reengage_level=reengage_level,
@@ -376,6 +373,8 @@ def create_app() -> FastAPI:
             hero=serialize_account_hero(updated),
             profile_fields=serialize_account_profile(updated),
         )
+
+    @app.post("/accounts/{user_id}/profile")
     async def account_save_profile(
         user_id: int,
         request: Request,
@@ -389,6 +388,7 @@ def create_app() -> FastAPI:
         looking_for: str = Form(""),
         description: str = Form(""),
         photo_file_id: str = Form(""),
+        language: str = Form(""),
         is_active: str | None = Form(None),
         is_complete: str | None = Form(None),
         clear_photo: str | None = Form(None),
@@ -430,6 +430,7 @@ def create_app() -> FastAPI:
                 is_active=is_active is not None,
                 is_complete=is_complete is not None,
                 clear_photo=clear_photo is not None,
+                language=language or None,
             )
         except Exception:
             return err_response(
@@ -448,6 +449,44 @@ def create_app() -> FastAPI:
             fields=serialize_account_profile(updated),
             hero=serialize_account_hero(updated),
         )
+
+    @app.get("/settlements/search")
+    async def settlements_search(
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+        q: str = "",
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        from services.settlements import (
+            choice_button_label,
+            disambiguation_choices,
+            format_confirm,
+            nearest_settlements,
+            search_settlements,
+        )
+
+        hits = await search_settlements(session, q or "", limit=12)
+        choices = disambiguation_choices(hits, max_n=8)
+        items = []
+        for hit in choices:
+            label = await choice_button_label(session, hit)
+            neighbours = await nearest_settlements(
+                session, hit.lat, hit.lon, exclude_id=hit.id, limit=2
+            )
+            items.append(
+                {
+                    "id": hit.id,
+                    "name": hit.display_name,
+                    "label": label,
+                    "lat": hit.lat,
+                    "lon": hit.lon,
+                    "confirm": format_confirm(hit, neighbours, "ru"),
+                    "admin1": hit.admin1 or "",
+                    "country_code": hit.country_code or "",
+                }
+            )
+        return JSONResponse({"ok": True, "q": (q or "").strip(), "items": items})
 
     @app.post("/accounts/{user_id}/premium")
     async def account_save_premium(
