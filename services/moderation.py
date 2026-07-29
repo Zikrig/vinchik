@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import Like, LikeAction, Profile, User
+from database.models import Like, LikeAction, Profile, Report, User
 from database.session import async_session_maker
 
 logger = logging.getLogger(__name__)
@@ -151,7 +151,9 @@ async def on_like_recorded(
 
 
 async def sweep_suspicious_candidates(session: AsyncSession) -> int:
-    """Periodic: volume over threshold today; layout scan on recent messages."""
+    """Periodic: volume over threshold today; layout scan; reports ≥2."""
+    from services.reports import REPORT_SUSPICIOUS_THRESHOLD, REPORT_WINDOW_DAYS
+
     start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     flagged = 0
 
@@ -192,6 +194,21 @@ async def sweep_suspicious_candidates(session: AsyncSession) -> int:
                 f"в сообщении более {MAX_LAYOUTS_BEFORE_FLAG} раскладок: {', '.join(layouts)}",
             ):
                 flagged += 1
+
+    reports_since = datetime.now(UTC) - timedelta(days=REPORT_WINDOW_DAYS)
+    result = await session.execute(
+        select(Report.to_user_id, func.count())
+        .where(Report.created_at >= reports_since)
+        .group_by(Report.to_user_id)
+        .having(func.count() >= REPORT_SUSPICIOUS_THRESHOLD)
+    )
+    for uid, n in result.all():
+        if await mark_suspicious(
+            session,
+            int(uid),
+            f"жалоб за {REPORT_WINDOW_DAYS} дн.: {int(n)}",
+        ):
+            flagged += 1
     return flagged
 
 

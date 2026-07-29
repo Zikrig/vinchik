@@ -16,6 +16,25 @@
     object-fit: cover;
     background: var(--bg-accent);
   }
+  .hero-id {
+    margin: 0 0 .35rem;
+    font-size: 1.85rem;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+  }
+  .hero-id code {
+    font: inherit;
+    background: transparent;
+    padding: 0;
+    color: var(--ink);
+  }
+  .hero-name {
+    margin: 0 0 .5rem;
+    font-size: 1.05rem;
+    font-weight: 500;
+  }
   .tag {
     display: inline-flex;
     align-items: center;
@@ -244,14 +263,13 @@
       <div class="ph">нет фото</div>
       {% endif %}
       <div>
-        <h2 data-hero-name>{{ p.name if p and p.name else 'Без имени' }}
-          {% if p and p.age %}<span class="meta">· {{ p.age }}</span>{% endif %}
-        </h2>
+        <h2 class="hero-id" data-hero-id><code>{{ u.tg_id }}</code></h2>
+        <p class="hero-name" data-hero-name style="margin:0 0 .35rem">
+          {{ p.name if p and p.name else 'Без имени' }}{% if p and p.age %}<span class="meta"> · {{ p.age }}</span>{% endif %}
+        </p>
         <p class="meta" style="margin:0 0 .5rem" data-hero-user data-tg-id="{{ u.tg_id }}"
            data-is-admin="{{ '1' if is_admin else '0' }}">
-          <code>{{ u.tg_id }}</code>
-          {% if u.username %} @{{ u.username }}{% endif %}
-          {% if is_admin %} · admin{% endif %}
+          {% if u.username %}@{{ u.username }}{% else %}без @username{% endif %}{% if is_admin %} · admin{% endif %}
         </p>
         <div data-hero-tags>
           {% if u.is_test %}<span class="tag warn">🧪 test</span>{% endif %}

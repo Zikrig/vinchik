@@ -662,15 +662,15 @@
       if (nameEl) {
         let html = escapeHtml(hero.name || "Без имени");
         if (hero.age != null) {
-          html += ' <span class="meta">· ' + escapeHtml(String(hero.age)) + "</span>";
+          html += '<span class="meta"> · ' + escapeHtml(String(hero.age)) + "</span>";
         }
         nameEl.innerHTML = html;
       }
       const userMeta = document.querySelector("[data-hero-user]");
       if (userMeta) {
-        const id = userMeta.getAttribute("data-tg-id") || "";
-        let html = "<code>" + escapeHtml(id) + "</code>";
-        if (hero.username) html += " @" + escapeHtml(hero.username);
+        let html = hero.username
+          ? "@" + escapeHtml(hero.username)
+          : "без @username";
         if (userMeta.getAttribute("data-is-admin") === "1") html += " · admin";
         userMeta.innerHTML = html;
       }

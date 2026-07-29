@@ -9,6 +9,7 @@ from database.models import Profile, Report, User
 
 REPORT_WINDOW_DAYS = 90
 REPORT_BLOCK_THRESHOLD = 5  # more than 5 → block
+REPORT_SUSPICIOUS_THRESHOLD = 2  # at least 2 → suspicious
 
 
 async def count_reports_recent(session: AsyncSession, to_user_id: int) -> int:
@@ -50,6 +51,14 @@ async def file_report(
     await session.commit()
 
     count = await count_reports_recent(session, to_user_id)
+    if count >= REPORT_SUSPICIOUS_THRESHOLD:
+        from services.moderation import mark_suspicious
+
+        await mark_suspicious(
+            session,
+            to_user_id,
+            f"жалоб за {REPORT_WINDOW_DAYS} дн.: {count}",
+        )
     just_blocked = False
     if count > REPORT_BLOCK_THRESHOLD:
         from services.users import load_user_with_profile
