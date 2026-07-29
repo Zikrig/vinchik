@@ -9,6 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from locales import t
+from services.channels import (
+    ChannelResolveError,
+    add_resolved_channel,
+    delete_channel,
+    list_all_channels,
+    resolve_channel_forward,
+    resolve_channel_ref,
+    toggle_channel,
+)
 from services.premium import (
     approve_order,
     list_pending_orders,
@@ -40,6 +49,24 @@ _EDIT_PROMPTS = {
     AdminStates.edit_manager.state: "Новые контакты менеджера:",
 }
 
+_ADD_CHANNEL_HINT = (
+    "📢 Добавление канала\n\n"
+    "⚠️ Сначала сделай бота администратором канала — иначе нельзя проверить подписку.\n\n"
+    "Затем пришли:\n"
+    "• @ник канала\n"
+    "• публичную ссылку t.me/ник\n"
+    "• или перешли любое сообщение из канала"
+)
+
+_EDIT_STATE_FILTER = StateFilter(
+    AdminStates.edit_limit,
+    AdminStates.edit_dist,
+    AdminStates.edit_reshow,
+    AdminStates.edit_card,
+    AdminStates.edit_check_time,
+    AdminStates.edit_manager,
+)
+
 
 def _is_admin(user_id: int) -> bool:
     return user_id in settings.admin_id_set
@@ -70,6 +97,7 @@ def _root_kb(reg_only: bool, pending_n: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=orders, callback_data="adm:orders:0")],
             [InlineKeyboardButton(text="⭐ Премиум юзеры", callback_data="adm:premiums:0")],
+            [InlineKeyboardButton(text="📢 Каналы", callback_data="adm:channels")],
             [InlineKeyboardButton(text=soft, callback_data="adm:toggle_reg")],
             [InlineKeyboardButton(text="⚙️ Настройки", callback_data="adm:settings")],
         ]
@@ -102,6 +130,47 @@ def _cancel_kb() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="❌ Отмена", callback_data="adm:settings")],
         ]
     )
+
+
+def _cancel_channels_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="adm:channels")],
+        ]
+    )
+
+
+async def _channels_view(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
+    channels = await list_all_channels(session)
+    if not channels:
+        text = (
+            "📢 Обязательные каналы\n\n"
+            "Список пуст.\n"
+            "Бот должен быть админом каждого канала, иначе проверка подписки не работает."
+        )
+    else:
+        lines = [
+            "📢 Обязательные каналы\n",
+            "Бот должен быть админом каждого канала.\n",
+        ]
+        for ch in channels:
+            mark = "🟢" if ch.is_active else "🔴"
+            title = ch.title or ch.channel_id
+            lines.append(f"{mark} {title}\n   {ch.channel_id}")
+        text = "\n".join(lines)
+    rows: list[list[InlineKeyboardButton]] = []
+    for ch in channels:
+        label = (ch.title or ch.channel_id)[:28]
+        tog = "Выкл" if ch.is_active else "Вкл"
+        rows.append(
+            [
+                _btn(f"{tog}: {label}", f"adm:ch:tog:{ch.id}"),
+                _btn("🗑", f"adm:ch:del:{ch.id}"),
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="➕ Добавить", callback_data="adm:ch:add")])
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")])
+    return text, InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _premiums_page_kb(users, page: int, total_pages: int) -> InlineKeyboardMarkup:
@@ -283,7 +352,7 @@ async def adm_edit_start(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.message.answer(_EDIT_PROMPTS[st.state], reply_markup=_cancel_kb())
 
 
-@router.message(StateFilter(AdminStates), F.text)
+@router.message(_EDIT_STATE_FILTER, F.text)
 async def adm_edit_value(
     message: Message, session: AsyncSession, state: FSMContext
 ) -> None:
@@ -325,6 +394,120 @@ async def adm_edit_value(
     await state.clear()
     text, kb = await _settings_view(session)
     await message.answer("✅ Сохранено.\n\n" + text, reply_markup=kb)
+
+
+@router.callback_query(F.data == "adm:channels")
+async def adm_channels(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(t("no_access", "ru"), show_alert=True)
+        return
+    await state.clear()
+    await callback.answer()
+    assert callback.message
+    text, kb = await _channels_view(session)
+    await callback.message.edit_text(text, reply_markup=kb)
+
+
+@router.callback_query(F.data == "adm:ch:add")
+async def adm_ch_add_start(callback: CallbackQuery, state: FSMContext) -> None:
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(t("no_access", "ru"), show_alert=True)
+        return
+    await state.set_state(AdminStates.add_channel)
+    await callback.answer()
+    assert callback.message
+    await callback.message.answer(_ADD_CHANNEL_HINT, reply_markup=_cancel_channels_kb())
+
+
+async def _finish_add_channel(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    bot: Bot,
+    *,
+    resolved,
+) -> None:
+    ch, created = await add_resolved_channel(session, resolved)
+    await state.clear()
+    verb = "добавлен" if created else "обновлён (уже был в списке)"
+    text, kb = await _channels_view(session)
+    await message.answer(
+        f"✅ Канал {verb}: {ch.title or ch.channel_id}\n\n{text}",
+        reply_markup=kb,
+    )
+
+
+@router.message(StateFilter(AdminStates.add_channel), F.forward_from_chat | F.forward_origin)
+async def adm_ch_add_forward(
+    message: Message, session: AsyncSession, state: FSMContext, bot: Bot
+) -> None:
+    assert message.from_user
+    if not _is_admin(message.from_user.id):
+        await state.clear()
+        return
+    try:
+        resolved = await resolve_channel_forward(bot, message)
+    except ChannelResolveError as exc:
+        await message.answer(str(exc))
+        return
+    await _finish_add_channel(message, session, state, bot, resolved=resolved)
+
+
+@router.message(StateFilter(AdminStates.add_channel), F.text)
+async def adm_ch_add_text(
+    message: Message, session: AsyncSession, state: FSMContext, bot: Bot
+) -> None:
+    assert message.from_user
+    if not _is_admin(message.from_user.id):
+        await state.clear()
+        return
+    try:
+        resolved = await resolve_channel_ref(bot, message.text or "")
+    except ChannelResolveError as exc:
+        await message.answer(str(exc))
+        return
+    await _finish_add_channel(message, session, state, bot, resolved=resolved)
+
+
+@router.message(StateFilter(AdminStates.add_channel))
+async def adm_ch_add_other(message: Message) -> None:
+    if not message.from_user or not _is_admin(message.from_user.id):
+        return
+    await message.answer(
+        "Пришли @ник, ссылку t.me/… или перешли сообщение из канала.\n"
+        "Не забудь: бот должен быть админом канала."
+    )
+
+
+@router.callback_query(F.data.startswith("adm:ch:tog:"))
+async def adm_ch_toggle(callback: CallbackQuery, session: AsyncSession) -> None:
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(t("no_access", "ru"), show_alert=True)
+        return
+    pk = int(callback.data.split(":")[3])  # type: ignore[union-attr]
+    ch = await toggle_channel(session, pk)
+    if ch is None:
+        await callback.answer("Не найден", show_alert=True)
+        return
+    await callback.answer("ON" if ch.is_active else "OFF")
+    assert callback.message
+    text, kb = await _channels_view(session)
+    await callback.message.edit_text(text, reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("adm:ch:del:"))
+async def adm_ch_delete(callback: CallbackQuery, session: AsyncSession) -> None:
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(t("no_access", "ru"), show_alert=True)
+        return
+    pk = int(callback.data.split(":")[3])  # type: ignore[union-attr]
+    ok = await delete_channel(session, pk)
+    await callback.answer("Удалён" if ok else "Не найден", show_alert=not ok)
+    assert callback.message
+    text, kb = await _channels_view(session)
+    await callback.message.edit_text(text, reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("adm:orders:"))

@@ -7,10 +7,21 @@ from handlers.common import load_user, show_main_menu, show_my_profile
 from handlers.profile import begin_profile_flow
 from keyboards.inline import language_kb, main_menu_kb, settings_kb, stop_confirm_kb
 from locales import t
-from services.users import set_language
+from services.channels import format_channels_lines, list_active_channels
+from services.users import is_premium
 from states.profile import ProfileStates
 
 router = Router()
+
+
+def _settings_channels_text(lang: str, channels, *, premium: bool) -> str:
+    if not channels:
+        body = t("settings_channels_empty", lang)
+    else:
+        body = f"{t('settings_channels_title', lang)}\n{format_channels_lines(channels)}"
+    if premium:
+        body = f"{body}\n\n{t('settings_channels_premium_note', lang)}"
+    return body
 
 
 @router.callback_query(F.data == "menu:root")
@@ -37,7 +48,24 @@ async def menu_settings(callback: CallbackQuery, session: AsyncSession) -> None:
     user = await load_user(session, callback.from_user.id)
     assert user and callback.message
     await callback.answer()
-    await callback.message.answer(t("settings_title", user.language), reply_markup=settings_kb(user.language))
+    await callback.message.answer(
+        t("settings_title", user.language), reply_markup=settings_kb(user.language)
+    )
+
+
+@router.callback_query(F.data == "settings:channels")
+async def settings_channels(callback: CallbackQuery, session: AsyncSession) -> None:
+    user = await load_user(session, callback.from_user.id)
+    assert user and callback.message
+    channels = await list_active_channels(session)
+    await callback.answer()
+    await callback.message.answer(
+        _settings_channels_text(
+            user.language, channels, premium=is_premium(user)
+        ),
+        reply_markup=settings_kb(user.language),
+        disable_web_page_preview=True,
+    )
 
 
 @router.callback_query(F.data == "settings:lang")

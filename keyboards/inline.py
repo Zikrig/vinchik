@@ -172,6 +172,11 @@ def settings_kb(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=t("settings_language", lang), callback_data="settings:lang")],
+            [
+                InlineKeyboardButton(
+                    text=t("settings_channels", lang), callback_data="settings:channels"
+                )
+            ],
             [InlineKeyboardButton(text=t("back", lang), callback_data="menu:root")],
         ]
     )
@@ -187,13 +192,24 @@ def stop_confirm_kb(lang: str) -> InlineKeyboardMarkup:
 
 
 def channels_kb(lang: str, channels) -> InlineKeyboardMarkup:
+    from services.channels import channel_button_url
+
     rows = []
     for ch in channels:
-        link = ch.invite_link or (
-            f"https://t.me/{ch.channel_id.lstrip('@')}" if not str(ch.channel_id).startswith("-") else None
-        )
+        link = channel_button_url(ch)
         title = ch.title or ch.channel_id
         if link:
-            rows.append([InlineKeyboardButton(text=f"{t('btn_subscribe', lang)}: {title}", url=link)])
-    rows.append([InlineKeyboardButton(text=t("btn_subscribed", lang), callback_data="channels:check")])
+            rows.append(
+                [InlineKeyboardButton(text=f"{t('btn_subscribe', lang)}: {title}", url=link)]
+            )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=t("btn_subscribed", lang), callback_data="channels:check"
+            ),
+            InlineKeyboardButton(
+                text=t("menu_premium", lang), callback_data="menu:premium"
+            ),
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)

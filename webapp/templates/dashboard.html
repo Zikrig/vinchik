@@ -119,6 +119,7 @@
 
   <section class="panel" id="channels">
     <h2 class="panel-title">📢 Обязательные каналы</h2>
+    <p class="hint">Бот должен быть администратором каждого канала — иначе проверка подписки не работает. Добавляй по @нику или публичной ссылке t.me/…</p>
     <table>
       <tr><th>ID</th><th>Название</th><th>Ссылка</th><th>Статус</th><th></th></tr>
       {% for ch in channels %}
@@ -149,9 +150,9 @@
     </table>
     <h3>Добавить канал</h3>
     <form method="post" action="{{ url('/channels/add') }}" class="row js-ajax" data-ajax="channel-add">
-      <input name="channel_id" placeholder="@channel или -100..." required>
-      <input name="title" placeholder="Название">
-      <input name="invite_link" placeholder="https://t.me/...">
+      <input name="channel_id" placeholder="@channel или https://t.me/channel" required>
+      <input name="title" placeholder="Название (необязательно)">
+      <input name="invite_link" placeholder="Ссылка (если нужна другая)">
       <button type="submit">Добавить</button>
     </form>
   </section>

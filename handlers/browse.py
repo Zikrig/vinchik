@@ -11,7 +11,7 @@ from keyboards.inline import browse_kb, channels_kb, main_menu_kb, premium_cta_k
 from locales import t
 from services.activity import touch_activity
 from services.browse import next_profile, profile_caption
-from services.channels import list_active_channels, user_subscribed_all
+from services.channels import format_channels_lines, list_active_channels, user_subscribed_all
 from services.media import as_photo_input
 from services.likes import (
     format_likes_list,
@@ -74,7 +74,10 @@ async def start_browse(
         return
     if not await user_subscribed_all(dest, session, user):
         channels = await list_active_channels(session)
-        await say(t("need_channels", lang), reply_markup=channels_kb(lang, channels))
+        await say(
+            t("need_channels", lang, channels=format_channels_lines(channels)),
+            reply_markup=channels_kb(lang, channels),
+        )
         return
     if not await can_browse(session, user, user.profile):
         await say(

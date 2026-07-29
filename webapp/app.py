@@ -48,6 +48,13 @@ from services.premium import (
 )
 from services.reports import ban_user, list_blocked_users, unban_user
 from services.moderation import clear_suspicious, list_suspicious_users
+from services.channels import (
+    ChannelResolveError,
+    add_resolved_channel,
+    delete_channel as remove_required_channel,
+    resolve_channel_ref,
+    toggle_channel as flip_required_channel,
+)
 from services.settings_service import (
     ensure_defaults,
     get_daily_like_limit,
@@ -708,19 +715,29 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        ch = RequiredChannel(
-            channel_id=channel_id.strip(),
-            title=title.strip(),
-            invite_link=invite_link.strip(),
-            is_active=True,
-        )
-        session.add(ch)
-        await session.commit()
-        await session.refresh(ch)
+        bot = Bot(token=settings.bot_token)
+        try:
+            resolved = await resolve_channel_ref(bot, channel_id)
+            ch, created = await add_resolved_channel(
+                session,
+                resolved,
+                title_override=title.strip(),
+                invite_override=invite_link.strip(),
+            )
+        except ChannelResolveError as exc:
+            return err_response(
+                request,
+                settings.abs_path("/"),
+                error=str(exc),
+                message=str(exc),
+            )
+        finally:
+            await bot.session.close()
+        verb = "добавлен" if created else "обновлён"
         return ok_response(
             request,
             settings.abs_path("/"),
-            message="Канал добавлен.",
+            message=f"Канал {verb}. Бот должен оставаться админом канала.",
             channel={
                 "id": ch.id,
                 "channel_id": ch.channel_id,
@@ -736,12 +753,8 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        ch = await session.get(RequiredChannel, channel_pk)
-        active = False
-        if ch:
-            ch.is_active = not ch.is_active
-            active = ch.is_active
-            await session.commit()
+        ch = await flip_required_channel(session, channel_pk)
+        active = bool(ch and ch.is_active)
         return ok_response(
             request,
             settings.abs_path("/"),
@@ -756,10 +769,7 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        ch = await session.get(RequiredChannel, channel_pk)
-        if ch:
-            await session.delete(ch)
-            await session.commit()
+        await remove_required_channel(session, channel_pk)
         return ok_response(
             request,
             settings.abs_path("/"),

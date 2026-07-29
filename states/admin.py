@@ -8,3 +8,4 @@ class AdminStates(StatesGroup):
     edit_card = State()
     edit_check_time = State()
     edit_manager = State()
+    add_channel = State()
