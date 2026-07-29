@@ -11,7 +11,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import Settlement, SettlementAlias
-from services.settlement_data import SETTLEMENTS_DUMP, normalize_name
+from services.settlement_data import SETTLEMENTS_DUMP, normalize_name, pick_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,7 @@ async def import_settlements_from_dump(
     places: dict[int, dict] = {}
     aliases: list[tuple[int, str, str]] = []
     alias_keys: set[tuple[int, str]] = set()
+    names_by_place: dict[int, list[str]] = {}
 
     with gzip.open(dump, "rt", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
@@ -60,6 +61,8 @@ async def import_settlements_from_dump(
             admin1 = (row.get("admin1") or "")[:128]
             is_primary = (row.get("is_primary") or "0").strip() == "1"
 
+            names_by_place.setdefault(sid, []).append(name)
+
             if sid not in places:
                 places[sid] = {
                     "display_name": name,
@@ -67,15 +70,26 @@ async def import_settlements_from_dump(
                     "lon": lon,
                     "country_code": country,
                     "admin1": admin1,
+                    "primary_name": name if is_primary else "",
                 }
-            elif is_primary:
-                places[sid]["display_name"] = name
+            else:
+                if is_primary:
+                    places[sid]["primary_name"] = name
+                places[sid]["lat"] = lat
+                places[sid]["lon"] = lon
 
             key = (sid, norm)
             if key in alias_keys:
                 continue
             alias_keys.add(key)
             aliases.append((sid, name, norm))
+
+    # Prefer Cyrillic (ru/tg) display names over Latin GeoNames titles.
+    for sid, meta in places.items():
+        meta["display_name"] = pick_display_name(
+            names_by_place.get(sid, []),
+            meta.get("primary_name") or meta["display_name"],
+        )
 
     if replace:
         await session.execute(delete(SettlementAlias))

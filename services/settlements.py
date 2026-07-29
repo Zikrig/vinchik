@@ -35,7 +35,7 @@ def _score(query_norm: str, alias_norm: str) -> float:
 
 
 async def search_settlements(
-    session: AsyncSession, raw_query: str, *, limit: int = 8
+    session: AsyncSession, raw_query: str, *, limit: int = 12
 ) -> list[SettlementHit]:
     q = normalize_name(raw_query)
     if len(q) < 2:
@@ -50,10 +50,11 @@ async def search_settlements(
         )
         return list(result.scalars().all())
 
-    rows = await _fetch(SettlementAlias.name_norm == q, 40)
-    if len(rows) < 5:
-        rows.extend(await _fetch(SettlementAlias.name_norm.like(f"{q}%"), 60))
-    if len(rows) < 5 and len(q) >= 3:
+    # Prefer exact name matches first (many villages share a name).
+    rows = await _fetch(SettlementAlias.name_norm == q, 80)
+    if len(rows) < 8:
+        rows.extend(await _fetch(SettlementAlias.name_norm.like(f"{q}%"), 80))
+    if len(rows) < 8 and len(q) >= 3:
         rows.extend(await _fetch(SettlementAlias.name_norm.like(f"%{q}%"), 60))
 
     best_by_place: dict[int, SettlementHit] = {}
@@ -80,6 +81,42 @@ async def search_settlements(
 
     ranked = sorted(best_by_place.values(), key=lambda h: (-h.score, h.display_name))
     return ranked[:limit]
+
+
+def disambiguation_choices(hits: list[SettlementHit], *, max_n: int = 8) -> list[SettlementHit]:
+    """If several close matches (often same name) — user must pick."""
+    if not hits:
+        return []
+    if len(hits) == 1:
+        return hits
+    best = hits[0].score
+    close = [h for h in hits if h.score >= best - 0.08 and h.score >= 0.75]
+    if len(close) >= 2:
+        return close[:max_n]
+    # Same display name in different places
+    top_name = normalize_name(hits[0].display_name)
+    same = [h for h in hits if normalize_name(h.display_name) == top_name]
+    if len(same) >= 2:
+        return same[:max_n]
+    return [hits[0]]
+
+
+async def choice_button_label(session: AsyncSession, hit: SettlementHit) -> str:
+    neighbours = await nearest_settlements(
+        session, hit.lat, hit.lon, exclude_id=hit.id, limit=2
+    )
+    near = [n.display_name for n in neighbours if n.display_name]
+    if len(near) >= 2:
+        label = f"{hit.display_name} · {near[0]}, {near[1]}"
+    elif len(near) == 1:
+        label = f"{hit.display_name} · {near[0]}"
+    elif hit.admin1:
+        label = f"{hit.display_name} · {hit.admin1}"
+    elif hit.country_code:
+        label = f"{hit.display_name} · {hit.country_code}"
+    else:
+        label = hit.display_name
+    return label[:64]
 
 
 async def nearest_settlements(

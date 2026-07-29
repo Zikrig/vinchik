@@ -23,6 +23,7 @@ DUMP_FIELDS = (
 
 _PUNCT_RE = re.compile(r"[^\w\s]+", re.UNICODE)
 _SPACE_RE = re.compile(r"\s+")
+_CYR_RE = re.compile(r"[\u0400-\u04FF]")
 
 
 def normalize_name(raw: str) -> str:
@@ -31,3 +32,28 @@ def normalize_name(raw: str) -> str:
     text = _PUNCT_RE.sub(" ", text)
     text = _SPACE_RE.sub(" ", text).strip()
     return text
+
+
+def cyrillic_ratio(raw: str) -> float:
+    letters = [c for c in (raw or "") if c.isalpha()]
+    if not letters:
+        return 0.0
+    cyr = sum(1 for c in letters if _CYR_RE.match(c))
+    return cyr / len(letters)
+
+
+def is_cyrillic_name(raw: str) -> bool:
+    """Prefer Russian / Tajik Cyrillic spellings over Latin GeoNames titles."""
+    return cyrillic_ratio(raw) >= 0.5
+
+
+def pick_display_name(names: list[str] | set[str], fallback: str = "") -> str:
+    """Choose a Cyrillic display label when available, else fallback/Latin."""
+    candidates = [n.strip() for n in names if n and n.strip()]
+    cyr = [n for n in candidates if is_cyrillic_name(n) and 2 <= len(n) <= 64]
+    if cyr:
+        cyr.sort(key=lambda n: (-cyrillic_ratio(n), len(n), n))
+        return cyr[0][:128]
+    if fallback.strip():
+        return fallback.strip()[:128]
+    return (candidates[0][:128] if candidates else "")

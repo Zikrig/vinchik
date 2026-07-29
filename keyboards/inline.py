@@ -67,6 +67,20 @@ def location_confirm_kb(lang: str) -> InlineKeyboardMarkup:
     )
 
 
+def location_pick_kb(lang: str, choices: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+    """choices: (settlement_id, button_label)."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for sid, label in choices:
+        text = (label or "?")[:64]
+        rows.append(
+            [InlineKeyboardButton(text=text, callback_data=f"loc:pick:{sid}")]
+        )
+    rows.append(
+        [InlineKeyboardButton(text=t("location_pick_none", lang), callback_data="loc:no")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def about_kb(lang: str, has_current: bool) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton(text=t("skip_text", lang), callback_data="about:skip")]]
     if has_current:

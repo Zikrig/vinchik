@@ -14,11 +14,14 @@ from keyboards.inline import (
     looking_kb,
     location_confirm_kb,
     location_kb,
+    location_pick_kb,
     photo_keep_kb,
 )
 from locales import t
 from services.geo import reverse_geocode
 from services.settlements import (
+    choice_button_label,
+    disambiguation_choices,
     format_confirm,
     get_settlement,
     nearest_settlements,
@@ -169,7 +172,20 @@ async def location_text_search(
         await message.answer(".", reply_markup=inline)
         await state.set_state(ProfileStates.location)
         return
-    hit = hits[0]
+
+    choices = disambiguation_choices(hits)
+    if len(choices) > 1:
+        buttons: list[tuple[int, str]] = []
+        for hit in choices:
+            buttons.append((hit.id, await choice_button_label(session, hit)))
+        await state.set_state(ProfileStates.location_confirm)
+        await message.answer(
+            t("location_pick_title", lang),
+            reply_markup=location_pick_kb(lang, buttons),
+        )
+        return
+
+    hit = choices[0]
     neighbours = await nearest_settlements(
         session, hit.lat, hit.lon, exclude_id=hit.id, limit=2
     )
@@ -181,15 +197,15 @@ async def location_text_search(
     )
 
 
-@router.callback_query(ProfileStates.location_confirm, F.data == "loc:yes")
-async def location_confirm_yes(
-    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+async def _apply_settlement_and_continue(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    state: FSMContext,
+    settlement_id: int,
 ) -> None:
     user = await load_user(session, callback.from_user.id)
     assert user and user.profile and callback.message
-    data = await state.get_data()
-    sid = data.get("pending_settlement_id")
-    place = await get_settlement(session, int(sid)) if sid else None
+    place = await get_settlement(session, settlement_id)
     if place is None:
         await callback.answer(t("location_not_found", user.language), show_alert=True)
         await state.set_state(ProfileStates.location_text)
@@ -206,6 +222,27 @@ async def location_confirm_yes(
     await state.set_state(ProfileStates.name)
     kb = keep_kb(user.language, "keep:name") if user.profile.name else None
     await callback.message.answer(t("ask_name", user.language), reply_markup=kb)
+
+
+@router.callback_query(ProfileStates.location_confirm, F.data.startswith("loc:pick:"))
+async def location_pick(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
+    assert callback.data
+    sid = int(callback.data.split(":")[2])
+    await _apply_settlement_and_continue(callback, session, state, sid)
+
+
+@router.callback_query(ProfileStates.location_confirm, F.data == "loc:yes")
+async def location_confirm_yes(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
+    data = await state.get_data()
+    sid = data.get("pending_settlement_id")
+    if not sid:
+        await callback.answer(t("location_not_found", "ru"), show_alert=True)
+        return
+    await _apply_settlement_and_continue(callback, session, state, int(sid))
 
 
 @router.callback_query(ProfileStates.location_confirm, F.data == "loc:no")

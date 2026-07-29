@@ -28,7 +28,7 @@ from urllib.request import urlopen
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from services.settlement_data import DUMP_FIELDS, SETTLEMENTS_DIR, SETTLEMENTS_DUMP, normalize_name
+from services.settlement_data import DUMP_FIELDS, SETTLEMENTS_DIR, SETTLEMENTS_DUMP, normalize_name, pick_display_name
 
 GEONAMES = "https://download.geonames.org/export/dump"
 COUNTRY_FILES = ("TJ", "UZ", "KG", "AF")
@@ -104,12 +104,12 @@ def _parse_places(raw: str) -> dict[int, dict]:
         if prev is None:
             places[gid] = {
                 "id": gid,
-                "display": name,
                 "lat": lat,
                 "lon": lon,
                 "country": country,
                 "admin1": admin1,
                 "names": names,
+                "latin_fallback": name,
             }
         else:
             prev["names"].update(names)
@@ -126,7 +126,8 @@ def main() -> None:
     rows: list[dict] = []
     seen_alias: set[tuple[int, str]] = set()
     for p in places.values():
-        primary_norm = normalize_name(p["display"])
+        display = pick_display_name(p["names"], p["latin_fallback"])
+        display_norm = normalize_name(display)
         for name in sorted(p["names"]):
             if len(name) > 128:
                 continue
@@ -145,7 +146,21 @@ def main() -> None:
                     "lon": f"{p['lon']:.6f}",
                     "country": p["country"][:2],
                     "admin1": (p["admin1"] or "")[:128],
-                    "is_primary": "1" if norm == primary_norm else "0",
+                    "is_primary": "1" if norm == display_norm else "0",
+                }
+            )
+        # Ensure display spelling exists as an alias row even if filtered earlier.
+        if display and (p["id"], display_norm) not in seen_alias and len(display_norm) >= 2:
+            seen_alias.add((p["id"], display_norm))
+            rows.append(
+                {
+                    "id": p["id"],
+                    "name": display[:128],
+                    "lat": f"{p['lat']:.6f}",
+                    "lon": f"{p['lon']:.6f}",
+                    "country": p["country"][:2],
+                    "admin1": (p["admin1"] or "")[:128],
+                    "is_primary": "1",
                 }
             )
 
