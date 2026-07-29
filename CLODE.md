@@ -44,6 +44,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Подозрительные (тихо): >150 лайков/сутки UTC, >150 сообщений/сутки, >3 раскладки в одном 💌 → `is_suspicious` + `suspicious_reason`; фон `moderation_loop` + хук после лайка; страница `/bans`.
 - Запуск только Docker (без локального venv).
 - По умолчанию polling; webhook — `USE_WEBHOOK=true` + HTTPS; хост-порт webhook **:8181** (внутри контейнера 8081).
+- `/start` (`handlers/start.py`): всегда приветствие (бот знакомств в Таджикистане); выбор языка только если `language_chosen=False`; иначе продолжение регистрации / меню. Флаг ставится в `set_language`; у готовых анкет — автозаполнение для старых строк.
 - Вне FSM любое личное сообщение → главное меню (`handlers/fallback.py`).
 - Терминальные ответы (оплата отмечена, премиум включён, пустая лента, soft-launch, список лайков, reengage, лимит) — с `main_menu_kb`.
 - Массовых рассылок нет.

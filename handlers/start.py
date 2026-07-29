@@ -4,13 +4,36 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from handlers.common import load_user, show_main_menu, show_my_profile
+from handlers.common import load_user, show_main_menu
 from keyboards.inline import language_kb
 from locales import t
 from services.users import get_or_create_user, set_language
 from states.profile import ProfileStates
 
 router = Router()
+
+
+async def _continue_after_language(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    user,
+    *,
+    tg_username: str | None,
+) -> None:
+    lang = user.language or "ru"
+    if user.profile and user.profile.is_complete:
+        await show_main_menu(message, user)
+        return
+
+    if not tg_username:
+        await state.set_state(ProfileStates.waiting_username)
+        await message.answer(t("need_username", lang))
+        return
+
+    from handlers.profile import begin_profile_flow
+
+    await begin_profile_flow(message, session, state, user, refill=False)
 
 
 @router.message(CommandStart())
@@ -23,14 +46,30 @@ async def cmd_start(message: Message, session: AsyncSession, state: FSMContext) 
         message.from_user.username,
     )
     if user.is_blocked:
-        await message.answer(t("you_are_blocked", user.language))
+        await message.answer(t("you_are_blocked", user.language or "ru"))
         return
-    profile = user.profile
-    if profile and profile.is_complete:
+
+    # Complete profiles already use a language; treat as chosen for legacy rows.
+    if user.profile and user.profile.is_complete and not user.language_chosen:
+        user.language_chosen = True
+        await session.commit()
+
+    if user.language_chosen:
+        await message.answer(t("welcome", user.language or "ru"))
+    else:
+        await message.answer(t("welcome_bilingual", "ru"))
+
+    if user.profile and user.profile.is_complete:
         await show_main_menu(message, user)
         return
-    # first-time or incomplete: language if never chosen explicitly — always ask if no complete profile
-    await message.answer(t("choose_language", "ru"), reply_markup=language_kb())
+
+    if not user.language_chosen:
+        await message.answer(t("choose_language", "ru"), reply_markup=language_kb())
+        return
+
+    await _continue_after_language(
+        message, session, state, user, tg_username=message.from_user.username
+    )
 
 
 @router.callback_query(F.data.startswith("lang:"))
@@ -49,15 +88,10 @@ async def on_language(callback: CallbackQuery, session: AsyncSession, state: FSM
 
     user = await load_user(session, callback.from_user.id)
     assert user
-    if user.profile and user.profile.is_complete:
-        await show_main_menu(callback.message, user)
-        return
-
-    if not callback.from_user.username:
-        await state.set_state(ProfileStates.waiting_username)
-        await callback.message.answer(t("need_username", lang))
-        return
-
-    from handlers.profile import begin_profile_flow
-
-    await begin_profile_flow(callback.message, session, state, user, refill=False)
+    await _continue_after_language(
+        callback.message,
+        session,
+        state,
+        user,
+        tg_username=callback.from_user.username,
+    )

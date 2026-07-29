@@ -54,6 +54,7 @@ class User(Base):
     tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     language: Mapped[str] = mapped_column(String(8), default="ru")
+    language_chosen: Mapped[bool] = mapped_column(Boolean, default=False)
     premium_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_like_notify_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

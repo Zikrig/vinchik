@@ -42,6 +42,7 @@ async def get_or_create_user(
 
 async def set_language(session: AsyncSession, user: User, lang: str) -> None:
     user.language = lang
+    user.language_chosen = True
     await session.commit()
 
 

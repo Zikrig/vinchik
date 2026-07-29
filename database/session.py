@@ -42,6 +42,11 @@ async def init_db() -> None:
         )
         await conn.execute(
             text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS language_chosen BOOLEAN DEFAULT FALSE"
+            )
+        )
+        await conn.execute(
+            text(
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_suspicious BOOLEAN DEFAULT FALSE"
             )
         )
