@@ -120,13 +120,15 @@ def _parse_places(raw: str) -> dict[int, dict]:
                 "country": country,
                 "admin1": admin1,
                 "names": names,
-                "latin_fallback": name,
+                # GeoNames current preferred title — display must follow this, not historical alts.
+                "official_name": name,
                 "population": population,
             }
         else:
             prev["names"].update(names)
             if population > prev.get("population", 0):
                 prev["population"] = population
+                prev["official_name"] = name
             if population >= prev.get("population", 0):
                 prev["lat"] = lat
                 prev["lon"] = lon
@@ -144,7 +146,7 @@ def main() -> None:
     rows: list[dict] = []
     seen_alias: set[tuple[int, str]] = set()
     for p in places.values():
-        display = pick_display_name(p["names"], p["latin_fallback"])
+        display = pick_display_name(p["names"], p.get("official_name") or "")
         display_norm = normalize_name(display)
         for name in sorted(p["names"]):
             if len(name) > 128:

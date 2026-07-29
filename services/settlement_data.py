@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from difflib import SequenceMatcher
 from pathlib import Path
 
 # Portable dump: copy data/settlements/ with the project to another server.
@@ -11,6 +12,8 @@ SETTLEMENTS_DIR = Path(__file__).resolve().parents[1] / "data" / "settlements"
 SETTLEMENTS_DUMP = SETTLEMENTS_DIR / "settlements.csv.gz"
 
 # CSV columns in the dump (one row per searchable alias).
+# All alias rows are kept for SEARCH; only is_primary / pick_display_name
+# decide what users see as the modern place title.
 DUMP_FIELDS = (
     "id",  # GeoNames id
     "name",
@@ -18,7 +21,7 @@ DUMP_FIELDS = (
     "lon",
     "country",
     "admin1",
-    "is_primary",  # 1 = display_name for the place
+    "is_primary",  # 1 = modern display_name for the place
     "population",
 )
 
@@ -26,7 +29,31 @@ _PUNCT_RE = re.compile(r"[^\w\s]+", re.UNICODE)
 _SPACE_RE = re.compile(r"\s+")
 _CYR_RE = re.compile(r"[\u0400-\u04FF]")
 _RARE_CYR = set("ъѣѳѷѧѫѯѱѡ҃")
-# Rough Cyrillic→Latin for matching GeoNames asciiname (Moscow / Moskva).
+
+# Historical / obsolete titles — still searchable, never shown when a modern
+# Cyrillic alternative exists for the same place.
+_NOT_FOR_DISPLAY = {
+    "петроград",
+    "ленинград",
+    "сталинград",
+    "свердловск",
+    "горький",
+    "куйбышев",
+    "калинин",
+    "орджоникидзе",
+    "фрунзе",
+    "устинов",
+    "андропов",
+    "брежнев",
+    "черненко",
+    "муско",
+    "москова",
+    "москъва",
+    "маскав",
+    "масква",
+}
+
+# Rough Cyrillic→Latin for matching GeoNames official Latin titles.
 _CYR_TO_LAT = str.maketrans(
     {
         "а": "a",
@@ -92,80 +119,87 @@ def is_cyrillic_name(raw: str) -> bool:
 
 
 def _latin_fold(raw: str) -> str:
-    text = normalize_name(raw)
-    return text.translate(_CYR_TO_LAT)
+    return normalize_name(raw).translate(_CYR_TO_LAT)
 
 
-def _ascii_aliases(candidates: list[str]) -> list[str]:
+def _ascii_titles(candidates: list[str]) -> list[str]:
     out: list[str] = []
     for n in candidates:
-        if not n.isascii() or " " in n or "-" in n:
+        if not n.isascii():
             continue
-        if not n.isalpha():
+        cleaned = _SPACE_RE.sub(" ", n.replace("-", " ").replace(".", " ")).strip()
+        if not cleaned or not all(c.isalpha() or c.isspace() for c in cleaned):
             continue
-        if not (4 <= len(n) <= 12):
+        letters = cleaned.replace(" ", "")
+        if not (4 <= len(letters) <= 40) or len(cleaned) > 28:
+            continue
+        if "lungsod" in cleaned.lower() or " ng " in cleaned.lower():
             continue
         out.append(n)
     return out
 
 
-def _twin_quality(ascii_name: str) -> tuple:
-    """Higher is better — Title-case names like Moscow / Moskva beat Musko."""
-    title = ascii_name[0].isupper() and ascii_name[1:].islower()
-    return (
-        1 if title else 0,
-        1 if 6 <= len(ascii_name) <= 7 else 0,
-        -abs(len(ascii_name) - 6),
-    )
-
-
 def pick_display_name(names: list[str] | set[str], fallback: str = "") -> str:
-    """Choose a Cyrillic display label when available, else fallback/Latin."""
+    """Modern display label for UI.
+
+    Aliases (including historical names) stay in the dump for SEARCH only.
+    Display prefers a modern Cyrillic spelling that matches the GeoNames
+    official ``name`` (``fallback``), never Петроград/Ленинград/Муско when a
+    better option exists.
+    """
     candidates = [n.strip() for n in names if n and n.strip()]
-    cyr = [n for n in candidates if is_cyrillic_name(n) and 2 <= len(n) <= 48]
-    ascii_names = _ascii_aliases(candidates)
-    fold_to_ascii: dict[str, list[str]] = {}
-    for a in ascii_names:
-        fold_to_ascii.setdefault(_latin_fold(a), []).append(a)
+    cyr_all = [n for n in candidates if is_cyrillic_name(n) and 2 <= len(n) <= 48]
+    modern = [n for n in cyr_all if normalize_name(n) not in _NOT_FOR_DISPLAY]
+    cyr = modern or cyr_all
+
+    official = (fallback or "").strip()
+    official_fold = _latin_fold(official) if official else ""
+    # Official GeoNames title first, then other Latin titles (for fold matching).
+    refs: list[str] = []
+    if official_fold and len(official_fold) >= 4:
+        refs.append(official_fold)
+    for n in sorted(_ascii_titles(candidates), key=lambda s: (-len(s), s))[:10]:
+        fold = _latin_fold(n)
+        if fold and fold not in refs:
+            refs.append(fold)
 
     if cyr:
-        all_folds = list(fold_to_ascii.keys())
-
-        def _family_size(fold: str) -> int:
-            if len(fold) < 4:
-                return 0
-            prefix = fold[:4]
-            return sum(1 for f in all_folds if f.startswith(prefix))
-
         def _key(n: str) -> tuple:
             letters = "".join(c for c in n if c.isalpha())
             pure = 1 if letters and all(_CYR_RE.match(c) for c in letters) else 0
             rare = sum(1 for c in n.lower() if c in _RARE_CYR)
-            length_pen = 0 if 4 <= len(n) <= 12 else abs(len(n) - 8)
+            length_pen = 0 if 3 <= len(n) <= 32 else abs(len(n) - 12)
             fold = _latin_fold(n)
-            twins = fold_to_ascii.get(fold, [])
-            if twins:
-                tq = max(_twin_quality(t) for t in twins)
-                has_twin = 1
-            else:
-                tq = (0, 0, -99)
-                has_twin = 0
-            family = _family_size(fold)
+            near_official = (
+                SequenceMatcher(None, fold, official_fold).ratio() if official_fold else 0.0
+            )
+            near_any = max(
+                (SequenceMatcher(None, fold, r).ratio() for r in refs),
+                default=0.0,
+            )
             # Ascending: lower is better.
-            # Exact latin twin + largest latin-name family (mosk* >> mask* / musk*).
             return (
-                -has_twin,
-                -family,
-                tuple(-x for x in tq),
+                -round(near_official, 2),
+                -round(near_any, 2),
                 -pure,
                 rare,
                 length_pen,
-                len(n),
+                -len(n) if near_official >= 0.75 or near_any >= 0.85 else len(n),
                 n,
             )
 
         cyr.sort(key=_key)
-        return cyr[0][:128]
-    if fallback.strip():
-        return fallback.strip()[:128]
+        chosen = cyr[0]
+        dnorm = normalize_name(chosen)
+        for n in cyr:
+            if normalize_name(n) == dnorm and "-" in n:
+                chosen = n
+                break
+        else:
+            if chosen.startswith("Санкт ") and "-" not in chosen:
+                chosen = "Санкт-" + chosen[len("Санкт ") :]
+        return chosen[:128]
+
+    if official:
+        return official[:128]
     return (candidates[0][:128] if candidates else "")

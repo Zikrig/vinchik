@@ -26,7 +26,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 ## Инварианты
 
 - Кнопки пользователя — inline (кроме request_location).
-- Гео в анкете: GPS **или** текст → поиск по `settlements` (**только TJ+RU**) → при нескольких одноимённых — кнопки выбора (подпись с соседями + страна); иначе подтверждение «A рядом с B и C». Подписи НП — кириллица (ru/tg), если есть в алиасах. Ранжирование: score → точное имя → **population**. Дамп `data/settlements/settlements.csv.gz`; пустая таблица → автоимпорт; после обновления дампа: `docker compose exec bot python scripts/import_settlements.py`. В веб-карточке — `GET /settlements/search`.
+- Гео в анкете: GPS **или** текст → поиск по `settlements` (**только TJ+RU**). Алиасы (в т.ч. исторические) — только для поиска; в UI везде `display_name` (современное имя). Ранжирование: score → точное имя → population. Дамп `data/settlements/settlements.csv.gz`; после обновления: `docker compose exec bot python scripts/import_settlements.py`. Веб: `GET /settlements/search`.
 - Без нумерации на кнопках.
 - Лимит лайков: default 50, сутки **UTC**; у мужчин без Премиум при исчерпании **нельзя смотреть ленту**.
 - Женщины и Премиум — без лимита.

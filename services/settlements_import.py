@@ -11,7 +11,13 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import Settlement, SettlementAlias
-from services.settlement_data import SETTLEMENTS_DUMP, normalize_name, pick_display_name
+from services.settlement_data import (
+    SETTLEMENTS_DUMP,
+    _NOT_FOR_DISPLAY,
+    is_cyrillic_name,
+    normalize_name,
+    pick_display_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,31 +97,47 @@ async def import_settlements_from_dump(
             alias_keys.add(key)
             aliases.append((sid, name, norm))
 
-    # Prefer Cyrillic (ru/tg) display names over Latin GeoNames titles.
+    # Prefer Cyrillic modern titles; aliases stay for search only.
     for sid, meta in places.items():
         namelist = names_by_place.get(sid, [])
-        latin = next(
+        primary = (meta.get("primary_name") or "").strip()
+        # Dump is_primary already marks the modern label when rebuilt with pick_display_name.
+        if (
+            primary
+            and is_cyrillic_name(primary)
+            and normalize_name(primary) not in _NOT_FOR_DISPLAY
+        ):
+            display = primary
+            if display.startswith("Санкт ") and "-" not in display:
+                display = "Санкт-" + display[len("Санкт ") :]
+            meta["display_name"] = display[:128]
+            continue
+
+        latin_official = max(
             (
                 n
                 for n in namelist
-                if n.isascii() and n.replace("-", "").isalpha() and 4 <= len(n) <= 40
-            ),
-            "",
-        )
-        # Prefer longest Latin title (Moscow over MOW) as fold reference.
-        latin_long = max(
-            (
-                n
-                for n in namelist
-                if n.isascii() and n.replace("-", "").isalpha() and 4 <= len(n) <= 40
+                if n.isascii()
+                and ((" " in n) or ("-" in n))
+                and 8 <= len(n) <= 40
+                and "lungsod" not in n.lower()
+                and " ng " not in n.lower()
             ),
             key=len,
-            default=latin,
+            default="",
+        ) or max(
+            (
+                n
+                for n in namelist
+                if n.isascii()
+                and n.isalpha()
+                and 5 <= len(n) <= 14
+                and n[0].isupper()
+            ),
+            key=lambda n: (n.lower() in {"moscow", "moskva"}, len(n)),
+            default=primary,
         )
-        meta["display_name"] = pick_display_name(
-            namelist,
-            latin_long or meta.get("primary_name") or meta["display_name"],
-        )
+        meta["display_name"] = pick_display_name(namelist, latin_official or primary)
 
     if replace:
         await session.execute(delete(SettlementAlias))
