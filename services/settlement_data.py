@@ -19,6 +19,7 @@ DUMP_FIELDS = (
     "country",
     "admin1",
     "is_primary",  # 1 = display_name for the place
+    "population",
 )
 
 _PUNCT_RE = re.compile(r"[^\w\s]+", re.UNICODE)

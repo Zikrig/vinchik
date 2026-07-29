@@ -88,6 +88,10 @@ def _parse_places(raw: str) -> dict[int, dict]:
         fcode = parts[7]
         country = parts[8].strip().upper()
         admin1 = parts[10].strip()
+        try:
+            population = int(parts[14] or 0)
+        except ValueError:
+            population = 0
         if fclass != "P" or fcode not in P_CODES:
             continue
         if not name:
@@ -110,9 +114,18 @@ def _parse_places(raw: str) -> dict[int, dict]:
                 "admin1": admin1,
                 "names": names,
                 "latin_fallback": name,
+                "population": population,
             }
         else:
             prev["names"].update(names)
+            if population > prev.get("population", 0):
+                prev["population"] = population
+            # Prefer coords from the higher-population record when merging dumps.
+            if population >= prev.get("population", 0):
+                prev["lat"] = lat
+                prev["lon"] = lon
+                prev["country"] = country
+                prev["admin1"] = admin1
     return places
 
 
@@ -147,6 +160,7 @@ def main() -> None:
                     "country": p["country"][:2],
                     "admin1": (p["admin1"] or "")[:128],
                     "is_primary": "1" if norm == display_norm else "0",
+                    "population": str(int(p.get("population") or 0)),
                 }
             )
         # Ensure display spelling exists as an alias row even if filtered earlier.
@@ -161,6 +175,7 @@ def main() -> None:
                     "country": p["country"][:2],
                     "admin1": (p["admin1"] or "")[:128],
                     "is_primary": "1",
+                    "population": str(int(p.get("population") or 0)),
                 }
             )
 

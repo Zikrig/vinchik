@@ -24,6 +24,7 @@ class SettlementHit:
     admin1: str
     matched_name: str
     score: float
+    population: int = 0
 
 
 def _score(query_norm: str, alias_norm: str) -> float:
@@ -32,6 +33,12 @@ def _score(query_norm: str, alias_norm: str) -> float:
     if alias_norm.startswith(query_norm) or query_norm.startswith(alias_norm):
         return 0.92
     return SequenceMatcher(None, query_norm, alias_norm).ratio()
+
+
+def _rank_key(hit: SettlementHit, query_norm: str) -> tuple:
+    """Higher score and population first; exact display-name match preferred."""
+    exact_display = 1 if normalize_name(hit.display_name) == query_norm else 0
+    return (hit.score, exact_display, hit.population, -len(hit.display_name))
 
 
 async def search_settlements(
@@ -51,19 +58,29 @@ async def search_settlements(
         return list(result.scalars().all())
 
     # Prefer exact name matches first (many villages share a name).
-    rows = await _fetch(SettlementAlias.name_norm == q, 80)
-    if len(rows) < 8:
-        rows.extend(await _fetch(SettlementAlias.name_norm.like(f"{q}%"), 80))
-    if len(rows) < 8 and len(q) >= 3:
-        rows.extend(await _fetch(SettlementAlias.name_norm.like(f"%{q}%"), 60))
+    rows = await _fetch(SettlementAlias.name_norm == q, 120)
+    if len(rows) < 12:
+        rows.extend(await _fetch(SettlementAlias.name_norm.like(f"{q}%"), 120))
+    if len(rows) < 12 and len(q) >= 3:
+        rows.extend(await _fetch(SettlementAlias.name_norm.like(f"%{q}%"), 80))
+    # Typos / near-misses: same prefix, then SequenceMatcher (e.g. прохорво → прохоровка).
+    if len(q) >= 5:
+        prefix = q[: max(4, len(q) - 2)]
+        rows.extend(await _fetch(SettlementAlias.name_norm.like(f"{prefix}%"), 200))
 
     best_by_place: dict[int, SettlementHit] = {}
+    fuzzy_min = 0.72 if len(q) >= 5 else 0.55
     for alias in rows:
         s = alias.settlement
         if s is None:
             continue
         score = _score(q, alias.name_norm)
-        if score < 0.55:
+        exactish = (
+            alias.name_norm == q
+            or alias.name_norm.startswith(q)
+            or q.startswith(alias.name_norm)
+        )
+        if score < (0.55 if exactish else fuzzy_min):
             continue
         hit = SettlementHit(
             id=s.id,
@@ -74,26 +91,34 @@ async def search_settlements(
             admin1=s.admin1 or "",
             matched_name=alias.name,
             score=score,
+            population=int(getattr(s, "population", 0) or 0),
         )
         prev = best_by_place.get(s.id)
-        if prev is None or hit.score > prev.score:
+        if prev is None or _rank_key(hit, q) > _rank_key(prev, q):
             best_by_place[s.id] = hit
 
-    ranked = sorted(best_by_place.values(), key=lambda h: (-h.score, h.display_name))
+    ranked = sorted(
+        best_by_place.values(),
+        key=lambda h: _rank_key(h, q),
+        reverse=True,
+    )
     return ranked[:limit]
 
 
 def disambiguation_choices(hits: list[SettlementHit], *, max_n: int = 8) -> list[SettlementHit]:
-    """If several close matches (often same name) — user must pick."""
+    """If several close matches (often same name) — user must pick.
+
+    Hits are expected pre-sorted by relevance (score, population).
+    """
     if not hits:
         return []
     if len(hits) == 1:
         return hits
     best = hits[0].score
-    close = [h for h in hits if h.score >= best - 0.08 and h.score >= 0.75]
+    close = [h for h in hits if h.score >= best - 0.08 and h.score >= 0.72]
     if len(close) >= 2:
         return close[:max_n]
-    # Same display name in different places
+    # Same display name in different places — keep population order from search.
     top_name = normalize_name(hits[0].display_name)
     same = [h for h in hits if normalize_name(h.display_name) == top_name]
     if len(same) >= 2:
@@ -106,16 +131,16 @@ async def choice_button_label(session: AsyncSession, hit: SettlementHit) -> str:
         session, hit.lat, hit.lon, exclude_id=hit.id, limit=2
     )
     near = [n.display_name for n in neighbours if n.display_name]
+    cc = (hit.country_code or "").upper()
+    head = f"{hit.display_name} ({cc})" if cc else hit.display_name
     if len(near) >= 2:
-        label = f"{hit.display_name} · {near[0]}, {near[1]}"
+        label = f"{head} · {near[0]}, {near[1]}"
     elif len(near) == 1:
-        label = f"{hit.display_name} · {near[0]}"
+        label = f"{head} · {near[0]}"
     elif hit.admin1:
-        label = f"{hit.display_name} · {hit.admin1}"
-    elif hit.country_code:
-        label = f"{hit.display_name} · {hit.country_code}"
+        label = f"{head} · {hit.admin1}"
     else:
-        label = hit.display_name
+        label = head
     return label[:64]
 
 
@@ -167,11 +192,14 @@ def format_confirm(hit: SettlementHit, neighbours: list[Settlement], lang: str) 
     from locales import t
 
     near = [n.display_name for n in neighbours if n.display_name]
+    place = hit.display_name
+    if hit.country_code:
+        place = f"{hit.display_name} ({hit.country_code.upper()})"
     if len(near) >= 2:
         return t(
             "location_confirm_near2",
             lang,
-            place=hit.display_name,
+            place=place,
             near_a=near[0],
             near_b=near[1],
         )
@@ -179,8 +207,8 @@ def format_confirm(hit: SettlementHit, neighbours: list[Settlement], lang: str) 
         return t(
             "location_confirm_near1",
             lang,
-            place=hit.display_name,
+            place=place,
             near_a=near[0],
         )
     admin = hit.admin1 or hit.country_code or "—"
-    return t("location_confirm_admin", lang, place=hit.display_name, admin=admin)
+    return t("location_confirm_admin", lang, place=place, admin=admin)

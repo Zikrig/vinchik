@@ -124,6 +124,7 @@ class Settlement(Base):
     lon: Mapped[float] = mapped_column(Float)
     country_code: Mapped[str] = mapped_column(String(2), default="")
     admin1: Mapped[str] = mapped_column(String(128), default="")
+    population: Mapped[int] = mapped_column(Integer, default=0)
 
     aliases: Mapped[list[SettlementAlias]] = relationship(back_populates="settlement")
 

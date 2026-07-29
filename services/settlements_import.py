@@ -60,6 +60,10 @@ async def import_settlements_from_dump(
             country = (row.get("country") or "")[:2]
             admin1 = (row.get("admin1") or "")[:128]
             is_primary = (row.get("is_primary") or "0").strip() == "1"
+            try:
+                population = int(row.get("population") or 0)
+            except ValueError:
+                population = 0
 
             names_by_place.setdefault(sid, []).append(name)
 
@@ -71,12 +75,15 @@ async def import_settlements_from_dump(
                     "country_code": country,
                     "admin1": admin1,
                     "primary_name": name if is_primary else "",
+                    "population": population,
                 }
             else:
                 if is_primary:
                     places[sid]["primary_name"] = name
                 places[sid]["lat"] = lat
                 places[sid]["lon"] = lon
+                if population > places[sid].get("population", 0):
+                    places[sid]["population"] = population
 
             key = (sid, norm)
             if key in alias_keys:
@@ -106,6 +113,7 @@ async def import_settlements_from_dump(
                 lon=meta["lon"],
                 country_code=meta["country_code"],
                 admin1=meta["admin1"],
+                population=int(meta.get("population") or 0),
             )
         )
         if len(buf) >= BATCH:

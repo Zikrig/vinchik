@@ -72,6 +72,11 @@ async def init_db() -> None:
                 "ON settlement_aliases (name_norm)"
             )
         )
+        await conn.execute(
+            text(
+                "ALTER TABLE settlements ADD COLUMN IF NOT EXISTS population INTEGER DEFAULT 0"
+            )
+        )
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
