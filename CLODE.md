@@ -13,7 +13,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Баны / подозрительные | `/bans`; `is_blocked` + `is_suspicious` + `suspicious_reason`; сообщения 💌 |
 | Карта пользователей (≤50, админ красным) | `/accounts` (Leaflet), `map_markers()` |
 | Гео админа / тестовые юзеры | `services/admin_tools.py`, `services/media.py` |
-| Справочник НП (текст+координаты) | `data/settlements/settlements.csv.gz`, `services/settlements*.py`, `scripts/build_settlements_dump.py` |
+| Справочник НП (текст+координаты) | `data/settlements/settlements.csv.gz` (**только TJ+RU**), `services/settlements*.py`, `scripts/build_settlements_dump.py` |
 | Тестовое фото | `data/test.png` |
 | Роутеры | `handlers/` |
 | Бизнес-логика | `services/` |
@@ -26,7 +26,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 ## Инварианты
 
 - Кнопки пользователя — inline (кроме request_location).
-- Гео в анкете: GPS **или** текст → поиск по `settlements` → при нескольких одноимённых — кнопки выбора (подпись с соседями); иначе подтверждение «A рядом с B и C». Подписи НП — кириллица (ru/tg), если есть в алиасах. Ранжирование: score → точное имя → **population**. Дамп `data/settlements/settlements.csv.gz` (+поле population); пустая таблица → автоимпорт; после обновления дампа: `docker compose exec bot python scripts/import_settlements.py`. В веб-карточке — `GET /settlements/search`.
+- Гео в анкете: GPS **или** текст → поиск по `settlements` (**только TJ+RU**) → при нескольких одноимённых — кнопки выбора (подпись с соседями + страна); иначе подтверждение «A рядом с B и C». Подписи НП — кириллица (ru/tg), если есть в алиасах. Ранжирование: score → точное имя → **population**. Дамп `data/settlements/settlements.csv.gz`; пустая таблица → автоимпорт; после обновления дампа: `docker compose exec bot python scripts/import_settlements.py`. В веб-карточке — `GET /settlements/search`.
 - Без нумерации на кнопках.
 - Лимит лайков: default 50, сутки **UTC**; у мужчин без Премиум при исчерпании **нельзя смотреть ленту**.
 - Женщины и Премиум — без лимита.

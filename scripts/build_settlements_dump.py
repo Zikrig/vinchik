@@ -4,8 +4,7 @@ Build portable settlements dump from GeoNames.
 Writes: data/settlements/settlements.csv.gz
 
 Sources:
-  - Full country dumps TJ, UZ, KG, AF (villages + towns, feature class P)
-  - cities1000 worldwide (larger towns)
+  - Full country dumps TJ + RU only (villages + towns, feature class P)
 
 Usage (on a machine with network):
   python scripts/build_settlements_dump.py
@@ -28,11 +27,17 @@ from urllib.request import urlopen
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from services.settlement_data import DUMP_FIELDS, SETTLEMENTS_DIR, SETTLEMENTS_DUMP, normalize_name, pick_display_name
+from services.settlement_data import (  # noqa: E402
+    DUMP_FIELDS,
+    SETTLEMENTS_DIR,
+    SETTLEMENTS_DUMP,
+    normalize_name,
+    pick_display_name,
+)
 
 GEONAMES = "https://download.geonames.org/export/dump"
-COUNTRY_FILES = ("TJ", "UZ", "KG", "AF")
-CITIES_FILE = "cities1000"
+# Dating bot scope: Tajikistan + Russia only.
+COUNTRY_FILES = ("TJ", "RU")
 
 # Populated places
 P_CODES = {
@@ -53,10 +58,10 @@ P_CODES = {
 def _download_zip_text(name: str) -> str:
     url = f"{GEONAMES}/{name}.zip"
     print(f"download {url}")
-    with urlopen(url, timeout=120) as resp:
+    with urlopen(url, timeout=600) as resp:
         data = resp.read()
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
-        # country file is TJ.txt etc; cities1000.txt
+        # country file is TJ.txt / RU.txt
         members = [n for n in zf.namelist() if n.endswith(".txt") and "readme" not in n.lower()]
         if not members:
             raise RuntimeError(f"no txt in {name}.zip")
@@ -92,6 +97,8 @@ def _parse_places(raw: str) -> dict[int, dict]:
             population = int(parts[14] or 0)
         except ValueError:
             population = 0
+        if country not in {"TJ", "RU"}:
+            continue
         if fclass != "P" or fcode not in P_CODES:
             continue
         if not name:
@@ -120,7 +127,6 @@ def _parse_places(raw: str) -> dict[int, dict]:
             prev["names"].update(names)
             if population > prev.get("population", 0):
                 prev["population"] = population
-            # Prefer coords from the higher-population record when merging dumps.
             if population >= prev.get("population", 0):
                 prev["lat"] = lat
                 prev["lon"] = lon
@@ -134,7 +140,6 @@ def main() -> None:
     places: dict[int, dict] = {}
     for code in COUNTRY_FILES:
         places.update(_parse_places(_download_zip_text(code)))
-    places.update(_parse_places(_download_zip_text(CITIES_FILE)))
 
     rows: list[dict] = []
     seen_alias: set[tuple[int, str]] = set()
@@ -163,7 +168,6 @@ def main() -> None:
                     "population": str(int(p.get("population") or 0)),
                 }
             )
-        # Ensure display spelling exists as an alias row even if filtered earlier.
         if display and (p["id"], display_norm) not in seen_alias and len(display_norm) >= 2:
             seen_alias.add((p["id"], display_norm))
             rows.append(

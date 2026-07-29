@@ -1,4 +1,4 @@
-"""Patch population (+ optional fcode) into existing settlements.csv.gz via GeoNames cities1000 + TJ/UZ/KG/AF."""
+"""Patch population into existing settlements.csv.gz via GeoNames TJ + RU dumps."""
 
 from __future__ import annotations
 
@@ -13,16 +13,16 @@ from urllib.request import urlopen
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from services.settlement_data import DUMP_FIELDS, SETTLEMENTS_DUMP  # noqa: E402
+from services.settlement_data import SETTLEMENTS_DUMP  # noqa: E402
 
 GEONAMES = "https://download.geonames.org/export/dump"
-SOURCES = ("cities1000", "TJ", "UZ", "KG", "AF")
+SOURCES = ("TJ", "RU")
 
 
 def _download_zip_text(name: str) -> str:
     url = f"{GEONAMES}/{name}.zip"
     print(f"download {url}")
-    with urlopen(url, timeout=180) as resp:
+    with urlopen(url, timeout=600) as resp:
         data = resp.read()
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         members = [n for n in zf.namelist() if n.endswith(".txt") and "readme" not in n.lower()]
@@ -59,23 +59,6 @@ def main() -> None:
         pops.update(_populations(_download_zip_text(src)))
     print(f"population ids={len(pops)}")
 
-    fields = list(DUMP_FIELDS)
-    if "population" not in fields:
-        fields.append("population")
-
-    rows: list[dict] = []
-    with gzip.open(SETTLEMENTS_DUMP, "rt", encoding="utf-8", newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            try:
-                sid = int(row["id"])
-            except (KeyError, ValueError):
-                continue
-            item = {k: row.get(k, "") for k in DUMP_FIELDS if k != "population"}
-            item["population"] = str(pops.get(sid, int(row.get("population") or 0) or 0))
-            rows.append(item)
-
-    # rewrite DUMP_FIELDS in settlement_data is updated separately; write with population
     out_fields = (
         "id",
         "name",
@@ -86,14 +69,43 @@ def main() -> None:
         "is_primary",
         "population",
     )
+    rows: list[dict] = []
+    kept = 0
+    skipped = 0
+    with gzip.open(SETTLEMENTS_DUMP, "rt", encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            cc = (row.get("country") or "").upper()
+            if cc not in {"TJ", "RU"}:
+                skipped += 1
+                continue
+            try:
+                sid = int(row["id"])
+            except (KeyError, ValueError):
+                continue
+            kept += 1
+            rows.append(
+                {
+                    "id": row["id"],
+                    "name": row.get("name", ""),
+                    "lat": row.get("lat", ""),
+                    "lon": row.get("lon", ""),
+                    "country": cc,
+                    "admin1": row.get("admin1", ""),
+                    "is_primary": row.get("is_primary", "0"),
+                    "population": str(pops.get(sid, int(row.get("population") or 0) or 0)),
+                }
+            )
+
     tmp = SETTLEMENTS_DUMP.with_suffix(".tmp.gz")
     with gzip.open(tmp, "wt", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=out_fields)
         writer.writeheader()
         writer.writerows(rows)
     tmp.replace(SETTLEMENTS_DUMP)
-    moscow = pops.get(524901, 0)
-    print(f"done rows={len(rows)} moscow_pop={moscow} -> {SETTLEMENTS_DUMP}")
+    print(
+        f"done kept_aliases={kept} skipped_other_countries={skipped} "
+        f"moscow_pop={pops.get(524901, 0)} -> {SETTLEMENTS_DUMP}"
+    )
 
 
 if __name__ == "__main__":
