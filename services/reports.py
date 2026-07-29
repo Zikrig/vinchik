@@ -108,3 +108,18 @@ async def unban_user(session: AsyncSession, user_id: int) -> User | None:
         user.profile.is_active = True
     await session.commit()
     return user
+
+
+async def ban_user(session: AsyncSession, user_id: int) -> User | None:
+    from services.users import load_user_with_profile
+
+    user = await load_user_with_profile(session, user_id)
+    if user is None:
+        return None
+    if not user.is_blocked:
+        user.is_blocked = True
+        user.blocked_at = datetime.now(UTC)
+        if user.profile:
+            user.profile.is_active = False
+        await session.commit()
+    return user

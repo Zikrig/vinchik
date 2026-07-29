@@ -42,6 +42,21 @@ async def init_db() -> None:
         )
         await conn.execute(
             text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_suspicious BOOLEAN DEFAULT FALSE"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS suspicious_reason TEXT"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS suspicious_at TIMESTAMPTZ"
+            )
+        )
+        await conn.execute(
+            text(
                 "CREATE INDEX IF NOT EXISTS ix_likes_from_created "
                 "ON likes (from_user_id, created_at)"
             )

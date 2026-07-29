@@ -66,6 +66,9 @@ class User(Base):
     reengage_level: Mapped[int] = mapped_column(Integer, default=0)
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
     blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_suspicious: Mapped[bool] = mapped_column(Boolean, default=False)
+    suspicious_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    suspicious_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_test: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

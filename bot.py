@@ -14,6 +14,7 @@ from database.session import async_session_maker, init_db
 from handlers import setup_routers
 from middlewares.db import DbSessionMiddleware
 from services.reengage import reengage_loop
+from services.moderation import moderation_loop
 from services.settings_service import ensure_defaults
 
 logging.basicConfig(level=logging.INFO)
@@ -96,6 +97,7 @@ async def main() -> None:
     )
     dp = build_dispatcher()
     asyncio.create_task(reengage_loop(bot))
+    asyncio.create_task(moderation_loop())
 
     if settings.use_webhook:
         await run_webhook(bot, dp)

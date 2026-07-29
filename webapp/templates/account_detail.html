@@ -121,6 +121,7 @@
     <div class="brand">Vinchik <span>Admin</span></div>
     <div class="nav">
       <a href="{{ url('/accounts') }}">← Аккаунты</a>
+      <a href="{{ url('/bans') }}">Баны</a>
       <a href="{{ url('/') }}">Дашборд</a>
       <a href="{{ url('/logout') }}">Выйти</a>
     </div>
@@ -161,6 +162,7 @@
         <div data-hero-tags>
           {% if u.is_test %}<span class="tag warn">test</span>{% endif %}
           {% if u.is_blocked %}<span class="tag danger">ban</span>{% endif %}
+          {% if u.is_suspicious %}<span class="tag warn">suspicious</span>{% endif %}
           {% if p and p.is_active %}<span class="tag ok">active</span>{% elif p %}<span class="tag">скрыт</span>{% endif %}
           {% if p and p.is_complete %}<span class="tag ok">ready</span>{% elif p %}<span class="tag">draft</span>{% endif %}
           {% if premium_active %}<span class="tag ok">premium</span>{% endif %}
@@ -251,7 +253,7 @@
     <h2>Аккаунт</h2>
     <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/user') }}"
           class="js-ajax js-confirm-changes" data-ajax="account-user"
-          data-confirm-labels='{"username":"Username","language":"язык","reengage_level":"reengage level","is_test":"test","is_blocked":"забанен"}'>
+          data-confirm-labels='{"username":"Username","language":"язык","reengage_level":"reengage level","is_test":"test","is_blocked":"забанен","is_suspicious":"подозрительный","suspicious_reason":"причина"}'>
       <div class="grid2">
         <label>Username
           <input type="text" name="username" value="{{ u.username or '' }}" placeholder="без @">
@@ -271,10 +273,14 @@
           </span>
           <input type="number" name="reengage_level" min="0" max="3" value="{{ u.reengage_level }}">
         </label>
+        <label>Причина подозрительности
+          <input type="text" name="suspicious_reason" value="{{ u.suspicious_reason or '' }}" placeholder="заполняется автоматически или вручную">
+        </label>
       </div>
       <div class="row" style="margin-top:.75rem">
         <label class="check"><input type="checkbox" name="is_test" {% if u.is_test %}checked{% endif %}> test</label>
         <label class="check"><input type="checkbox" name="is_blocked" {% if u.is_blocked %}checked{% endif %}> забанен</label>
+        <label class="check"><input type="checkbox" name="is_suspicious" {% if u.is_suspicious %}checked{% endif %}> подозрительный</label>
       </div>
       <div class="actions">
         <button type="submit">Сохранить аккаунт</button>

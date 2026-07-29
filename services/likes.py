@@ -101,6 +101,10 @@ async def record_action(
         existing.is_seen = False
         existing.created_at = now
         await session.commit()
+        if action in (LikeAction.like, LikeAction.message):
+            from services.moderation import on_like_recorded
+
+            await on_like_recorded(session, from_user.tg_id, action, message_text)
         return existing
 
     like = Like(
@@ -112,6 +116,10 @@ async def record_action(
     )
     session.add(like)
     await session.commit()
+    if action in (LikeAction.like, LikeAction.message):
+        from services.moderation import on_like_recorded
+
+        await on_like_recorded(session, from_user.tg_id, action, message_text)
     return like
 
 

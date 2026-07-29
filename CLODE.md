@@ -10,6 +10,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Веб-админка | `web.py`, `webapp/` |
 | Список аккаунтов (поиск/фильтры) | `webapp/` → `/accounts`, `services/accounts.py` |
 | Карточка аккаунта (блоки: премиум / лайки / аккаунт / анкета) | `/accounts/{tg_id}`; премиум активен только если `premium_until > now` (`is_premium`); снять → `2004-01-01` |
+| Баны / подозрительные | `/bans`; `is_blocked` + `is_suspicious` + `suspicious_reason`; сообщения 💌 |
 | Карта пользователей (≤50, админ красным) | `/accounts` (Leaflet), `map_markers()` |
 | Гео админа / тестовые юзеры | `services/admin_tools.py`, `services/media.py` |
 | Справочник НП (текст+координаты) | `data/settlements/settlements.csv.gz`, `services/settlements*.py`, `scripts/build_settlements_dump.py` |
@@ -35,11 +36,12 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - После истечения окна анкета может снова попасть в ленту; новая реакция обновляет ту же строку `likes`.
 - Реактивация: только через 1 / 3 / 7 суток после `last_activity_at` (не спамить).
 - Симпатии: батч-уведомление ≤1/30 мин; матч не обязателен.
-- Админка бота `/admin`: заявки по одной со счётчиком; премиум-юзеры с датой + листание; soft-launch 🟢/🔴; настройки. Баны/аккаунты — веб.
+- Админка бота `/admin`: заявки по одной со счётчиком; премиум-юзеры с датой + листание; soft-launch 🟢/🔴; настройки. Баны — веб `/bans`.
 - Веб-дашборд: блок «Режимы» (soft-launch / тесты) с зелёно-красными свитчами; каналы — тот же индикатор. POST форм админки — AJAX без перезагрузки (toast).
-- Админка веб: карта оплаты, гео, тестовые юзеры, баны, `/accounts` (+ карточка `/accounts/{tg_id}`).
+- Админка веб: карта оплаты, гео, тестовые юзеры, `/bans`, `/accounts` (+ карточка `/accounts/{tg_id}`).
 - Тестовые юзеры: `User.is_test`, негативные `tg_id`, фото `data/test.png`; свич «Тестовые в ленте» = setting `test_users_visible` + массовый `Profile.is_active`.
 - Жалобы: кнопка в ленте; >5 уникальных за 3 мес → `is_blocked`; разбан в админке с фото/анкетой.
+- Подозрительные (тихо): >150 лайков/сутки UTC, >150 сообщений/сутки, >3 раскладки в одном 💌 → `is_suspicious` + `suspicious_reason`; фон `moderation_loop` + хук после лайка; страница `/bans`.
 - Запуск только Docker (без локального venv).
 - По умолчанию polling; webhook — `USE_WEBHOOK=true` + HTTPS; хост-порт webhook **:8181** (внутри контейнера 8081).
 - Вне FSM любое личное сообщение → главное меню (`handlers/fallback.py`).

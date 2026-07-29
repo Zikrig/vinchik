@@ -6,6 +6,7 @@
     <div class="brand">Vinchik <span>Admin</span></div>
     <div class="nav">
       <a href="{{ url('/accounts') }}">Все аккаунты</a>
+      <a href="{{ url('/bans') }}">Баны</a>
       <a href="{{ url('/logout') }}">Выйти</a>
     </div>
   </div>
@@ -26,7 +27,7 @@
     <a href="#channels">Каналы</a>
     <a href="#orders">Заявки</a>
     <a href="#premiums">Премиум</a>
-    <a href="#blocked">Баны</a>
+    <a href="{{ url('/bans') }}">Баны</a>
     <a href="#geo">Гео</a>
   </nav>
 
@@ -186,37 +187,6 @@
       <tr><td colspan="3" class="hint">Пока никого.</td></tr>
       {% endfor %}
     </table>
-  </section>
-
-  <section class="panel" id="blocked">
-    <h2>Заблокированные</h2>
-    <p>Автоблок: больше 5 жалоб за 3 месяца. Жалоба — один раз с одного аккаунта.</p>
-    {% if not blocked %}<p class="hint">Список пуст.</p>{% endif %}
-    {% for row in blocked %}
-    <article class="blocked-card">
-      {% if row.profile and row.profile.photo_file_id %}
-      <img src="{{ url('/users/' ~ row.tg_id ~ '/photo') }}" alt="photo">
-      {% else %}
-      <div class="ph">нет фото</div>
-      {% endif %}
-      <div>
-        <p><strong>ID:</strong> {{ row.tg_id }}
-          {% if row.username %} · <a href="https://t.me/{{ row.username }}" target="_blank">@{{ row.username }}</a>{% endif %}
-        </p>
-        <p><strong>Жалоб за 3 мес:</strong> {{ row.reports_n }}</p>
-        <p><strong>Заблокирован:</strong> {{ row.blocked_at }}</p>
-        {% if row.profile %}
-        <p><strong>Имя:</strong> {{ row.profile.name }} · <strong>Возраст:</strong> {{ row.profile.age }} · <strong>Город:</strong> {{ row.profile.city_name }}</p>
-        <p><strong>Пол:</strong> {{ row.profile.gender }} · <strong>Ищет:</strong> {{ row.profile.looking_for }}</p>
-        <p><strong>Координаты:</strong> {{ row.profile.lat }}, {{ row.profile.lon }}</p>
-        <p><strong>О себе:</strong> {{ row.profile.description or '—' }}</p>
-        {% endif %}
-        <form method="post" action="{{ url('/users/' ~ row.tg_id ~ '/unban') }}" class="js-ajax" data-ajax="unban">
-          <button type="submit">Разбанить</button>
-        </form>
-      </div>
-    </article>
-    {% endfor %}
   </section>
 
   <section class="panel" id="geo">

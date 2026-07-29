@@ -321,6 +321,8 @@ async def update_account_user(
     is_test: bool,
     is_blocked: bool,
     reengage_level: int,
+    is_suspicious: bool | None = None,
+    suspicious_reason: str | None = None,
 ) -> User | None:
     user = await load_user_with_profile(session, user_id)
     if user is None:
@@ -337,6 +339,19 @@ async def update_account_user(
     elif not is_blocked and user.is_blocked:
         user.is_blocked = False
         user.blocked_at = None
+
+    if is_suspicious is not None:
+        if is_suspicious and not user.is_suspicious:
+            user.is_suspicious = True
+            user.suspicious_at = datetime.now(UTC)
+            user.suspicious_reason = (suspicious_reason or "").strip() or "вручную"
+        elif is_suspicious and user.is_suspicious:
+            if suspicious_reason is not None:
+                user.suspicious_reason = (suspicious_reason or "").strip() or user.suspicious_reason
+        elif not is_suspicious:
+            user.is_suspicious = False
+            user.suspicious_reason = None
+            user.suspicious_at = None
 
     if user.is_blocked and user.profile and user.profile.is_active:
         user.profile.is_active = False

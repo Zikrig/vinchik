@@ -46,7 +46,8 @@ from services.premium import (
     notify_premium_activated,
     reject_order,
 )
-from services.reports import list_blocked_users, unban_user
+from services.reports import ban_user, list_blocked_users, unban_user
+from services.moderation import clear_suspicious, list_suspicious_users
 from services.settings_service import (
     ensure_defaults,
     get_daily_like_limit,
@@ -117,6 +118,8 @@ def serialize_account_user(user) -> dict:
         "reengage_level": int(user.reengage_level or 0),
         "is_test": bool(user.is_test),
         "is_blocked": bool(user.is_blocked),
+        "is_suspicious": bool(user.is_suspicious),
+        "suspicious_reason": user.suspicious_reason or "",
     }
 
 
@@ -161,6 +164,7 @@ def serialize_account_hero(user) -> dict:
         "username": user.username or "",
         "is_test": bool(user.is_test),
         "is_blocked": bool(user.is_blocked),
+        "is_suspicious": bool(user.is_suspicious),
         "is_active": bool(p.is_active) if p else False,
         "is_complete": bool(p.is_complete) if p else False,
         "has_premium": is_premium(user),
@@ -230,7 +234,6 @@ def create_app() -> FastAPI:
             await session.execute(select(RequiredChannel).order_by(RequiredChannel.id))
         ).scalars().all()
         pay = await get_payment_info(session)
-        blocked = await list_blocked_users(session)
         admin_ids = sorted(settings.admin_id_set)
         admin_geo = {}
         for aid in admin_ids:
@@ -246,7 +249,6 @@ def create_app() -> FastAPI:
             "pending": pending,
             "premiums": premiums,
             "channels": channels,
-            "blocked": blocked,
             "admin_ids": admin_ids,
             "admin_geo": admin_geo,
             "dushanbe_lat": DUSHANBE_LAT,
@@ -257,6 +259,20 @@ def create_app() -> FastAPI:
             "flash": request.query_params.get("flash"),
         }
         return TEMPLATES.TemplateResponse(request, "dashboard.html", ctx)
+
+    @app.get("/bans", response_class=HTMLResponse)
+    async def bans_page(request: Request, session: AsyncSession = Depends(get_db)):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        return TEMPLATES.TemplateResponse(
+            request,
+            "bans.html",
+            {
+                "blocked": await list_blocked_users(session),
+                "suspicious": await list_suspicious_users(session),
+                "flash": request.query_params.get("flash"),
+            },
+        )
 
     @app.get("/accounts", response_class=HTMLResponse)
     async def accounts_list(request: Request, session: AsyncSession = Depends(get_db)):
@@ -323,6 +339,8 @@ def create_app() -> FastAPI:
         language: str = Form("ru"),
         is_test: str | None = Form(None),
         is_blocked: str | None = Form(None),
+        is_suspicious: str | None = Form(None),
+        suspicious_reason: str = Form(""),
         reengage_level: int = Form(0),
     ):
         if (redir := require_auth(request)) is not None:
@@ -336,6 +354,8 @@ def create_app() -> FastAPI:
                 is_test=is_test is not None,
                 is_blocked=is_blocked is not None,
                 reengage_level=reengage_level,
+                is_suspicious=is_suspicious is not None,
+                suspicious_reason=suspicious_reason,
             )
         except Exception:
             return err_response(
@@ -554,10 +574,34 @@ def create_app() -> FastAPI:
             dest = settings.abs_path(f"/accounts/{user_id}?flash=saved")
         elif "/accounts" in referer:
             dest = settings.abs_path("/accounts")
+        elif "/bans" in referer:
+            dest = settings.abs_path("/bans?flash=unbanned")
         else:
-            dest = settings.abs_path("/")
+            dest = settings.abs_path("/bans?flash=unbanned")
         return ok_response(
             request, dest, message="Разбанен.", remove=True, user_id=user_id
+        )
+
+    @app.post("/users/{user_id}/ban")
+    async def user_ban(
+        user_id: int, request: Request, session: AsyncSession = Depends(get_db)
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        await ban_user(session, user_id)
+        dest = settings.abs_path("/bans?flash=banned")
+        return ok_response(request, dest, message="Забанен.", user_id=user_id)
+
+    @app.post("/users/{user_id}/clear-suspicious")
+    async def user_clear_suspicious(
+        user_id: int, request: Request, session: AsyncSession = Depends(get_db)
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        await clear_suspicious(session, user_id)
+        dest = settings.abs_path("/bans?flash=cleared")
+        return ok_response(
+            request, dest, message="Флаг снят.", remove=True, user_id=user_id
         )
 
     @app.post("/settings")

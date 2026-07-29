@@ -469,6 +469,7 @@
         const parts = [];
         if (hero.is_test) parts.push('<span class="tag warn">test</span>');
         if (hero.is_blocked) parts.push('<span class="tag danger">ban</span>');
+        if (hero.is_suspicious) parts.push('<span class="tag warn">suspicious</span>');
         if (hero.is_active) parts.push('<span class="tag ok">active</span>');
         else parts.push('<span class="tag">скрыт</span>');
         if (hero.is_complete) parts.push('<span class="tag ok">ready</span>');
@@ -532,7 +533,7 @@
             badge.classList.toggle("off", !active);
             badge.innerHTML = '<span class="dot"></span> ' + (active ? "ON" : "OFF");
           }
-        } else if (kind === "channel-delete" || kind === "order" || kind === "unban") {
+        } else if (kind === "channel-delete" || kind === "order" || kind === "unban" || kind === "clear-suspicious" || kind === "ban") {
           const row = form.closest("tr, article.blocked-card");
           if (row) row.remove();
         } else if (kind === "channel-add" && data.channel) {
