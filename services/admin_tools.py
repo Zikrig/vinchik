@@ -20,19 +20,25 @@ DUSHANBE_CITY = "Душанбе"
 # Spawn test profiles near center (not across whole TJ).
 TEST_SPAWN_RADIUS_KM = 60.0
 
-_TEST_NAMES = (
+_TEST_NAMES_MALE = (
     "Али",
     "Фарход",
     "Дилшод",
     "Рустам",
+    "Бахтиёр",
+    "Джамшед",
+    "Камол",
+    "Саид",
+)
+_TEST_NAMES_FEMALE = (
     "Зарина",
     "Нигора",
     "Мадина",
     "Шахло",
-    "Бахтиёр",
     "Парвина",
     "Ситора",
-    "Джамшед",
+    "Мехри",
+    "Гулнора",
 )
 
 
@@ -101,9 +107,10 @@ async def create_test_users(session: AsyncSession, count: int) -> int:
         gender = random.choice((Gender.male, Gender.female))
         if gender == Gender.male:
             looking = random.choice((LookingFor.female, LookingFor.any))
+            name = random.choice(_TEST_NAMES_MALE)
         else:
             looking = random.choice((LookingFor.male, LookingFor.any))
-        name = random.choice(_TEST_NAMES)
+            name = random.choice(_TEST_NAMES_FEMALE)
         age = random.randint(18, 35)
         user = User(
             tg_id=tg_id,

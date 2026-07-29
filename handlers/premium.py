@@ -92,7 +92,8 @@ async def _send_premium_menu(message, session: AsyncSession, user) -> None:
     else:
         status = t("premium_inactive", lang)
     plans = await list_active_plans(session)
-    body = f"{status}\n\n{t('premium_choose', lang) if plans else t('premium_title', lang)}"
+    choose = t("premium_choose", lang) if plans else t("premium_title", lang)
+    body = f"{t('premium_benefits', lang)}\n\n{status}\n\n{choose}"
     await message.answer(body, reply_markup=_premium_menu_kb(lang, plans))
 
 

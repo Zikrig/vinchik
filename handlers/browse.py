@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import LikeAction
 from handlers.common import load_user, show_main_menu
-from keyboards.inline import browse_kb, channels_kb, main_menu_kb
+from keyboards.inline import browse_kb, channels_kb, main_menu_kb, premium_cta_kb
 from locales import t
 from services.activity import touch_activity
 from services.browse import next_profile, profile_caption
@@ -26,6 +26,10 @@ from services.settings_service import is_registration_only
 from states.profile import ProfileStates
 
 router = Router()
+
+
+def _limit_promo_text(lang: str) -> str:
+    return f"{t('limit_reached', lang)}\n\n{t('premium_benefits', lang)}"
 
 
 async def strip_card_keyboard(message: Message | None) -> None:
@@ -47,8 +51,8 @@ async def notify_limit(bot: Bot, callback: CallbackQuery, lang: str) -> None:
     await strip_card_keyboard(callback.message)
     await bot.send_message(
         callback.from_user.id,
-        t("limit_reached", lang),
-        reply_markup=main_menu_kb(lang),
+        _limit_promo_text(lang),
+        reply_markup=premium_cta_kb(lang, with_main_menu=True),
     )
 
 
@@ -73,7 +77,10 @@ async def start_browse(
         await say(t("need_channels", lang), reply_markup=channels_kb(lang, channels))
         return
     if not await can_browse(session, user, user.profile):
-        await say(t("limit_reached", lang), reply_markup=main_menu_kb(lang))
+        await say(
+            _limit_promo_text(lang),
+            reply_markup=premium_cta_kb(lang, with_main_menu=True),
+        )
         return
     if not user.profile or not user.profile.is_complete:
         await say(t("ask_age", lang), reply_markup=main_menu_kb(lang))
@@ -105,8 +112,8 @@ async def cb_browse(callback: CallbackQuery, session: AsyncSession, bot: Bot) ->
     if not await can_browse(session, user, user.profile):
         await bot.send_message(
             callback.from_user.id,
-            t("limit_reached", user.language or "ru"),
-            reply_markup=main_menu_kb(user.language or "ru"),
+            _limit_promo_text(user.language or "ru"),
+            reply_markup=premium_cta_kb(user.language or "ru", with_main_menu=True),
         )
         return
     await start_browse(callback.message, session, user, bot)
@@ -166,8 +173,8 @@ async def send_message_text(
         )
     except PermissionError:
         await message.answer(
-            t("limit_reached", user.language or "ru"),
-            reply_markup=main_menu_kb(user.language or "ru"),
+            _limit_promo_text(user.language or "ru"),
+            reply_markup=premium_cta_kb(user.language or "ru", with_main_menu=True),
         )
         return
     if like:
@@ -250,8 +257,8 @@ async def _rate(
         if not await can_like(session, user, user.profile):
             await bot.send_message(
                 callback.from_user.id,
-                t("limit_reached", lang),
-                reply_markup=main_menu_kb(lang),
+                _limit_promo_text(lang),
+                reply_markup=premium_cta_kb(lang, with_main_menu=True),
             )
             return
 

@@ -82,16 +82,26 @@ def browse_kb(lang: str, target_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text=t("btn_like", lang), callback_data=f"b:like:{target_id}"),
                 InlineKeyboardButton(text=t("btn_message", lang), callback_data=f"b:msg:{target_id}"),
                 InlineKeyboardButton(text=t("btn_dislike", lang), callback_data=f"b:no:{target_id}"),
-                InlineKeyboardButton(text=t("btn_sleep", lang), callback_data="b:sleep"),
             ],
             [
-                InlineKeyboardButton(
-                    text=t("btn_report", lang),
-                    callback_data=f"b:rep:{target_id}",
-                )
+                InlineKeyboardButton(text=t("btn_report", lang), callback_data=f"b:rep:{target_id}"),
+                InlineKeyboardButton(text=t("btn_premium", lang), callback_data="menu:premium"),
+                InlineKeyboardButton(text=t("btn_sleep", lang), callback_data="b:sleep"),
             ],
         ]
     )
+
+
+def premium_cta_kb(lang: str, *, with_main_menu: bool = False) -> InlineKeyboardMarkup:
+    """Promo entry to premium (after registration / like limit)."""
+    rows = [
+        [InlineKeyboardButton(text=t("menu_premium", lang), callback_data="menu:premium")]
+    ]
+    if with_main_menu:
+        rows.append(
+            [InlineKeyboardButton(text=t("btn_main_menu", lang), callback_data="menu:root")]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def empty_feed_kb(lang: str) -> InlineKeyboardMarkup:

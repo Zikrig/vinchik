@@ -5,11 +5,12 @@ from aiogram.types import ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import Profile, User
-from keyboards.inline import main_menu_kb, my_profile_kb
+from keyboards.inline import main_menu_kb, my_profile_kb, premium_cta_kb
 from locales import t
 from services.browse import profile_caption
 from services.media import as_photo_input
 from services.settings_service import is_registration_only
+from services.users import is_premium
 
 
 async def load_user(session: AsyncSession, tg_id: int) -> User | None:
@@ -36,12 +37,23 @@ async def show_main_menu(message: Message, user: User) -> None:
 async def after_profile_ready(message: Message, session: AsyncSession, user: User) -> None:
     from handlers.browse import start_browse
 
+    lang = user.language or "ru"
     if await is_registration_only(session):
         await message.answer(
-            t("soft_launch", user.language),
+            t("soft_launch", lang),
             reply_markup=ReplyKeyboardRemove(),
         )
+        if not is_premium(user):
+            await message.answer(
+                t("premium_benefits", lang),
+                reply_markup=premium_cta_kb(lang),
+            )
         await show_my_profile(message, user, user.profile)  # type: ignore[arg-type]
         return
     await message.answer(".", reply_markup=ReplyKeyboardRemove())
+    if not is_premium(user):
+        await message.answer(
+            t("premium_promo", lang),
+            reply_markup=premium_cta_kb(lang),
+        )
     await start_browse(message, session, user)
