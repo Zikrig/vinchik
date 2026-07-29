@@ -33,6 +33,10 @@ async def file_report(
     if from_user_id == to_user_id:
         return False, False
 
+    target_exists = await session.get(User, to_user_id)
+    if target_exists is None:
+        return False, False
+
     existing = await session.execute(
         select(Report).where(
             Report.from_user_id == from_user_id,

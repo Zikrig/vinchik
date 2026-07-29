@@ -68,8 +68,15 @@ async def record_action(
     One row per directed pair (unique). Hides both users from each other for
     ``profile_reshow_days`` (0 = forever). After that window a new reaction
     updates the same row.
+
+    Returns None if the target no longer exists (stale browse card after
+    test-user wipe) or the pair is still hidden by the reshow window.
     """
     from services.settings_service import get_profile_reshow_days
+
+    target = await session.get(User, to_user_id)
+    if target is None:
+        return None
 
     existing = (
         await session.execute(
