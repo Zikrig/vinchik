@@ -66,6 +66,7 @@
   .panel.profile-zone.is-locked {
     background: #eef0f2;
     cursor: pointer;
+    user-select: none;
   }
   .panel.profile-zone.is-unlocked {
     background: #fff;
@@ -391,7 +392,7 @@
 
   <section class="panel profile-zone is-locked" id="profile">
     <h2 class="panel-title">📋 Анкета</h2>
-    <p class="hint-lock">Панель серая — только просмотр. Дважды кликните по панели, чтобы редактировать.</p>
+    <p class="hint-lock">Панель серая — только просмотр. Кликните по панели, чтобы редактировать.</p>
     <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/profile') }}"
           class="js-ajax js-confirm-changes js-lockable-form" data-ajax="account-profile"
           data-confirm-labels='{"language":"язык","name":"имя","age":"возраст","city_name":"город","gender":"пол","looking_for":"ищет","lat":"lat","lon":"lon","photo_file_id":"photo_file_id","description":"описание","is_active":"анкета активна","is_complete":"анкета готова","clear_photo":"очистить фото"}'>
@@ -415,8 +416,8 @@
              data-search-url="{{ url('/settlements/search') }}">
           <div class="meta" style="margin-bottom:.35rem;font-weight:500">Город (справочник НП)</div>
           <input type="text" name="city_name" value="{{ p.city_name if p and p.city_name else '' }}"
-                 readonly placeholder="Дважды кликните по панели для поиска" autocomplete="off"
-                 title="Дважды кликните по панели, затем введите название">
+                 readonly placeholder="Кликните по панели, затем введите название" autocomplete="off"
+                 title="Кликните по панели, затем введите название">
           <div class="settlement-results" aria-live="polite"></div>
           <div class="settlement-confirm"></div>
         </div>
@@ -451,14 +452,15 @@
             <label for="look-female">♀ Ж</label>
           </div>
         </div>
-        <label data-lock>Lat
-          <input type="text" name="lat" value="{{ p.lat if p and p.lat is not none else '' }}" readonly>
+        <label data-lock>Широта (lat)
+          <input type="number" step="any" name="lat" value="{{ p.lat if p and p.lat is not none else '' }}" readonly autocomplete="off">
         </label>
-        <label data-lock>Lon
-          <input type="text" name="lon" value="{{ p.lon if p and p.lon is not none else '' }}" readonly>
+        <label data-lock>Долгота (lon)
+          <input type="number" step="any" name="lon" value="{{ p.lon if p and p.lon is not none else '' }}" readonly autocomplete="off">
         </label>
-        <label data-lock>photo_file_id
-          <input type="text" name="photo_file_id" value="{{ p.photo_file_id if p and p.photo_file_id else '' }}" readonly>
+        <label data-lock>ID фото (Telegram file_id)
+          <input type="text" name="photo_file_id" value="{{ p.photo_file_id if p and p.photo_file_id else '' }}"
+                 readonly autocomplete="off" spellcheck="false" placeholder="AgACAgIAAxkB…">
         </label>
       </div>
       <label data-lock style="margin-top:.75rem;display:block">Описание
@@ -543,7 +545,7 @@
       const city = box.querySelector('input[name="city_name"]');
       if (city) {
         if (box._settlementSavedCity != null) city.value = box._settlementSavedCity;
-        city.placeholder = "Дважды кликните по панели для поиска";
+        city.placeholder = "Кликните по панели, затем введите название";
       }
     });
   }
@@ -679,9 +681,9 @@
     initSettlementPickers(form);
     const panel = panelOf(form);
     if (!panel) return;
-    panel.addEventListener("dblclick", function (e) {
-      if (e.target.closest("button, a, .settlement-results")) return;
+    panel.addEventListener("click", function (e) {
       if (panel.classList.contains("is-unlocked")) return;
+      if (e.target.closest("button, a, .settlement-results")) return;
       e.preventDefault();
       unlockAll(form);
     });
