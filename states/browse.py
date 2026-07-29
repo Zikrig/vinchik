@@ -7,4 +7,3 @@ class BrowseStates(StatesGroup):
 
 class MessageStates(StatesGroup):
     content = State()
-    attachments = State()

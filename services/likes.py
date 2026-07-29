@@ -15,7 +15,7 @@ from database.models import Like, LikeAction, Profile, User
 from locales import t
 from services.limits import can_like, increment_like_count
 
-MAX_MESSAGE_ATTACHMENTS = 3
+MAX_MESSAGE_ATTACHMENTS = 3  # unused; kept for imports safety
 MAX_MESSAGE_ATTACH_BYTES = 10 * 1024 * 1024
 
 
@@ -24,7 +24,6 @@ def empty_message_payload() -> dict[str, Any]:
         "text": None,
         "voice_file_id": None,
         "video_note_file_id": None,
-        "attachments": [],
     }
 
 
@@ -237,32 +236,18 @@ def format_likes_list(rows: list[tuple[User, Profile, Like]], lang: str) -> str:
             lines.append(t("likes_list_voice", lang))
         if payload.get("video_note_file_id"):
             lines.append(t("likes_list_video_note", lang))
-        atts = payload.get("attachments") or []
-        if atts:
-            lines.append(t("likes_list_attachment", lang, n=len(atts)))
         if len(rows) > 1:
             lines.append("")
     return "\n".join(lines).rstrip()
 
 
 async def deliver_like_media(bot: Bot, chat_id: int, like: Like) -> None:
-    """Forward stored voice / video note / attachments to the recipient."""
+    """Forward stored voice / video note to the recipient."""
     payload = _like_payload(like)
     try:
         if payload.get("voice_file_id"):
             await bot.send_voice(chat_id, payload["voice_file_id"])
         if payload.get("video_note_file_id"):
             await bot.send_video_note(chat_id, payload["video_note_file_id"])
-        for att in payload.get("attachments") or []:
-            kind = att.get("type")
-            file_id = att.get("file_id")
-            if not file_id:
-                continue
-            if kind == "photo":
-                await bot.send_photo(chat_id, file_id)
-            elif kind == "video":
-                await bot.send_video(chat_id, file_id)
-            else:
-                await bot.send_document(chat_id, file_id)
     except TelegramAPIError:
         pass

@@ -11,17 +11,14 @@ from keyboards.inline import (
     browse_reply_kb,
     channels_kb,
     main_menu_kb,
-    msg_next_kb,
     premium_cta_kb,
 )
 from locales import t
 from services.activity import touch_activity
 from services.browse import next_profile, profile_caption
 from services.channels import format_channels_lines, list_active_channels, user_subscribed_all
-from services.media import as_photo_input
+from services.media import as_photo_input, media_photos_for_profile, profile_photo_ids
 from services.likes import (
-    MAX_MESSAGE_ATTACH_BYTES,
-    MAX_MESSAGE_ATTACHMENTS,
     deliver_like_media,
     empty_message_payload,
     format_likes_list,
@@ -48,24 +45,32 @@ def _is_btn(text: str | None, key: str, lang: str) -> bool:
     return text in {t(key, lang), t(key, "ru"), t(key, "tg")}
 
 
-def _attach_left_mb(used: int) -> str:
-    left = max(0, MAX_MESSAGE_ATTACH_BYTES - used)
-    return f"{left / (1024 * 1024):.1f}".rstrip("0").rstrip(".")
-
-
-def _attach_prompt(lang: str, n: int, used_bytes: int) -> str:
-    return t(
-        "ask_message_attach",
-        lang,
-        n=n,
-        left_mb=_attach_left_mb(used_bytes),
-    )
-
-
 async def _say_limit(message: Message, lang: str) -> None:
     body = _limit_promo_text(lang)
     await message.answer(body, reply_markup=ReplyKeyboardRemove())
     await message.answer(body, reply_markup=premium_cta_kb(lang, with_main_menu=True))
+
+
+async def _send_profile_card(
+    dest: Bot, chat_id: int, profile, caption: str, kb, lang: str
+) -> None:
+    photos = profile_photo_ids(profile)
+    if not photos:
+        await dest.send_message(chat_id, caption, reply_markup=kb)
+        return
+    if len(photos) == 1:
+        photo = as_photo_input(photos[0])
+        if photo is not None:
+            await dest.send_photo(chat_id, photo, caption=caption, reply_markup=kb)
+        else:
+            await dest.send_message(chat_id, caption, reply_markup=kb)
+        return
+    media = media_photos_for_profile(profile, caption=caption)
+    if not media:
+        await dest.send_message(chat_id, caption, reply_markup=kb)
+        return
+    await dest.send_media_group(chat_id, media)
+    await dest.send_message(chat_id, t("browse_hint", lang), reply_markup=kb)
 
 
 async def start_browse(
@@ -133,11 +138,7 @@ async def start_browse(
 
     caption = profile_caption(profile)
     kb = browse_reply_kb(lang)
-    photo = as_photo_input(profile.photo_file_id)
-    if photo is not None:
-        await dest.send_photo(chat_id, photo, caption=caption, reply_markup=kb)
-    else:
-        await say(caption, reply_markup=kb)
+    await _send_profile_card(dest, chat_id, profile, caption, kb, lang)
 
 
 @router.callback_query(F.data == "browse:start")
@@ -267,7 +268,6 @@ async def _start_message_flow(
     await state.update_data(
         msg_target=int(target_id),
         msg_payload=empty_message_payload(),
-        msg_attach_bytes=0,
     )
     await message.answer(t("ask_message", lang), reply_markup=ReplyKeyboardRemove())
 
@@ -316,76 +316,18 @@ async def _report_from_message(
     await start_browse(message, session, user, bot, state)
 
 
-async def _enter_attachments(message: Message, state: FSMContext, lang: str) -> None:
-    data = await state.get_data()
-    payload = data.get("msg_payload") or empty_message_payload()
-    used = int(data.get("msg_attach_bytes") or 0)
-    atts = payload.get("attachments") or []
-    await state.set_state(MessageStates.attachments)
-    await message.answer(
-        _attach_prompt(lang, len(atts), used),
-        reply_markup=msg_next_kb(lang),
-    )
-
-
-@router.message(MessageStates.content, F.voice)
-async def msg_content_voice(message: Message, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user and message.voice
-    payload = (await state.get_data()).get("msg_payload") or empty_message_payload()
-    payload["voice_file_id"] = message.voice.file_id
-    payload["video_note_file_id"] = None
-    await state.update_data(msg_payload=payload)
-    await _enter_attachments(message, state, user.language or "ru")
-
-
-@router.message(MessageStates.content, F.video_note)
-async def msg_content_video_note(
-    message: Message, session: AsyncSession, state: FSMContext
-) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user and message.video_note
-    payload = (await state.get_data()).get("msg_payload") or empty_message_payload()
-    payload["video_note_file_id"] = message.video_note.file_id
-    payload["voice_file_id"] = None
-    await state.update_data(msg_payload=payload)
-    await _enter_attachments(message, state, user.language or "ru")
-
-
-@router.message(MessageStates.content, F.text)
-async def msg_content_text(message: Message, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user
-    lang = user.language or "ru"
-    text = (message.text or "").strip()[:500]
-    if not text:
-        await message.answer(t("msg_need_content", lang))
-        return
-    payload = (await state.get_data()).get("msg_payload") or empty_message_payload()
-    payload["text"] = text
-    await state.update_data(msg_payload=payload)
-    await _enter_attachments(message, state, lang)
-
-
-@router.message(MessageStates.content)
-async def msg_content_other(message: Message, session: AsyncSession) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user
-    await message.answer(t("msg_need_content", user.language or "ru"))
-
-
 async def _finalize_message(
     message: Message,
     session: AsyncSession,
     bot: Bot,
     state: FSMContext,
+    payload: dict,
 ) -> None:
     user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
     assert user and user.profile
     lang = user.language or "ru"
     data = await state.get_data()
     target_id = int(data["msg_target"])
-    payload = data.get("msg_payload") or empty_message_payload()
     try:
         like = await record_action(
             session,
@@ -406,134 +348,47 @@ async def _finalize_message(
     await start_browse(message, session, user, bot, state)
 
 
-async def _add_attachment(
-    message: Message,
-    session: AsyncSession,
-    state: FSMContext,
-    bot: Bot,
-    *,
-    file_id: str,
-    size: int,
-    kind: str,
+@router.message(MessageStates.content, F.voice)
+async def msg_content_voice(
+    message: Message, session: AsyncSession, state: FSMContext, bot: Bot
+) -> None:
+    assert message.voice
+    payload = empty_message_payload()
+    payload["voice_file_id"] = message.voice.file_id
+    await _finalize_message(message, session, bot, state, payload)
+
+
+@router.message(MessageStates.content, F.video_note)
+async def msg_content_video_note(
+    message: Message, session: AsyncSession, state: FSMContext, bot: Bot
+) -> None:
+    assert message.video_note
+    payload = empty_message_payload()
+    payload["video_note_file_id"] = message.video_note.file_id
+    await _finalize_message(message, session, bot, state, payload)
+
+
+@router.message(MessageStates.content, F.text)
+async def msg_content_text(
+    message: Message, session: AsyncSession, state: FSMContext, bot: Bot
 ) -> None:
     user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
     assert user
     lang = user.language or "ru"
-    data = await state.get_data()
-    payload = data.get("msg_payload") or empty_message_payload()
-    atts: list = list(payload.get("attachments") or [])
-    used = int(data.get("msg_attach_bytes") or 0)
-
-    if len(atts) >= MAX_MESSAGE_ATTACHMENTS:
-        await message.answer(
-            t("msg_attach_full", lang),
-            reply_markup=msg_next_kb(lang),
-        )
+    text = (message.text or "").strip()[:500]
+    if not text:
+        await message.answer(t("msg_need_content", lang))
         return
-
-    if size <= 0:
-        try:
-            f = await bot.get_file(file_id)
-            size = int(f.file_size or 0)
-        except Exception:
-            size = 0
-
-    if used + size > MAX_MESSAGE_ATTACH_BYTES:
-        await message.answer(
-            t("msg_attach_too_big", lang),
-            reply_markup=msg_next_kb(lang),
-        )
-        return
-
-    atts.append({"type": kind, "file_id": file_id, "size": size})
-    payload["attachments"] = atts
-    used += size
-    await state.update_data(msg_payload=payload, msg_attach_bytes=used)
-
-    if len(atts) >= MAX_MESSAGE_ATTACHMENTS:
-        await _finalize_message(message, session, bot, state)
-        return
-
-    await message.answer(
-        _attach_prompt(lang, len(atts), used),
-        reply_markup=msg_next_kb(lang),
-    )
+    payload = empty_message_payload()
+    payload["text"] = text
+    await _finalize_message(message, session, bot, state, payload)
 
 
-@router.message(MessageStates.attachments, F.photo)
-async def msg_attach_photo(
-    message: Message, session: AsyncSession, state: FSMContext, bot: Bot
-) -> None:
-    photo = message.photo[-1]  # type: ignore[index]
-    await _add_attachment(
-        message,
-        session,
-        state,
-        bot,
-        file_id=photo.file_id,
-        size=int(photo.file_size or 0),
-        kind="photo",
-    )
-
-
-@router.message(MessageStates.attachments, F.video)
-async def msg_attach_video(
-    message: Message, session: AsyncSession, state: FSMContext, bot: Bot
-) -> None:
-    assert message.video
-    await _add_attachment(
-        message,
-        session,
-        state,
-        bot,
-        file_id=message.video.file_id,
-        size=int(message.video.file_size or 0),
-        kind="video",
-    )
-
-
-@router.message(MessageStates.attachments, F.document)
-async def msg_attach_document(
-    message: Message, session: AsyncSession, state: FSMContext, bot: Bot
-) -> None:
-    assert message.document
-    await _add_attachment(
-        message,
-        session,
-        state,
-        bot,
-        file_id=message.document.file_id,
-        size=int(message.document.file_size or 0),
-        kind="document",
-    )
-
-
-@router.message(MessageStates.attachments)
-async def msg_attach_other(message: Message, session: AsyncSession, state: FSMContext) -> None:
+@router.message(MessageStates.content)
+async def msg_content_other(message: Message, session: AsyncSession) -> None:
     user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
     assert user
-    lang = user.language or "ru"
-    data = await state.get_data()
-    payload = data.get("msg_payload") or empty_message_payload()
-    used = int(data.get("msg_attach_bytes") or 0)
-    atts = payload.get("attachments") or []
-    await message.answer(
-        _attach_prompt(lang, len(atts), used),
-        reply_markup=msg_next_kb(lang),
-    )
-
-
-@router.callback_query(MessageStates.attachments, F.data == "msg:next")
-async def msg_next(
-    callback: CallbackQuery, session: AsyncSession, bot: Bot, state: FSMContext
-) -> None:
-    assert callback.message
-    await callback.answer()
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    await _finalize_message(callback.message, session, bot, state)
+    await message.answer(t("msg_need_content", user.language or "ru"))
 
 
 @router.callback_query(F.data == "likes:view")

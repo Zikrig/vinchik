@@ -92,6 +92,20 @@ def photo_keep_kb(lang: str) -> InlineKeyboardMarkup:
     return keep_kb(lang, "keep:photo")
 
 
+def photo_step_kb(lang: str, count: int, *, can_keep: bool = False) -> InlineKeyboardMarkup:
+    """Collect 0–3 profile photos: Done/Skip + optional keep."""
+    rows: list[list[InlineKeyboardButton]] = []
+    if can_keep and count == 0:
+        rows.append(
+            [InlineKeyboardButton(text=t("keep_current", lang), callback_data="keep:photo")]
+        )
+    done_key = "btn_photo_done" if count > 0 else "btn_photo_skip"
+    rows.append(
+        [InlineKeyboardButton(text=t(done_key, lang), callback_data="photo:done")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def my_profile_kb(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

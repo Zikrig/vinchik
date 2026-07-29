@@ -102,6 +102,7 @@ class Profile(Base):
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_file_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    photo_file_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_complete: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(

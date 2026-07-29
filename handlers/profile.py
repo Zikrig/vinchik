@@ -15,10 +15,11 @@ from keyboards.inline import (
     location_confirm_kb,
     location_kb,
     location_pick_kb,
-    photo_keep_kb,
+    photo_step_kb,
 )
 from locales import t
 from services.geo import reverse_geocode
+from services.media import MAX_PROFILE_PHOTOS, profile_photo_ids, set_profile_photos
 from services.settlements import (
     choice_button_label,
     disambiguation_choices,
@@ -325,76 +326,23 @@ async def about_skip_or_keep(
 
 async def _ask_photo(message: Message, state: FSMContext, user: User) -> None:
     await state.set_state(ProfileStates.photo)
-    kb = photo_keep_kb(user.language) if user.profile and user.profile.photo_file_id else None
-    await message.answer(t("ask_photo", user.language), reply_markup=kb)
+    await state.update_data(draft_photos=[])
+    can_keep = bool(profile_photo_ids(user.profile))
+    await message.answer(
+        t("ask_photo", user.language, n=0, max=MAX_PROFILE_PHOTOS),
+        reply_markup=photo_step_kb(user.language, 0, can_keep=can_keep),
+    )
 
 
-@router.message(ProfileStates.photo, F.photo)
-async def set_photo(message: Message, session: AsyncSession, state: FSMContext, bot: Bot) -> None:
-    await _save_photo_and_finish(message, session, state, bot, from_document=False)
-
-
-@router.message(ProfileStates.photo, F.document)
-async def set_photo_doc(message: Message, session: AsyncSession, state: FSMContext, bot: Bot) -> None:
-    await _save_photo_and_finish(message, session, state, bot, from_document=True)
-
-
-@router.callback_query(ProfileStates.photo, F.data == "keep:photo")
-async def keep_photo(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and user.profile and callback.message
-    if not user.profile.photo_file_id:
-        await callback.answer(t("bad_photo", user.language), show_alert=True)
-        return
-    user.profile.is_complete = True
-    user.profile.is_active = True
-    await session.commit()
-    await callback.answer()
-    await state.clear()
-    user = await load_user(session, user.tg_id)
-    assert user
-    await after_profile_ready(callback.message, session, user, state)
-
-
-async def _save_photo_and_finish(
+async def _finish_photos(
     message: Message,
     session: AsyncSession,
     state: FSMContext,
-    bot: Bot,
-    *,
-    from_document: bool,
+    user: User,
+    photos: list[str],
 ) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user and user.profile
-    lang = user.language
-    file_id = None
-    if from_document and message.document:
-        mime = message.document.mime_type or ""
-        name = (message.document.file_name or "").lower()
-        ok_mime = mime in {"image/jpeg", "image/png", "image/gif"}
-        ok_ext = name.endswith((".jpg", ".jpeg", ".png", ".gif"))
-        if not (ok_mime or ok_ext):
-            await message.answer(t("bad_photo", lang))
-            return
-        if message.document.file_size and message.document.file_size > MAX_PHOTO_BYTES:
-            await message.answer(t("bad_photo", lang))
-            return
-        file_id = message.document.file_id
-    elif message.photo:
-        photo = message.photo[-1]
-        try:
-            f = await bot.get_file(photo.file_id)
-            if f.file_size and f.file_size > MAX_PHOTO_BYTES:
-                await message.answer(t("bad_photo", lang))
-                return
-        except Exception:
-            pass
-        file_id = photo.file_id
-    else:
-        await message.answer(t("bad_photo", lang))
-        return
-
-    user.profile.photo_file_id = file_id
+    assert user.profile
+    set_profile_photos(user.profile, photos)
     user.profile.is_complete = True
     user.profile.is_active = True
     if message.from_user and message.from_user.username:
@@ -406,22 +354,163 @@ async def _save_photo_and_finish(
     await after_profile_ready(message, session, user, state)
 
 
+async def _extract_photo_id(
+    message: Message, bot: Bot, lang: str, *, from_document: bool
+) -> str | None:
+    if from_document and message.document:
+        mime = message.document.mime_type or ""
+        name = (message.document.file_name or "").lower()
+        ok_mime = mime in {"image/jpeg", "image/png", "image/gif"}
+        ok_ext = name.endswith((".jpg", ".jpeg", ".png", ".gif"))
+        if not (ok_mime or ok_ext):
+            await message.answer(t("bad_photo", lang))
+            return None
+        if message.document.file_size and message.document.file_size > MAX_PHOTO_BYTES:
+            await message.answer(t("bad_photo", lang))
+            return None
+        return message.document.file_id
+    if message.photo:
+        photo = message.photo[-1]
+        try:
+            f = await bot.get_file(photo.file_id)
+            if f.file_size and f.file_size > MAX_PHOTO_BYTES:
+                await message.answer(t("bad_photo", lang))
+                return None
+        except Exception:
+            pass
+        return photo.file_id
+    await message.answer(t("bad_photo", lang))
+    return None
+
+
+@router.message(ProfileStates.photo, F.photo)
+async def set_photo(message: Message, session: AsyncSession, state: FSMContext, bot: Bot) -> None:
+    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
+    assert user and user.profile
+    lang = user.language or "ru"
+    file_id = await _extract_photo_id(message, bot, lang, from_document=False)
+    if not file_id:
+        return
+    data = await state.get_data()
+    draft: list[str] = list(data.get("draft_photos") or [])
+    if len(draft) >= MAX_PROFILE_PHOTOS:
+        await message.answer(t("photo_full", lang))
+        await _finish_photos(message, session, state, user, draft)
+        return
+    draft.append(file_id)
+    await state.update_data(draft_photos=draft)
+    if len(draft) >= MAX_PROFILE_PHOTOS:
+        await _finish_photos(message, session, state, user, draft)
+        return
+    await message.answer(
+        t("ask_photo_more", lang, n=len(draft), max=MAX_PROFILE_PHOTOS),
+        reply_markup=photo_step_kb(lang, len(draft), can_keep=False),
+    )
+
+
+@router.message(ProfileStates.photo, F.document)
+async def set_photo_doc(
+    message: Message, session: AsyncSession, state: FSMContext, bot: Bot
+) -> None:
+    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
+    assert user and user.profile
+    lang = user.language or "ru"
+    file_id = await _extract_photo_id(message, bot, lang, from_document=True)
+    if not file_id:
+        return
+    data = await state.get_data()
+    draft: list[str] = list(data.get("draft_photos") or [])
+    if len(draft) >= MAX_PROFILE_PHOTOS:
+        await _finish_photos(message, session, state, user, draft)
+        return
+    draft.append(file_id)
+    await state.update_data(draft_photos=draft)
+    if len(draft) >= MAX_PROFILE_PHOTOS:
+        await _finish_photos(message, session, state, user, draft)
+        return
+    await message.answer(
+        t("ask_photo_more", lang, n=len(draft), max=MAX_PROFILE_PHOTOS),
+        reply_markup=photo_step_kb(lang, len(draft), can_keep=False),
+    )
+
+
+@router.callback_query(ProfileStates.photo, F.data == "photo:done")
+async def photo_done(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    user = await load_user(session, callback.from_user.id)
+    assert user and user.profile and callback.message
+    data = await state.get_data()
+    draft: list[str] = list(data.get("draft_photos") or [])
+    await callback.answer()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await _finish_photos(callback.message, session, state, user, draft)
+
+
+@router.callback_query(ProfileStates.photo, F.data == "keep:photo")
+async def keep_photo(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    user = await load_user(session, callback.from_user.id)
+    assert user and user.profile and callback.message
+    existing = profile_photo_ids(user.profile)
+    await callback.answer()
+    await _finish_photos(callback.message, session, state, user, existing)
+
+
 @router.message(ProfileStates.edit_photo, F.photo)
 async def edit_photo(message: Message, session: AsyncSession, state: FSMContext, bot: Bot) -> None:
     user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user and user.profile and message.photo
-    photo = message.photo[-1]
-    try:
-        f = await bot.get_file(photo.file_id)
-        if f.file_size and f.file_size > MAX_PHOTO_BYTES:
-            await message.answer(t("bad_photo", user.language))
-            return
-    except Exception:
-        pass
-    user.profile.photo_file_id = photo.file_id
+    assert user and user.profile
+    lang = user.language or "ru"
+    file_id = await _extract_photo_id(message, bot, lang, from_document=False)
+    if not file_id:
+        return
+    data = await state.get_data()
+    draft: list[str] = list(data.get("draft_photos") or [])
+    if len(draft) >= MAX_PROFILE_PHOTOS:
+        set_profile_photos(user.profile, draft)
+        await session.commit()
+        await state.clear()
+        await show_my_profile(message, user, user.profile)
+        return
+    draft.append(file_id)
+    await state.update_data(draft_photos=draft)
+    if len(draft) >= MAX_PROFILE_PHOTOS:
+        set_profile_photos(user.profile, draft)
+        await session.commit()
+        await state.clear()
+        await show_my_profile(message, user, user.profile)
+        return
+    await message.answer(
+        t("ask_photo_more", lang, n=len(draft), max=MAX_PROFILE_PHOTOS),
+        reply_markup=photo_step_kb(lang, len(draft), can_keep=False),
+    )
+
+
+@router.callback_query(ProfileStates.edit_photo, F.data == "photo:done")
+async def edit_photo_done(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
+    user = await load_user(session, callback.from_user.id)
+    assert user and user.profile and callback.message
+    data = await state.get_data()
+    draft: list[str] = list(data.get("draft_photos") or [])
+    set_profile_photos(user.profile, draft)
     await session.commit()
     await state.clear()
-    await show_my_profile(message, user, user.profile)
+    await callback.answer()
+    await show_my_profile(callback.message, user, user.profile)
+
+
+@router.callback_query(ProfileStates.edit_photo, F.data == "keep:photo")
+async def edit_photo_keep(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
+    user = await load_user(session, callback.from_user.id)
+    assert user and user.profile and callback.message
+    await state.clear()
+    await callback.answer()
+    await show_my_profile(callback.message, user, user.profile)
 
 
 @router.message(ProfileStates.edit_text)

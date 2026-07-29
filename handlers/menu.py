@@ -119,8 +119,16 @@ async def profile_edit_photo(
     user = await load_user(session, callback.from_user.id)
     assert user and callback.message
     await state.set_state(ProfileStates.edit_photo)
+    await state.update_data(draft_photos=[])
+    can_keep = bool(user.profile and (user.profile.photo_file_id or user.profile.photo_file_ids))
     await callback.answer()
-    await callback.message.answer(t("ask_photo", user.language))
+    from keyboards.inline import photo_step_kb
+    from services.media import MAX_PROFILE_PHOTOS
+
+    await callback.message.answer(
+        t("ask_photo", user.language, n=0, max=MAX_PROFILE_PHOTOS),
+        reply_markup=photo_step_kb(user.language, 0, can_keep=can_keep),
+    )
 
 
 @router.callback_query(F.data == "profile:edit_text")

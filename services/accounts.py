@@ -397,8 +397,11 @@ async def update_account_profile(
     p.is_complete = is_complete
     if clear_photo:
         p.photo_file_id = None
+        p.photo_file_ids = None
     elif photo_file_id is not None:
-        p.photo_file_id = photo_file_id.strip() or None
+        raw = photo_file_id.strip() or None
+        p.photo_file_id = raw
+        p.photo_file_ids = [raw] if raw else None
 
     if gender in {"male", "female"}:
         p.gender = Gender(gender)

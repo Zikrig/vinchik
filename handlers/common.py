@@ -21,14 +21,28 @@ async def load_user(session: AsyncSession, tg_id: int) -> User | None:
 
 
 async def show_my_profile(message: Message, user: User, profile: Profile) -> None:
+    from services.media import media_photos_for_profile, profile_photo_ids
+
     lang = user.language
     caption = profile_caption(profile)
     kb = my_profile_kb(lang)
-    photo = as_photo_input(profile.photo_file_id)
-    if photo is not None:
-        await message.answer_photo(photo, caption=caption, reply_markup=kb)
-    else:
+    photos = profile_photo_ids(profile)
+    if not photos:
         await message.answer(caption, reply_markup=kb)
+        return
+    if len(photos) == 1:
+        photo = as_photo_input(photos[0])
+        if photo is not None:
+            await message.answer_photo(photo, caption=caption, reply_markup=kb)
+        else:
+            await message.answer(caption, reply_markup=kb)
+        return
+    media = media_photos_for_profile(profile, caption=caption)
+    if not media:
+        await message.answer(caption, reply_markup=kb)
+        return
+    await message.answer_media_group(media)
+    await message.answer("☰", reply_markup=kb)
 
 
 async def show_main_menu(message: Message, user: User) -> None:

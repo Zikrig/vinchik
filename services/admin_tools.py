@@ -130,6 +130,7 @@ async def create_test_users(session: AsyncSession, count: int) -> int:
             city_name=city,
             description="Тестовая анкета",
             photo_file_id=TEST_PHOTO_MARKER,
+            photo_file_ids=[TEST_PHOTO_MARKER],
             is_active=visible,
             is_complete=True,
         )
