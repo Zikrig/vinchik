@@ -338,6 +338,18 @@
       user-select: none;
     }
     .seg label:hover { color: var(--ink); background: rgba(255,255,255,.55); }
+    .seg-empty {
+      display: inline-flex;
+      align-items: center;
+      padding: .4rem .65rem;
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--muted);
+      opacity: .85;
+      pointer-events: none;
+      user-select: none;
+    }
+    .seg:has(input:checked) .seg-empty { display: none; }
     .seg input:focus-visible + label {
       outline: 2px solid rgba(31, 107, 79, .35);
       outline-offset: 1px;

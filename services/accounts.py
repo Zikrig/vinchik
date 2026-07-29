@@ -404,13 +404,11 @@ async def update_account_profile(
 
     if gender in {"male", "female"}:
         p.gender = Gender(gender)
-    elif gender in {"", "none", None}:
-        p.gender = None
+    # empty / omitted — keep current (cannot clear via admin)
 
     if looking_for in {"male", "female", "any"}:
         p.looking_for = LookingFor(looking_for)
-    elif looking_for in {"", "none", None}:
-        p.looking_for = None
+    # empty / omitted — keep current (cannot clear via admin)
 
     if user.is_blocked and p.is_active:
         p.is_active = False

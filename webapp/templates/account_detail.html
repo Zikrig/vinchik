@@ -328,9 +328,9 @@
         <div>
           <div class="meta" style="margin-bottom:.35rem;font-weight:500">Пол</div>
           <div class="seg gender-switch" role="radiogroup" aria-label="Пол">
-            <input type="radio" name="gender" id="gender-none" value=""
-                   {% if not p or not p.gender %}checked{% endif %}>
-            <label for="gender-none">—</label>
+            {% if not p or not p.gender %}
+            <span class="seg-empty" title="Не задан — можно только выбрать М или Ж">не задан</span>
+            {% endif %}
             <input type="radio" name="gender" id="gender-male" value="male"
                    {% if p and p.gender and p.gender.value == 'male' %}checked{% endif %}>
             <label for="gender-male">♂ М</label>
@@ -342,9 +342,9 @@
         <div>
           <div class="meta" style="margin-bottom:.35rem;font-weight:500">Ищет</div>
           <div class="seg looking-switch" role="radiogroup" aria-label="Ищет">
-            <input type="radio" name="looking_for" id="look-none" value=""
-                   {% if not p or not p.looking_for %}checked{% endif %}>
-            <label for="look-none">—</label>
+            {% if not p or not p.looking_for %}
+            <span class="seg-empty" title="Не задан — можно только выбрать значение">не задан</span>
+            {% endif %}
             <input type="radio" name="looking_for" id="look-male" value="male"
                    {% if p and p.looking_for and p.looking_for.value == 'male' %}checked{% endif %}>
             <label for="look-male">♂ М</label>
