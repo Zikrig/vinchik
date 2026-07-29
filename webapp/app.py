@@ -709,8 +709,6 @@ def create_app() -> FastAPI:
     async def add_channel(
         request: Request,
         channel_id: str = Form(...),
-        title: str = Form(""),
-        invite_link: str = Form(""),
         session: AsyncSession = Depends(get_db),
     ):
         if (redir := require_auth(request)) is not None:
@@ -718,12 +716,7 @@ def create_app() -> FastAPI:
         bot = Bot(token=settings.bot_token)
         try:
             resolved = await resolve_channel_ref(bot, channel_id)
-            ch, created = await add_resolved_channel(
-                session,
-                resolved,
-                title_override=title.strip(),
-                invite_override=invite_link.strip(),
-            )
+            ch, created = await add_resolved_channel(session, resolved)
         except ChannelResolveError as exc:
             return err_response(
                 request,

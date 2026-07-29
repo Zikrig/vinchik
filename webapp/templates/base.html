@@ -592,12 +592,10 @@
         "<td>" + escapeHtml(ch.channel_id || "") + "</td>" +
         "<td>" + escapeHtml(ch.title || "") + "</td>" +
         "<td>" + escapeHtml(ch.invite_link || "") + "</td>" +
-        '<td><span class="status-badge ' + (on ? "on" : "off") + '"><span class="dot"></span> ' +
-        (on ? "ON" : "OFF") + "</span></td>" +
         '<td class="row">' +
         '<form method="post" action="' + urls.toggle + '" class="js-ajax" data-ajax="channel-toggle">' +
         '<button type="submit" class="status-pill ' + (on ? "on" : "off") + '"><span class="dot"></span> ' +
-        (on ? "Выкл" : "Вкл") + "</button></form>" +
+        (on ? "ON" : "OFF") + "</button></form>" +
         '<form method="post" action="' + urls.del + '" class="js-ajax" data-ajax="channel-delete" data-confirm="Удалить канал?">' +
         '<button type="submit" class="danger">удалить</button></form>' +
         "</td></tr>"
@@ -722,16 +720,9 @@
         } else if (kind === "test-create" || kind === "test-clear") {
           if (typeof data.count === "number") updateTestCount(data.count);
         } else if (kind === "channel-toggle") {
-          const row = form.closest("tr");
           const active = !!data.active;
           const pill = form.querySelector(".status-pill");
-          window.setPill(pill, active, "Выкл", "Вкл");
-          const badge = row && row.querySelector(".status-badge");
-          if (badge) {
-            badge.classList.toggle("on", active);
-            badge.classList.toggle("off", !active);
-            badge.innerHTML = '<span class="dot"></span> ' + (active ? "ON" : "OFF");
-          }
+          window.setPill(pill, active, "ON", "OFF");
         } else if (kind === "channel-delete" || kind === "order" || kind === "unban" || kind === "clear-suspicious" || kind === "ban") {
           const row = form.closest("tr, article.blocked-card");
           if (row) row.remove();
