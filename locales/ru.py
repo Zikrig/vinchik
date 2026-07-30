@@ -182,4 +182,5 @@ TEXTS = {
     "premium_activated": "⭐ Премиум активирован!\nДействует до {dt}",
     "btn_premium_ok": "🏠 В меню",
     "no_access": "Нет доступа.",
+    "stale_button": "Кнопка устарела. Открой меню командой /start.",
 }

@@ -1,10 +1,11 @@
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from handlers.common import load_user, show_main_menu
+from handlers.common import callback_context, show_main_menu
 from keyboards.inline import language_kb
 from locales import t
 from services.users import get_or_create_user, set_language
@@ -39,7 +40,8 @@ async def _continue_after_language(
 @router.message(CommandStart())
 async def cmd_start(message: Message, session: AsyncSession, state: FSMContext) -> None:
     await state.clear()
-    assert message.from_user
+    if message.from_user is None:
+        return
     user = await get_or_create_user(
         session,
         message.from_user.id,
@@ -74,23 +76,24 @@ async def cmd_start(message: Message, session: AsyncSession, state: FSMContext) 
 
 @router.callback_query(F.data.startswith("lang:"))
 async def on_language(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
-    assert callback.from_user and callback.message and callback.data
-    lang = callback.data.split(":", 1)[1]
+    lang = (callback.data or "").split(":", 1)[1]
     if lang not in {"ru", "tg"}:
         await callback.answer()
         return
-    user = await get_or_create_user(
-        session, callback.from_user.id, callback.from_user.username, language=lang
-    )
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     await set_language(session, user, lang)
     await state.clear()
     await callback.answer()
-    await callback.message.edit_text(t("language_saved", lang))
+    try:
+        await message.edit_text(t("language_saved", lang))
+    except TelegramBadRequest:
+        await message.answer(t("language_saved", lang))
 
-    user = await load_user(session, callback.from_user.id)
-    assert user
     await _continue_after_language(
-        callback.message,
+        message,
         session,
         state,
         user,

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database.models import OrderStatus, PremiumOrder, PremiumPlan
-from handlers.common import load_user, show_main_menu
+from handlers.common import callback_context, message_user, show_main_menu
 from keyboards.inline import main_menu_kb
 from locales import t
 from services.premium import (
@@ -154,35 +154,41 @@ async def _notify_admins_receipt(
 
 @router.callback_query(F.data == "menu:premium")
 async def premium_menu(callback: CallbackQuery, session: AsyncSession) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     await callback.answer()
-    await _send_premium_menu(callback.message, session, user)
+    await _send_premium_menu(message, session, user)
 
 
 @router.callback_query(F.data == "prem:menu")
 async def premium_menu_again(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     await state.clear()
     await callback.answer()
     try:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        await message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await _send_premium_menu(callback.message, session, user)
+    await _send_premium_menu(message, session, user)
 
 
 @router.callback_query(F.data == "prem:history")
 async def premium_history(callback: CallbackQuery, session: AsyncSession) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     lang = user.language
     await callback.answer()
     try:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        await message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
     rows_data = await list_user_orders(session, user.tg_id, limit=20)
@@ -208,16 +214,18 @@ async def premium_history(callback: CallbackQuery, session: AsyncSession) -> Non
         if rows_data
         else t("premium_history_empty", lang)
     )
-    await callback.message.answer(
+    await message.answer(
         text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows)
     )
 
 
 @router.callback_query(F.data.startswith("prem:ord:"))
 async def premium_order_detail(callback: CallbackQuery, session: AsyncSession) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.data and callback.message
-    order_id = int(callback.data.split(":")[2])
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
+    order_id = int((callback.data or "").split(":")[2])
     row = await get_order_with_plan(session, order_id, user.tg_id)
     if row is None:
         await callback.answer("—", show_alert=True)
@@ -230,7 +238,7 @@ async def premium_order_detail(callback: CallbackQuery, session: AsyncSession) -
             "premium_order_processed", lang, processed=_fmt_dt(order.processed_at)
         )
     await callback.answer()
-    await callback.message.answer(
+    await message.answer(
         t(
             "premium_order_detail",
             lang,
@@ -250,9 +258,11 @@ async def premium_order_detail(callback: CallbackQuery, session: AsyncSession) -
 
 @router.callback_query(F.data.startswith("prem:buy:"))
 async def premium_buy(callback: CallbackQuery, session: AsyncSession) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.data and callback.message
-    plan_id = int(callback.data.split(":")[2])
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
+    plan_id = int((callback.data or "").split(":")[2])
     order = await create_order(session, user.tg_id, plan_id)
     if order is None:
         await callback.answer("—", show_alert=True)
@@ -260,10 +270,10 @@ async def premium_buy(callback: CallbackQuery, session: AsyncSession) -> None:
     pay = await get_payment_info(session)
     await callback.answer()
     try:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        await message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await callback.message.answer(
+    await message.answer(
         t(
             "premium_pay",
             user.language,
@@ -280,19 +290,21 @@ async def premium_buy(callback: CallbackQuery, session: AsyncSession) -> None:
 async def premium_ask_receipt(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.data and callback.message
-    order_id = int(callback.data.split(":")[2])
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
+    order_id = int((callback.data or "").split(":")[2])
     row = await get_order_with_plan(session, order_id, user.tg_id)
     if row is None or row[0].status != OrderStatus.pending:
         await callback.answer("—", show_alert=True)
         return
     await callback.answer()
     try:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        await message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    prompt = await callback.message.answer(
+    prompt = await message.answer(
         t("premium_send_receipt", user.language, order_id=order_id),
         reply_markup=_receipt_prompt_kb(user.language, order_id),
     )
@@ -306,9 +318,11 @@ async def premium_ask_receipt(
 async def premium_receipt_cancel(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.data and callback.message
-    order_id = int(callback.data.split(":")[2])
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
+    order_id = int((callback.data or "").split(":")[2])
     data = await state.get_data()
     if data.get("order_id") != order_id:
         await callback.answer("—", show_alert=True)
@@ -316,10 +330,10 @@ async def premium_receipt_cancel(
     await state.clear()
     await callback.answer()
     try:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        await message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await callback.message.answer(
+    await message.answer(
         t("premium_receipt_cancelled", user.language),
         reply_markup=_premium_pay_kb(user.language, order_id),
     )
@@ -338,7 +352,8 @@ async def premium_receipt_photo(
 async def premium_receipt_document(
     message: Message, session: AsyncSession, state: FSMContext, bot: Bot
 ) -> None:
-    assert message.document
+    if message.document is None:
+        return
     await _accept_receipt(
         message,
         session,
@@ -351,8 +366,9 @@ async def premium_receipt_document(
 
 @router.message(PremiumStates.awaiting_receipt)
 async def premium_receipt_wrong(message: Message, session: AsyncSession) -> None:
-    user = await load_user(session, message.from_user.id)
-    assert user
+    user = await message_user(message, session)
+    if user is None:
+        return
     await message.answer(t("premium_receipt_need_file", user.language))
 
 
@@ -365,8 +381,10 @@ async def _accept_receipt(
     kind: str,
     file_id: str,
 ) -> None:
-    user = await load_user(session, message.from_user.id)
-    assert user and message.from_user
+    user = await message_user(message, session)
+    if user is None:
+        await state.clear()
+        return
     data = await state.get_data()
     order_id = data.get("order_id")
     prompt_message_id = data.get("prompt_message_id")
@@ -399,12 +417,14 @@ async def _accept_receipt(
 async def premium_back(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     await state.clear()
     await callback.answer()
     try:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        await message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await show_main_menu(callback.message, user)
+    await show_main_menu(message, user)

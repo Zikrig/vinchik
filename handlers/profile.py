@@ -9,8 +9,15 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import Gender, LookingFor, User
-from handlers.common import after_profile_ready, load_user, show_my_profile
+from database.models import Gender, LookingFor, Profile, User
+from handlers.common import (
+    after_profile_ready,
+    callback_context,
+    ensure_user,
+    load_user,
+    message_user,
+    show_my_profile,
+)
 from keyboards.inline import (
     about_kb,
     gender_kb,
@@ -64,6 +71,30 @@ async def _photo_draft_lock(user_id: int) -> AsyncIterator[None]:
             _photo_lock_holders[user_id] = rest
 
 
+async def _profile_owner(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> tuple[User, Profile] | None:
+    """User whose profile is being filled in; drops the state if the row is gone."""
+    user = await message_user(message, session)
+    if user is None or user.profile is None:
+        await state.clear()
+        return None
+    return user, user.profile
+
+
+async def _profile_owner_cb(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> tuple[User, Profile, Message] | None:
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return None
+    user, message = ctx
+    if user.profile is None:
+        await state.clear()
+        return None
+    return user, user.profile, message
+
+
 async def begin_profile_flow(
     message: Message,
     session: AsyncSession,
@@ -81,11 +112,10 @@ async def begin_profile_flow(
 
 @router.message(ProfileStates.waiting_username)
 async def got_username_check(message: Message, session: AsyncSession, state: FSMContext) -> None:
-    assert message.from_user
-    lang = "ru"
-    user = await load_user(session, message.from_user.id)
-    if user:
-        lang = user.language
+    if message.from_user is None:
+        return
+    user = await ensure_user(session, message.from_user.id, message.from_user.username)
+    lang = user.language or "ru"
     if not message.from_user.username:
         await message.answer(t("need_username", lang))
         return
@@ -97,8 +127,10 @@ async def got_username_check(message: Message, session: AsyncSession, state: FSM
 
 @router.message(ProfileStates.age)
 async def set_age(message: Message, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user and user.profile
+    owner = await _profile_owner(message, session, state)
+    if owner is None:
+        return
+    user, profile = owner
     lang = user.language
     try:
         age = int((message.text or "").strip())
@@ -107,7 +139,7 @@ async def set_age(message: Message, session: AsyncSession, state: FSMContext) ->
     except ValueError:
         await message.answer(t("bad_age", lang))
         return
-    user.profile.age = age
+    profile.age = age
     await session.commit()
     await state.set_state(ProfileStates.gender)
     await message.answer(t("ask_gender", lang), reply_markup=gender_kb(lang))
@@ -115,52 +147,58 @@ async def set_age(message: Message, session: AsyncSession, state: FSMContext) ->
 
 @router.callback_query(ProfileStates.age, F.data == "keep:age")
 async def keep_age(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, cb_message = ctx
     await callback.answer()
     await state.set_state(ProfileStates.gender)
-    await callback.message.answer(t("ask_gender", user.language), reply_markup=gender_kb(user.language))
+    await cb_message.answer(t("ask_gender", user.language), reply_markup=gender_kb(user.language))
 
 
 @router.callback_query(ProfileStates.gender, F.data.startswith("gender:"))
 async def set_gender(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and user.profile and callback.data and callback.message
-    gender = callback.data.split(":")[1]
-    user.profile.gender = Gender(gender)
+    owner = await _profile_owner_cb(callback, session, state)
+    if owner is None:
+        return
+    user, profile, cb_message = owner
+    gender = (callback.data or "").split(":")[1]
+    profile.gender = Gender(gender)
     await session.commit()
     await callback.answer()
     await state.set_state(ProfileStates.looking_for)
-    await callback.message.edit_text(t("ask_looking", user.language), reply_markup=looking_kb(user.language))
+    await cb_message.edit_text(t("ask_looking", user.language), reply_markup=looking_kb(user.language))
 
 
 @router.callback_query(ProfileStates.looking_for, F.data.startswith("looking:"))
 async def set_looking(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and user.profile and callback.data and callback.message
-    looking = callback.data.split(":")[1]
-    user.profile.looking_for = LookingFor(looking)
+    owner = await _profile_owner_cb(callback, session, state)
+    if owner is None:
+        return
+    user, profile, cb_message = owner
+    looking = (callback.data or "").split(":")[1]
+    profile.looking_for = LookingFor(looking)
     await session.commit()
     await callback.answer()
     await state.set_state(ProfileStates.location)
-    reply, inline = location_kb(
-        user.language, has_current=user.profile.lat is not None
-    )
-    await callback.message.answer(t("ask_location", user.language), reply_markup=reply)
-    await callback.message.answer(".", reply_markup=inline)
+    reply, inline = location_kb(user.language, has_current=profile.lat is not None)
+    await cb_message.answer(t("ask_location", user.language), reply_markup=reply)
+    await cb_message.answer(".", reply_markup=inline)
 
 
 @router.message(ProfileStates.location, F.location)
 async def set_location(message: Message, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user and user.profile and message.location
-    user.profile.lat = message.location.latitude
-    user.profile.lon = message.location.longitude
-    user.profile.city_name = await reverse_geocode(user.profile.lat, user.profile.lon)
+    owner = await _profile_owner(message, session, state)
+    if owner is None or message.location is None:
+        return
+    user, profile = owner
+    profile.lat = message.location.latitude
+    profile.lon = message.location.longitude
+    profile.city_name = await reverse_geocode(profile.lat, profile.lon)
     await session.commit()
     await message.answer("OK", reply_markup=ReplyKeyboardRemove())
     await state.set_state(ProfileStates.name)
-    kb = keep_kb(user.language, "keep:name") if user.profile.name else None
+    kb = keep_kb(user.language, "keep:name") if profile.name else None
     await message.answer(t("ask_name", user.language), reply_markup=kb)
 
 
@@ -170,11 +208,13 @@ async def set_location(message: Message, session: AsyncSession, state: FSMContex
 async def location_text_start(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, cb_message = ctx
     await callback.answer()
     await state.set_state(ProfileStates.location_text)
-    await callback.message.answer(
+    await cb_message.answer(
         t("ask_location_text", user.language),
         reply_markup=ReplyKeyboardRemove(),
     )
@@ -191,12 +231,14 @@ async def location_text_got_gps(
 async def location_text_search(
     message: Message, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user and user.profile
+    owner = await _profile_owner(message, session, state)
+    if owner is None:
+        return
+    user, profile = owner
     lang = user.language or "ru"
     hits = await search_settlements(session, message.text or "")
     if not hits:
-        reply, inline = location_kb(lang, has_current=user.profile.lat is not None)
+        reply, inline = location_kb(lang, has_current=profile.lat is not None)
         await message.answer(t("location_not_found", lang), reply_markup=reply)
         await message.answer(".", reply_markup=inline)
         await state.set_state(ProfileStates.location)
@@ -232,33 +274,34 @@ async def _apply_settlement_and_continue(
     state: FSMContext,
     settlement_id: int,
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and user.profile and callback.message
+    owner = await _profile_owner_cb(callback, session, state)
+    if owner is None:
+        return
+    user, profile, cb_message = owner
     place = await get_settlement(session, settlement_id)
     if place is None:
         await callback.answer(t("location_not_found", user.language), show_alert=True)
         await state.set_state(ProfileStates.location_text)
         return
-    user.profile.lat = place.lat
-    user.profile.lon = place.lon
-    user.profile.city_name = place.display_name[:128]
+    profile.lat = place.lat
+    profile.lon = place.lon
+    profile.city_name = place.display_name[:128]
     await session.commit()
     await callback.answer()
     try:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        await cb_message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
     await state.set_state(ProfileStates.name)
-    kb = keep_kb(user.language, "keep:name") if user.profile.name else None
-    await callback.message.answer(t("ask_name", user.language), reply_markup=kb)
+    kb = keep_kb(user.language, "keep:name") if profile.name else None
+    await cb_message.answer(t("ask_name", user.language), reply_markup=kb)
 
 
 @router.callback_query(ProfileStates.location_confirm, F.data.startswith("loc:pick:"))
 async def location_pick(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    assert callback.data
-    sid = int(callback.data.split(":")[2])
+    sid = int((callback.data or "").split(":")[2])
     await _apply_settlement_and_continue(callback, session, state, sid)
 
 
@@ -278,63 +321,72 @@ async def location_confirm_yes(
 async def location_confirm_no(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, cb_message = ctx
     await callback.answer()
     try:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        await cb_message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
     await state.set_state(ProfileStates.location_text)
-    await callback.message.answer(t("ask_location_text", user.language))
+    await cb_message.answer(t("ask_location_text", user.language))
 
 
 @router.callback_query(ProfileStates.location, F.data == "keep:location")
 async def keep_location(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, cb_message = ctx
     await callback.answer()
-    await callback.message.answer("OK", reply_markup=ReplyKeyboardRemove())
+    await cb_message.answer("OK", reply_markup=ReplyKeyboardRemove())
     await state.set_state(ProfileStates.name)
     kb = keep_kb(user.language, "keep:name") if user.profile and user.profile.name else None
-    await callback.message.answer(t("ask_name", user.language), reply_markup=kb)
+    await cb_message.answer(t("ask_name", user.language), reply_markup=kb)
 
 
 @router.message(ProfileStates.name)
 async def set_name(message: Message, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user and user.profile
+    owner = await _profile_owner(message, session, state)
+    if owner is None:
+        return
+    user, profile = owner
     name = (message.text or "").strip()
     if not 2 <= len(name) <= 32:
         await message.answer(t("bad_name", user.language))
         return
-    user.profile.name = name
+    profile.name = name
     await session.commit()
     await state.set_state(ProfileStates.about)
     await message.answer(
         t("ask_about", user.language),
-        reply_markup=about_kb(user.language, has_current=bool(user.profile.description)),
+        reply_markup=about_kb(user.language, has_current=bool(profile.description)),
     )
 
 
 @router.callback_query(ProfileStates.name, F.data == "keep:name")
 async def keep_name(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and user.profile and callback.message
+    owner = await _profile_owner_cb(callback, session, state)
+    if owner is None:
+        return
+    user, profile, cb_message = owner
     await callback.answer()
     await state.set_state(ProfileStates.about)
-    await callback.message.answer(
+    await cb_message.answer(
         t("ask_about", user.language),
-        reply_markup=about_kb(user.language, has_current=bool(user.profile.description)),
+        reply_markup=about_kb(user.language, has_current=bool(profile.description)),
     )
 
 
 @router.message(ProfileStates.about)
 async def set_about(message: Message, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user and user.profile
-    text = (message.text or "").strip()[:900]
-    user.profile.description = text
+    owner = await _profile_owner(message, session, state)
+    if owner is None:
+        return
+    user, profile = owner
+    profile.description = (message.text or "").strip()[:900]
     await session.commit()
     await _ask_photo(message, state, user)
 
@@ -343,13 +395,15 @@ async def set_about(message: Message, session: AsyncSession, state: FSMContext) 
 async def about_skip_or_keep(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and user.profile and callback.message and callback.data
+    owner = await _profile_owner_cb(callback, session, state)
+    if owner is None:
+        return
+    user, profile, cb_message = owner
     if callback.data == "about:skip":
-        user.profile.description = None
+        profile.description = None
         await session.commit()
     await callback.answer()
-    await _ask_photo(callback.message, state, user)
+    await _ask_photo(cb_message, state, user)
 
 
 async def _ask_photo(message: Message, state: FSMContext, user: User) -> None:
@@ -371,7 +425,9 @@ async def _finish_photos(
     *,
     tg_username: str | None,
 ) -> None:
-    assert user.profile
+    if user.profile is None:
+        await state.clear()
+        return
     set_profile_photos(user.profile, photos)
     user.profile.is_complete = True
     user.profile.is_active = True
@@ -379,9 +435,10 @@ async def _finish_photos(
         user.username = tg_username
     await session.commit()
     await state.clear()
-    user = await load_user(session, user.tg_id)
-    assert user
-    await after_profile_ready(message, session, user, state)
+    fresh = await load_user(session, user.tg_id)
+    if fresh is None:
+        return
+    await after_profile_ready(message, session, fresh, state)
 
 
 async def _extract_photo_id(
@@ -415,9 +472,12 @@ async def _extract_photo_id(
 
 @router.message(ProfileStates.photo, F.photo | F.document)
 async def set_photo(message: Message, session: AsyncSession, state: FSMContext, bot: Bot) -> None:
-    assert message.from_user
-    user = await load_user(session, message.from_user.id)
-    assert user and user.profile
+    if message.from_user is None:
+        return
+    owner = await _profile_owner(message, session, state)
+    if owner is None:
+        return
+    user, _ = owner
     lang = user.language or "ru"
     file_id = await _extract_photo_id(
         message, bot, lang, from_document=message.document is not None
@@ -459,18 +519,20 @@ async def set_photo(message: Message, session: AsyncSession, state: FSMContext, 
 
 @router.callback_query(ProfileStates.photo, F.data == "photo:done")
 async def photo_done(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and user.profile and callback.message
+    owner = await _profile_owner_cb(callback, session, state)
+    if owner is None:
+        return
+    user, _, cb_message = owner
     async with _photo_draft_lock(callback.from_user.id):
         data = await state.get_data()
         draft: list[str] = list(data.get("draft_photos") or [])
         await callback.answer()
         try:
-            await callback.message.edit_reply_markup(reply_markup=None)
+            await cb_message.edit_reply_markup(reply_markup=None)
         except Exception:
             pass
         await _finish_photos(
-            callback.message,
+            cb_message,
             session,
             state,
             user,
@@ -481,12 +543,14 @@ async def photo_done(callback: CallbackQuery, session: AsyncSession, state: FSMC
 
 @router.callback_query(ProfileStates.photo, F.data == "keep:photo")
 async def keep_photo(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and user.profile and callback.message
-    existing = profile_photo_ids(user.profile)
+    owner = await _profile_owner_cb(callback, session, state)
+    if owner is None:
+        return
+    user, profile, cb_message = owner
+    existing = profile_photo_ids(profile)
     await callback.answer()
     await _finish_photos(
-        callback.message,
+        cb_message,
         session,
         state,
         user,
@@ -502,7 +566,9 @@ async def _finish_edit_photos(
     user: User,
     draft: list[str],
 ) -> None:
-    assert user.profile
+    if user.profile is None:
+        await state.clear()
+        return
     set_profile_photos(user.profile, draft)
     await session.commit()
     await state.clear()
@@ -511,9 +577,12 @@ async def _finish_edit_photos(
 
 @router.message(ProfileStates.edit_photo, F.photo | F.document)
 async def edit_photo(message: Message, session: AsyncSession, state: FSMContext, bot: Bot) -> None:
-    assert message.from_user
-    user = await load_user(session, message.from_user.id)
-    assert user and user.profile
+    if message.from_user is None:
+        return
+    owner = await _profile_owner(message, session, state)
+    if owner is None:
+        return
+    user, _ = owner
     lang = user.language or "ru"
     file_id = await _extract_photo_id(
         message, bot, lang, from_document=message.document is not None
@@ -542,31 +611,37 @@ async def edit_photo(message: Message, session: AsyncSession, state: FSMContext,
 async def edit_photo_done(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and user.profile and callback.message
+    owner = await _profile_owner_cb(callback, session, state)
+    if owner is None:
+        return
+    user, _, cb_message = owner
     async with _photo_draft_lock(callback.from_user.id):
         data = await state.get_data()
         draft: list[str] = list(data.get("draft_photos") or [])
         await callback.answer()
-        await _finish_edit_photos(callback.message, session, state, user, draft)
+        await _finish_edit_photos(cb_message, session, state, user, draft)
 
 
 @router.callback_query(ProfileStates.edit_photo, F.data == "keep:photo")
 async def edit_photo_keep(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and user.profile and callback.message
+    owner = await _profile_owner_cb(callback, session, state)
+    if owner is None:
+        return
+    user, profile, cb_message = owner
     await state.clear()
     await callback.answer()
-    await show_my_profile(callback.message, user, user.profile)
+    await show_my_profile(cb_message, user, profile)
 
 
 @router.message(ProfileStates.edit_text)
 async def edit_text(message: Message, session: AsyncSession, state: FSMContext) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user and user.profile
-    user.profile.description = (message.text or "").strip()[:900]
+    owner = await _profile_owner(message, session, state)
+    if owner is None:
+        return
+    user, profile = owner
+    profile.description = (message.text or "").strip()[:900]
     await session.commit()
     await state.clear()
-    await show_my_profile(message, user, user.profile)
+    await show_my_profile(message, user, profile)

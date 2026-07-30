@@ -1,6 +1,7 @@
 import html
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -72,6 +73,21 @@ _EDIT_STATE_FILTER = StateFilter(
 
 def _is_admin(user_id: int) -> bool:
     return user_id in settings.admin_id_set
+
+
+async def _redraw(
+    callback: CallbackQuery, bot: Bot, text: str, kb: InlineKeyboardMarkup
+) -> None:
+    """Repaint the panel in place; a stale button gets a fresh screen instead."""
+    message = callback.message
+    if isinstance(message, Message):
+        try:
+            await message.edit_text(text, reply_markup=kb)
+            return
+        except TelegramBadRequest as exc:
+            if "not modified" in str(exc).lower():
+                return
+    await bot.send_message(callback.from_user.id, text, reply_markup=kb)
 
 
 def _fmt_dt(dt: datetime | None) -> str:
@@ -292,7 +308,8 @@ async def _render_premiums(
 
 @router.message(Command("admin"))
 async def admin_cmd(message: Message, session: AsyncSession, state: FSMContext) -> None:
-    assert message.from_user
+    if message.from_user is None:
+        return
     if not _is_admin(message.from_user.id):
         await message.answer(t("no_access", "ru"))
         return
@@ -307,37 +324,37 @@ async def adm_noop(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "adm:root")
-async def adm_root(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
-    if not _is_admin(callback.from_user.id):
-        await callback.answer(t("no_access", "ru"), show_alert=True)
-        return
-    await state.clear()
-    await callback.answer()
-    assert callback.message
-    text, kb = await _root_view(session)
-    await callback.message.edit_text(text, reply_markup=kb)
-
-
-@router.callback_query(F.data == "adm:settings")
-async def adm_settings(
-    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+async def adm_root(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext, bot: Bot
 ) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
     await state.clear()
     await callback.answer()
-    assert callback.message
-    text, kb = await _settings_view(session)
-    await callback.message.edit_text(text, reply_markup=kb)
+    text, kb = await _root_view(session)
+    await _redraw(callback, bot, text, kb)
 
 
-@router.callback_query(F.data.startswith("adm:edit:"))
-async def adm_edit_start(callback: CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(F.data == "adm:settings")
+async def adm_settings(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext, bot: Bot
+) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
-    field = callback.data.split(":")[2]  # type: ignore[union-attr]
+    await state.clear()
+    await callback.answer()
+    text, kb = await _settings_view(session)
+    await _redraw(callback, bot, text, kb)
+
+
+@router.callback_query(F.data.startswith("adm:edit:"))
+async def adm_edit_start(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(t("no_access", "ru"), show_alert=True)
+        return
+    field = (callback.data or "").split(":")[2]
     mapping = {
         "limit": AdminStates.edit_limit,
         "dist": AdminStates.edit_dist,
@@ -352,15 +369,17 @@ async def adm_edit_start(callback: CallbackQuery, state: FSMContext) -> None:
         return
     await state.set_state(st)
     await callback.answer()
-    assert callback.message
-    await callback.message.answer(_EDIT_PROMPTS[st.state], reply_markup=_cancel_kb())
+    await bot.send_message(
+        callback.from_user.id, _EDIT_PROMPTS[st.state], reply_markup=_cancel_kb()
+    )
 
 
 @router.message(_EDIT_STATE_FILTER, F.text)
 async def adm_edit_value(
     message: Message, session: AsyncSession, state: FSMContext
 ) -> None:
-    assert message.from_user
+    if message.from_user is None:
+        return
     if not _is_admin(message.from_user.id):
         await state.clear()
         return
@@ -402,27 +421,27 @@ async def adm_edit_value(
 
 @router.callback_query(F.data == "adm:channels")
 async def adm_channels(
-    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext, bot: Bot
 ) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
     await state.clear()
     await callback.answer()
-    assert callback.message
     text, kb = await _channels_view(session)
-    await callback.message.edit_text(text, reply_markup=kb)
+    await _redraw(callback, bot, text, kb)
 
 
 @router.callback_query(F.data == "adm:ch:add")
-async def adm_ch_add_start(callback: CallbackQuery, state: FSMContext) -> None:
+async def adm_ch_add_start(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
     await state.set_state(AdminStates.add_channel)
     await callback.answer()
-    assert callback.message
-    await callback.message.answer(_ADD_CHANNEL_HINT, reply_markup=_cancel_channels_kb())
+    await bot.send_message(
+        callback.from_user.id, _ADD_CHANNEL_HINT, reply_markup=_cancel_channels_kb()
+    )
 
 
 async def _finish_add_channel(
@@ -447,7 +466,8 @@ async def _finish_add_channel(
 async def adm_ch_add_forward(
     message: Message, session: AsyncSession, state: FSMContext, bot: Bot
 ) -> None:
-    assert message.from_user
+    if message.from_user is None:
+        return
     if not _is_admin(message.from_user.id):
         await state.clear()
         return
@@ -463,7 +483,8 @@ async def adm_ch_add_forward(
 async def adm_ch_add_text(
     message: Message, session: AsyncSession, state: FSMContext, bot: Bot
 ) -> None:
-    assert message.from_user
+    if message.from_user is None:
+        return
     if not _is_admin(message.from_user.id):
         await state.clear()
         return
@@ -486,44 +507,41 @@ async def adm_ch_add_other(message: Message) -> None:
 
 
 @router.callback_query(F.data.startswith("adm:ch:tog:"))
-async def adm_ch_toggle(callback: CallbackQuery, session: AsyncSession) -> None:
+async def adm_ch_toggle(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
-    pk = int(callback.data.split(":")[3])  # type: ignore[union-attr]
+    pk = int((callback.data or "").split(":")[3])
     ch = await toggle_channel(session, pk)
     if ch is None:
         await callback.answer("Не найден", show_alert=True)
         return
     await callback.answer("ON" if ch.is_active else "OFF")
-    assert callback.message
     text, kb = await _channels_view(session)
-    await callback.message.edit_text(text, reply_markup=kb)
+    await _redraw(callback, bot, text, kb)
 
 
 @router.callback_query(F.data.startswith("adm:ch:del:"))
-async def adm_ch_delete(callback: CallbackQuery, session: AsyncSession) -> None:
+async def adm_ch_delete(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
-    pk = int(callback.data.split(":")[3])  # type: ignore[union-attr]
+    pk = int((callback.data or "").split(":")[3])
     ok = await delete_channel(session, pk)
     await callback.answer("Удалён" if ok else "Не найден", show_alert=not ok)
-    assert callback.message
     text, kb = await _channels_view(session)
-    await callback.message.edit_text(text, reply_markup=kb)
+    await _redraw(callback, bot, text, kb)
 
 
 @router.callback_query(F.data.startswith("adm:orders:"))
-async def adm_orders(callback: CallbackQuery, session: AsyncSession) -> None:
+async def adm_orders(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
-    index = int(callback.data.split(":")[2])  # type: ignore[union-attr]
+    index = int((callback.data or "").split(":")[2])
     text, kb = await _render_order(session, index)
     await callback.answer()
-    assert callback.message
-    await callback.message.edit_text(text, reply_markup=kb)
+    await _redraw(callback, bot, text, kb)
 
 
 @router.callback_query(F.data.startswith("adm:ok:"))
@@ -531,7 +549,7 @@ async def adm_ok(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> No
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
-    parts = callback.data.split(":")  # type: ignore[union-attr]
+    parts = (callback.data or "").split(":")
     order_id = int(parts[2])
     index = int(parts[3]) if len(parts) > 3 else 0
     result = await approve_order(session, order_id, callback.from_user.id)
@@ -541,17 +559,16 @@ async def adm_ok(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> No
         await callback.answer("Одобрено")
     else:
         await callback.answer("Уже обработана", show_alert=True)
-    assert callback.message
     text, kb = await _render_order(session, index)
-    await callback.message.edit_text(text, reply_markup=kb)
+    await _redraw(callback, bot, text, kb)
 
 
 @router.callback_query(F.data.startswith("adm:no:"))
-async def adm_no(callback: CallbackQuery, session: AsyncSession) -> None:
+async def adm_no(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
-    parts = callback.data.split(":")  # type: ignore[union-attr]
+    parts = (callback.data or "").split(":")
     order_id = int(parts[2])
     index = int(parts[3]) if len(parts) > 3 else 0
     order = await reject_order(session, order_id, callback.from_user.id)
@@ -559,25 +576,23 @@ async def adm_no(callback: CallbackQuery, session: AsyncSession) -> None:
         await callback.answer("Отклонено")
     else:
         await callback.answer("Уже обработана", show_alert=True)
-    assert callback.message
     text, kb = await _render_order(session, index)
-    await callback.message.edit_text(text, reply_markup=kb)
+    await _redraw(callback, bot, text, kb)
 
 
 @router.callback_query(F.data.startswith("adm:premiums:"))
-async def adm_premiums(callback: CallbackQuery, session: AsyncSession) -> None:
+async def adm_premiums(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
-    page = int(callback.data.split(":")[2])  # type: ignore[union-attr]
+    page = int((callback.data or "").split(":")[2])
     text, kb = await _render_premiums(session, page)
     await callback.answer()
-    assert callback.message
-    await callback.message.edit_text(text, reply_markup=kb)
+    await _redraw(callback, bot, text, kb)
 
 
 @router.callback_query(F.data == "adm:toggle_reg")
-async def adm_toggle_reg(callback: CallbackQuery, session: AsyncSession) -> None:
+async def adm_toggle_reg(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
@@ -585,10 +600,9 @@ async def adm_toggle_reg(callback: CallbackQuery, session: AsyncSession) -> None
     await set_setting(session, "registration_only", "false" if current else "true")
     now_on = not current
     await callback.answer("Soft-launch ON" if now_on else "Soft-launch OFF")
-    assert callback.message
-    msg = callback.message.text or ""
-    if msg.startswith("⚙️"):
+    shown = callback.message.text if isinstance(callback.message, Message) else None
+    if (shown or "").startswith("⚙️"):
         text, kb = await _settings_view(session)
     else:
         text, kb = await _root_view(session)
-    await callback.message.edit_text(text, reply_markup=kb)
+    await _redraw(callback, bot, text, kb)

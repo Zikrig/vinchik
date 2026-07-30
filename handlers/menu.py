@@ -3,7 +3,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from handlers.common import load_user, show_main_menu, show_my_profile
+from handlers.common import callback_context, show_main_menu, show_my_profile
 from handlers.profile import begin_profile_flow
 from keyboards.inline import language_kb, main_menu_kb, settings_kb, stop_confirm_kb
 from locales import t
@@ -28,42 +28,53 @@ def _settings_channels_text(lang: str, channels, *, premium: bool) -> str:
 async def menu_root(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     if user.is_blocked:
         await callback.answer(t("you_are_blocked", user.language), show_alert=True)
         return
     await state.clear()
     await callback.answer()
-    await callback.message.answer("☰", reply_markup=ReplyKeyboardRemove())
-    await show_main_menu(callback.message, user)
+    await message.answer("☰", reply_markup=ReplyKeyboardRemove())
+    await show_main_menu(message, user)
 
 
 @router.callback_query(F.data == "menu:my")
 async def menu_my(callback: CallbackQuery, session: AsyncSession) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and user.profile and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     await callback.answer()
-    await show_my_profile(callback.message, user, user.profile)
+    if user.profile is None:
+        await show_main_menu(message, user)
+        return
+    await show_my_profile(message, user, user.profile)
 
 
 @router.callback_query(F.data == "menu:settings")
 async def menu_settings(callback: CallbackQuery, session: AsyncSession) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     await callback.answer()
-    await callback.message.answer(
+    await message.answer(
         t("settings_title", user.language), reply_markup=settings_kb(user.language)
     )
 
 
 @router.callback_query(F.data == "settings:channels")
 async def settings_channels(callback: CallbackQuery, session: AsyncSession) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     channels = await list_active_channels(session)
     await callback.answer()
-    await callback.message.answer(
+    await message.answer(
         _settings_channels_text(
             user.language, channels, premium=is_premium(user)
         ),
@@ -76,31 +87,38 @@ async def settings_channels(callback: CallbackQuery, session: AsyncSession) -> N
 async def settings_lang(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     await state.clear()
     await callback.answer()
-    await callback.message.answer(t("choose_language", user.language), reply_markup=language_kb())
+    await message.answer(t("choose_language", user.language), reply_markup=language_kb())
 
 
 @router.callback_query(F.data == "menu:stop")
 async def menu_stop(callback: CallbackQuery, session: AsyncSession) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     await callback.answer()
-    await callback.message.answer(
+    await message.answer(
         t("stop_confirm", user.language), reply_markup=stop_confirm_kb(user.language)
     )
 
 
 @router.callback_query(F.data == "stop:yes")
 async def stop_yes(callback: CallbackQuery, session: AsyncSession) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and user.profile and callback.message
-    user.profile.is_active = False
-    await session.commit()
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
+    if user.profile is not None:
+        user.profile.is_active = False
+        await session.commit()
     await callback.answer()
-    await callback.message.answer(
+    await message.answer(
         t("profile_disabled", user.language), reply_markup=main_menu_kb(user.language)
     )
 
@@ -109,18 +127,22 @@ async def stop_yes(callback: CallbackQuery, session: AsyncSession) -> None:
 async def profile_refill(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     await callback.answer()
-    await begin_profile_flow(callback.message, session, state, user, refill=True)
+    await begin_profile_flow(message, session, state, user, refill=True)
 
 
 @router.callback_query(F.data == "profile:edit_photo")
 async def profile_edit_photo(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     await state.set_state(ProfileStates.edit_photo)
     await state.update_data(draft_photos=[])
     can_keep = bool(user.profile and (user.profile.photo_file_id or user.profile.photo_file_ids))
@@ -128,7 +150,7 @@ async def profile_edit_photo(
     from keyboards.inline import photo_step_kb
     from services.media import MAX_PROFILE_PHOTOS
 
-    await callback.message.answer(
+    await message.answer(
         t("ask_photo", user.language, n=0, max=MAX_PROFILE_PHOTOS),
         reply_markup=photo_step_kb(user.language, 0, can_keep=can_keep),
     )
@@ -138,8 +160,10 @@ async def profile_edit_photo(
 async def profile_edit_text(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     await state.set_state(ProfileStates.edit_text)
     await callback.answer()
-    await callback.message.answer(t("ask_about", user.language))
+    await message.answer(t("ask_about", user.language))

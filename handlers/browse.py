@@ -6,7 +6,7 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import LikeAction, User
-from handlers.common import load_user, show_main_menu
+from handlers.common import callback_context, load_user, message_user, show_main_menu
 from keyboards.inline import (
     browse_reply_kb,
     channels_kb,
@@ -171,34 +171,40 @@ async def start_browse(
 async def cb_browse(
     callback: CallbackQuery, session: AsyncSession, bot: Bot, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     await callback.answer()
-    await start_browse(callback.message, session, user, bot, state)
+    await start_browse(message, session, user, bot, state)
 
 
 @router.callback_query(F.data == "profile:enable")
 async def cb_profile_enable(
     callback: CallbackQuery, session: AsyncSession, bot: Bot, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     await callback.answer()
     if not user.is_blocked and user.profile and not user.profile.is_active:
         user.profile.is_active = True
         await session.commit()
-    await start_browse(callback.message, session, user, bot, state)
+    await start_browse(message, session, user, bot, state)
 
 
 @router.callback_query(F.data == "channels:check")
 async def cb_channels(
     callback: CallbackQuery, session: AsyncSession, bot: Bot, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     if await user_subscribed_all(bot, session, user):
         await callback.answer(t("channels_ok", user.language))
-        await start_browse(callback.message, session, user, bot, state)
+        await start_browse(message, session, user, bot, state)
     else:
         await callback.answer(t("channels_fail", user.language), show_alert=True)
 
@@ -210,8 +216,10 @@ async def _rate_from_message(
     state: FSMContext,
     action: LikeAction,
 ) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user and user.profile
+    user = await message_user(message, session)
+    if user is None or user.profile is None:
+        await state.clear()
+        return
     lang = user.language or "ru"
     data = await state.get_data()
     target_id = data.get("browse_target")
@@ -250,8 +258,9 @@ async def _rate_from_message(
 async def browse_reply_action(
     message: Message, session: AsyncSession, bot: Bot, state: FSMContext
 ) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user
+    user = await message_user(message, session)
+    if user is None:
+        return
     lang = user.language or "ru"
     text = message.text or ""
 
@@ -360,8 +369,10 @@ async def _finalize_message(
     state: FSMContext,
     payload: dict,
 ) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user and user.profile
+    user = await message_user(message, session)
+    if user is None or user.profile is None:
+        await state.clear()
+        return
     lang = user.language or "ru"
     data = await state.get_data()
     target_id_raw = data.get("msg_target")
@@ -399,8 +410,10 @@ async def _finalize_message(
 async def msg_content_cancel(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, cb_message = ctx
     lang = user.language or "ru"
     data = await state.get_data()
     browse_target = data.get("browse_target")
@@ -410,10 +423,10 @@ async def msg_content_cancel(
         await state.update_data(browse_target=browse_target)
     await callback.answer()
     try:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        await cb_message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await callback.message.answer(
+    await cb_message.answer(
         t("msg_cancelled", lang),
         reply_markup=browse_reply_kb(lang),
     )
@@ -423,7 +436,8 @@ async def msg_content_cancel(
 async def msg_content_voice(
     message: Message, session: AsyncSession, state: FSMContext, bot: Bot
 ) -> None:
-    assert message.voice
+    if message.voice is None:
+        return
     payload = empty_message_payload()
     payload["voice_file_id"] = message.voice.file_id
     await _finalize_message(message, session, bot, state, payload)
@@ -433,7 +447,8 @@ async def msg_content_voice(
 async def msg_content_video_note(
     message: Message, session: AsyncSession, state: FSMContext, bot: Bot
 ) -> None:
-    assert message.video_note
+    if message.video_note is None:
+        return
     payload = empty_message_payload()
     payload["video_note_file_id"] = message.video_note.file_id
     await _finalize_message(message, session, bot, state, payload)
@@ -443,8 +458,9 @@ async def msg_content_video_note(
 async def msg_content_text(
     message: Message, session: AsyncSession, state: FSMContext, bot: Bot
 ) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user
+    user = await message_user(message, session)
+    if user is None:
+        return
     lang = user.language or "ru"
     text = (message.text or "").strip()[:500]
     if not text:
@@ -457,8 +473,9 @@ async def msg_content_text(
 
 @router.message(MessageStates.content)
 async def msg_content_other(message: Message, session: AsyncSession) -> None:
-    user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
-    assert user
+    user = await message_user(message, session)
+    if user is None:
+        return
     await message.answer(t("msg_need_content", user.language or "ru"))
 
 
@@ -466,17 +483,19 @@ async def msg_content_other(message: Message, session: AsyncSession) -> None:
 async def cb_view_likes(
     callback: CallbackQuery, session: AsyncSession, bot: Bot
 ) -> None:
-    user = await load_user(session, callback.from_user.id)
-    assert user and callback.message
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
     rows = await list_unseen_likers(session, user.tg_id)
     text = format_likes_list(rows, user.language)
     likes = [like for _, _, like in rows]
     await callback.answer()
     try:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        await message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await callback.message.answer(
+    await message.answer(
         text,
         parse_mode="HTML",
         disable_web_page_preview=True,

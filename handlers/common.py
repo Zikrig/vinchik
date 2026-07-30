@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 from aiogram.types import ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +18,41 @@ async def load_user(session: AsyncSession, tg_id: int) -> User | None:
     from services.users import load_user_with_profile
 
     return await load_user_with_profile(session, tg_id)
+
+
+async def ensure_user(session: AsyncSession, tg_id: int, username: str | None) -> User:
+    """Row for a known chat; recreates it if the account was wiped meanwhile."""
+    from services.users import get_or_create_user
+
+    user = await load_user(session, tg_id)
+    if user is not None:
+        return user
+    return await get_or_create_user(session, tg_id, username)
+
+
+async def message_user(message: Message, session: AsyncSession) -> User | None:
+    """Author of a private message; ``None`` for channel posts and anonymous senders."""
+    if message.from_user is None:
+        return None
+    return await ensure_user(session, message.from_user.id, message.from_user.username)
+
+
+async def callback_context(
+    callback: CallbackQuery, session: AsyncSession
+) -> tuple[User, Message] | None:
+    """User + the message the button lives on.
+
+    ``None`` means the click cannot be served: Telegram drops the message body
+    for buttons older than 48h (``InaccessibleMessage`` has no text or author).
+    """
+    message = callback.message
+    if not isinstance(message, Message):
+        user = await load_user(session, callback.from_user.id)
+        lang = (user.language if user else None) or "ru"
+        await callback.answer(t("stale_button", lang), show_alert=True)
+        return None
+    user = await ensure_user(session, callback.from_user.id, callback.from_user.username)
+    return user, message
 
 
 async def show_my_profile(message: Message, user: User, profile: Profile) -> None:

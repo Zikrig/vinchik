@@ -52,6 +52,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - По умолчанию polling; webhook — `USE_WEBHOOK=true` + HTTPS; хост-порт webhook **:8181** (внутри контейнера 8081).
 - `/start` (`handlers/start.py`): всегда приветствие (бот знакомств в Таджикистане); выбор языка только если `language_chosen=False`; иначе продолжение регистрации / меню. Флаг ставится в `set_language`; у готовых анкет — автозаполнение для старых строк.
 - Вне FSM любое личное сообщение → главное меню (`handlers/fallback.py`).
+- Хендлеры не используют `assert` для входных данных: юзер берётся через `callback_context` / `message_user` / `ensure_user` (`handlers/common.py`), они же чинят пропавшую строку `users`. Протухшая кнопка (нет тела сообщения) → алерт `stale_button`. В админке экран перерисовывает `_redraw` (правка на месте, иначе новое сообщение).
 - Терминальные ответы (оплата отмечена, премиум включён, пустая лента, soft-launch, список лайков, reengage, лимит) — с `main_menu_kb`.
 - Оплата Премиум: кнопка «Отправить чек» → FSM `PremiumStates.awaiting_receipt` (фото/документ + «Отмена», кнопка снимается после файла); `receipt_file_id`/`receipt_kind` в `premium_orders`; одна pending-заявка на пользователя (повтор «Купить» возвращает её); пересылка админам; веб `/orders/{id}/receipt` + превью в `#orders`.
 - Массовых рассылок нет.
@@ -77,3 +78,4 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Порты 8180/8181 публикуются только на `127.0.0.1` — снаружи всё идёт через nginx.
 - Альбом фото приходит несколькими апдейтами параллельно: правки `draft_photos` в FSM только под `_photo_draft_lock` (`handlers/profile.py`).
 - `callback.message.from_user` — это **бот**, а не пользователь; ник берём из `callback.from_user`.
+- `callback.message` у кнопки старше 48 ч — это `InaccessibleMessage` (нет ни `.text`, ни `.from_user`), поэтому проверка идёт через `isinstance(..., Message)`, а не `if callback.message`.
