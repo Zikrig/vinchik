@@ -65,17 +65,20 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 1.25rem;
-      margin: -0.35rem -0.25rem 1.25rem;
-      padding: 0.75rem 0.5rem;
-      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      gap: 1rem 1.5rem;
+      flex-wrap: wrap;
+      box-sizing: border-box;
+      width: 100%;
+      margin: 0 0 1.25rem;
+      padding: 0.7rem 1rem;
+      background: rgba(243, 246, 244, 0.96);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(213, 224, 218, 0.85);
-      box-shadow: 0 8px 20px rgba(26, 36, 32, 0.04);
+      border-bottom: 1px solid rgba(213, 224, 218, 0.9);
+      box-shadow: 0 8px 20px rgba(26, 36, 32, 0.05);
     }
-    @supports not (background: color-mix(in srgb, white 50%, transparent)) {
-      .topbar { background: rgba(243, 246, 244, 0.94); }
+    .topbar > .nav {
+      margin-left: auto;
     }
     .topbar-end {
       display: flex;
@@ -566,25 +569,26 @@
     }
     .gender-stats {
       margin: 0;
+      margin-right: auto;
       padding: 0;
       background: transparent;
       border: 0;
       box-shadow: none;
       flex-shrink: 0;
-      text-align: right;
+      text-align: left;
     }
     .gender-stats-lines {
       display: flex;
       flex-direction: column;
-      align-items: flex-end;
+      align-items: flex-start;
       gap: .2rem;
-      text-align: right;
+      text-align: left;
       font-size: .92rem;
       line-height: 1.35;
       font-variant-numeric: tabular-nums;
     }
     .gender-stats-line {
-      text-align: right;
+      text-align: left;
       font-weight: 600;
       letter-spacing: .01em;
       white-space: nowrap;
@@ -597,7 +601,7 @@
       margin-left: .25rem;
       min-width: 1.5ch;
       display: inline-block;
-      text-align: right;
+      text-align: left;
     }
     .link-presets {
       display: flex;

@@ -42,15 +42,14 @@
 </style>
 {% endblock %}
 {% block body %}
-<div class="wrap">
-  <div class="topbar">
-    <div class="brand">Vinchik <span>Admin</span></div>
-    <div class="nav">
-      {% set nav = 'accounts' %}
-      {% include "_admin_nav.html" %}
-    </div>
+<div class="topbar">
+  <div class="brand">Vinchik <span>Admin</span></div>
+  <div class="nav">
+    {% set nav = 'accounts' %}
+    {% include "_admin_nav.html" %}
   </div>
-
+</div>
+<div class="wrap">
   {% if flash and flash.startswith("test_created_") %}<p class="flash-ok">Создано тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
   {% if flash and flash.startswith("test_cleared_") %}<p class="flash-ok">Удалено тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
   {% if flash and flash.startswith("test_shown_") %}<p class="flash-ok">Тестовые показаны в ленте.</p>{% endif %}

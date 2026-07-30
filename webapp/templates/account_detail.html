@@ -218,17 +218,16 @@
 </style>
 {% endblock %}
 {% block body %}
-<div class="wrap">
-  <div class="topbar">
-    <div class="brand">Vinchik <span>Admin</span></div>
-    <div class="nav">
-      <a href="{{ url('/accounts') }}">← Аккаунты</a>
-      <a href="{{ url('/bans') }}">🚫 Баны</a>
-      <a href="{{ url('/') }}">📊 Дашборд</a>
-      <a href="{{ url('/logout') }}">Выйти</a>
-    </div>
+<div class="topbar">
+  <div class="brand">Vinchik <span>Admin</span></div>
+  <div class="nav">
+    <a href="{{ url('/accounts') }}">← Аккаунты</a>
+    <a href="{{ url('/bans') }}">🚫 Баны</a>
+    <a href="{{ url('/') }}">📊 Дашборд</a>
+    <a href="{{ url('/logout') }}">Выйти</a>
   </div>
-
+</div>
+<div class="wrap">
   {% if flash == 'saved' %}
   <p class="flash-ok">Сохранено.</p>
   {% elif flash == 'error' %}

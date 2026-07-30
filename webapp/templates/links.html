@@ -1,15 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Ссылки — Vinchik Admin{% endblock %}
 {% block body %}
-<div class="wrap">
-  <div class="topbar">
-    <div class="brand">Vinchik <span>Ссылки</span></div>
-    <div class="nav">
-      {% set nav = 'links' %}
-      {% include "_admin_nav.html" %}
-    </div>
+<div class="topbar">
+  <div class="brand">Vinchik <span>Ссылки</span></div>
+  <div class="nav">
+    {% set nav = 'links' %}
+    {% include "_admin_nav.html" %}
   </div>
-
+</div>
+<div class="wrap">
   <section class="panel" id="links" data-stats-url="{{ url('/links/stats') }}">
     <h2 class="panel-title">🔗 Ссылки</h2>
     <p class="hint">Полные t.me-ссылки с аргументом. Каждый /start по коду считает переход. Статистика — Asia/Dushanbe.</p>

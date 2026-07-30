@@ -1,15 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Премиум — Vinchik Admin{% endblock %}
 {% block body %}
-<div class="wrap">
-  <div class="topbar">
-    <div class="brand">Vinchik <span>Премиум</span></div>
-    <div class="nav">
-      {% set nav = 'premium' %}
-      {% include "_admin_nav.html" %}
-    </div>
+<div class="topbar">
+  <div class="brand">Vinchik <span>Премиум</span></div>
+  <div class="nav">
+    {% set nav = 'premium' %}
+    {% include "_admin_nav.html" %}
   </div>
-
+</div>
+<div class="wrap">
   <nav class="jump">
     <a href="#orders">💳 Заявки</a>
     <a href="#premiums">⭐ Активные</a>
