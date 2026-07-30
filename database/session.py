@@ -87,6 +87,16 @@ async def init_db() -> None:
                 "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS photo_file_ids JSONB"
             )
         )
+        await conn.execute(
+            text(
+                "ALTER TABLE premium_orders ADD COLUMN IF NOT EXISTS receipt_file_id VARCHAR(256)"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE premium_orders ADD COLUMN IF NOT EXISTS receipt_kind VARCHAR(16)"
+            )
+        )
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

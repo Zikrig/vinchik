@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
-from database.models import RequiredChannel
+from database.models import PremiumOrder, RequiredChannel
 from database.session import async_session_maker
 from services.admin_tools import (
     DUSHANBE_CITY,
@@ -770,6 +770,36 @@ def create_app() -> FastAPI:
             remove=True,
             message="Канал удалён.",
         )
+
+    @app.get("/orders/{order_id}/receipt")
+    async def order_receipt(
+        order_id: int, request: Request, session: AsyncSession = Depends(get_db)
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        order = await session.get(PremiumOrder, order_id)
+        if not order or not order.receipt_file_id:
+            return Response(status_code=404)
+        bot = Bot(token=settings.bot_token)
+        try:
+            f = await bot.get_file(order.receipt_file_id)
+            if not f.file_path:
+                return Response(status_code=404)
+            url = f"https://api.telegram.org/file/bot{settings.bot_token}/{f.file_path}"
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    return Response(status_code=404)
+                ctype = resp.headers.get("content-type") or "application/octet-stream"
+                if order.receipt_kind == "photo" and not ctype.startswith("image/"):
+                    ctype = "image/jpeg"
+                filename = Path(f.file_path).name
+                headers = {}
+                if order.receipt_kind == "document":
+                    headers["Content-Disposition"] = f'inline; filename="{filename}"'
+                return Response(content=resp.content, media_type=ctype, headers=headers)
+        finally:
+            await bot.session.close()
 
     @app.post("/orders/{order_id}/approve")
     async def order_approve(

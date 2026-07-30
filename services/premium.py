@@ -47,6 +47,23 @@ async def create_order(session: AsyncSession, user_id: int, plan_id: int) -> Pre
     return order
 
 
+async def attach_receipt(
+    session: AsyncSession,
+    order_id: int,
+    user_id: int,
+    file_id: str,
+    kind: str,
+) -> PremiumOrder | None:
+    order = await session.get(PremiumOrder, order_id)
+    if order is None or order.user_id != user_id or order.status != OrderStatus.pending:
+        return None
+    order.receipt_file_id = file_id
+    order.receipt_kind = kind
+    await session.commit()
+    await session.refresh(order)
+    return order
+
+
 async def approve_order(
     session: AsyncSession, order_id: int, admin_id: int
 ) -> tuple[PremiumOrder, User] | None:

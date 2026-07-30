@@ -158,6 +158,20 @@
         <td>#{{ o.id }}</td>
         <td>user {{ o.user_id }}</td>
         <td>plan {{ o.plan_id }}</td>
+        <td>
+          {% if o.receipt_file_id %}
+            {% if o.receipt_kind == 'photo' %}
+              <a href="{{ url('/orders/' ~ o.id ~ '/receipt') }}" target="_blank" rel="noopener">
+                <img src="{{ url('/orders/' ~ o.id ~ '/receipt') }}" alt="чек"
+                     style="max-height:72px;max-width:120px;object-fit:cover;border-radius:8px;vertical-align:middle">
+              </a>
+            {% else %}
+              <a href="{{ url('/orders/' ~ o.id ~ '/receipt') }}" target="_blank" rel="noopener">📄 Чек</a>
+            {% endif %}
+          {% else %}
+            <span class="hint">нет чека</span>
+          {% endif %}
+        </td>
         <td class="row">
           <form method="post" action="{{ url('/orders/' ~ o.id ~ '/approve') }}" class="js-ajax" data-ajax="order"><button type="submit">OK</button></form>
           <form method="post" action="{{ url('/orders/' ~ o.id ~ '/reject') }}" class="js-ajax" data-ajax="order"><button type="submit" class="secondary">Reject</button></form>

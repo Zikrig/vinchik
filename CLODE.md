@@ -51,6 +51,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - `/start` (`handlers/start.py`): всегда приветствие (бот знакомств в Таджикистане); выбор языка только если `language_chosen=False`; иначе продолжение регистрации / меню. Флаг ставится в `set_language`; у готовых анкет — автозаполнение для старых строк.
 - Вне FSM любое личное сообщение → главное меню (`handlers/fallback.py`).
 - Терминальные ответы (оплата отмечена, премиум включён, пустая лента, soft-launch, список лайков, reengage, лимит) — с `main_menu_kb`.
+- Оплата Премиум: кнопка «Отправить чек» → FSM `PremiumStates.awaiting_receipt` (фото/документ + «Отмена», кнопка снимается после файла); `receipt_file_id`/`receipt_kind` в `premium_orders`; пересылка админам; веб `/orders/{id}/receipt` + превью в `#orders`.
 - Массовых рассылок нет.
 - Сообщения про лимит / like_sent слать через `bot.send_message(user_id)`, не через `callback.message.answer` (фото / InaccessibleMessage).
 

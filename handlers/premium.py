@@ -5,7 +5,8 @@ from zoneinfo import ZoneInfo
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
@@ -14,6 +15,7 @@ from handlers.common import load_user, show_main_menu
 from keyboards.inline import main_menu_kb
 from locales import t
 from services.premium import (
+    attach_receipt,
     create_order,
     get_order_with_plan,
     list_active_plans,
@@ -21,6 +23,7 @@ from services.premium import (
 )
 from services.settings_service import get_payment_info
 from services.users import is_premium
+from states.premium import PremiumStates
 
 router = Router()
 
@@ -54,11 +57,24 @@ def _premium_pay_kb(lang: str, order_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=t("btn_i_paid", lang),
-                    callback_data=f"prem:paid:{order_id}",
+                    text=t("btn_send_receipt", lang),
+                    callback_data=f"prem:receipt:{order_id}",
                 )
             ],
             [InlineKeyboardButton(text=t("back", lang), callback_data="prem:menu")],
+        ]
+    )
+
+
+def _receipt_prompt_kb(lang: str, order_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=t("btn_cancel", lang),
+                    callback_data=f"prem:receipt_cancel:{order_id}",
+                )
+            ]
         ]
     )
 
@@ -97,6 +113,44 @@ async def _send_premium_menu(message, session: AsyncSession, user) -> None:
     await message.answer(body, reply_markup=_premium_menu_kb(lang, plans))
 
 
+async def _notify_admins_receipt(
+    bot: Bot, user, order: PremiumOrder, kind: str, file_id: str
+) -> None:
+    uname = f"@{user.username}" if user.username else "—"
+    admin_text = (
+        f"💳 Чек по оплате\n"
+        f"Заявка #{order.id}\n"
+        f"user: {user.tg_id} {uname}"
+    )
+    admin_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Подтвердить", callback_data=f"adm:ok:{order.id}:0"
+                ),
+                InlineKeyboardButton(
+                    text="❌ Отклонить", callback_data=f"adm:no:{order.id}:0"
+                ),
+            ]
+        ]
+    )
+    for aid in settings.admin_id_set:
+        try:
+            if kind == "photo":
+                await bot.send_photo(
+                    aid, photo=file_id, caption=admin_text, reply_markup=admin_kb
+                )
+            else:
+                await bot.send_document(
+                    aid, document=file_id, caption=admin_text, reply_markup=admin_kb
+                )
+        except TelegramAPIError:
+            try:
+                await bot.send_message(aid, admin_text, reply_markup=admin_kb)
+            except TelegramAPIError:
+                pass
+
+
 @router.callback_query(F.data == "menu:premium")
 async def premium_menu(callback: CallbackQuery, session: AsyncSession) -> None:
     user = await load_user(session, callback.from_user.id)
@@ -106,9 +160,12 @@ async def premium_menu(callback: CallbackQuery, session: AsyncSession) -> None:
 
 
 @router.callback_query(F.data == "prem:menu")
-async def premium_menu_again(callback: CallbackQuery, session: AsyncSession) -> None:
+async def premium_menu_again(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
     user = await load_user(session, callback.from_user.id)
     assert user and callback.message
+    await state.clear()
     await callback.answer()
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
@@ -215,45 +272,132 @@ async def premium_buy(callback: CallbackQuery, session: AsyncSession) -> None:
     )
 
 
-@router.callback_query(F.data.startswith("prem:paid:"))
-async def premium_paid(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
+@router.callback_query(F.data.startswith("prem:receipt:"))
+async def premium_ask_receipt(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
     user = await load_user(session, callback.from_user.id)
     assert user and callback.data and callback.message
     order_id = int(callback.data.split(":")[2])
+    row = await get_order_with_plan(session, order_id, user.tg_id)
+    if row is None or row[0].status != OrderStatus.pending:
+        await callback.answer("—", show_alert=True)
+        return
+    await callback.answer()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    prompt = await callback.message.answer(
+        t("premium_send_receipt", user.language, order_id=order_id),
+        reply_markup=_receipt_prompt_kb(user.language, order_id),
+    )
+    await state.set_state(PremiumStates.awaiting_receipt)
+    await state.update_data(order_id=order_id, prompt_message_id=prompt.message_id)
+
+
+@router.callback_query(
+    PremiumStates.awaiting_receipt, F.data.startswith("prem:receipt_cancel:")
+)
+async def premium_receipt_cancel(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
+    user = await load_user(session, callback.from_user.id)
+    assert user and callback.data and callback.message
+    order_id = int(callback.data.split(":")[2])
+    data = await state.get_data()
+    if data.get("order_id") != order_id:
+        await callback.answer("—", show_alert=True)
+        return
+    await state.clear()
     await callback.answer()
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
     await callback.message.answer(
-        t("premium_paid_thanks", user.language, order_id=order_id),
-        reply_markup=main_menu_kb(user.language),
+        t("premium_receipt_cancelled", user.language),
+        reply_markup=_premium_pay_kb(user.language, order_id),
     )
-    uname = f"@{user.username}" if user.username else "—"
-    admin_text = (
-        f"💳 Пользователь отметил оплату\n"
-        f"Заявка #{order_id}\n"
-        f"user: {user.tg_id} {uname}"
+
+
+@router.message(PremiumStates.awaiting_receipt, F.photo)
+async def premium_receipt_photo(
+    message: Message, session: AsyncSession, state: FSMContext, bot: Bot
+) -> None:
+    await _accept_receipt(
+        message, session, state, bot, kind="photo", file_id=message.photo[-1].file_id
     )
-    admin_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"adm:ok:{order_id}:0"),
-                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"adm:no:{order_id}:0"),
-            ]
-        ]
+
+
+@router.message(PremiumStates.awaiting_receipt, F.document)
+async def premium_receipt_document(
+    message: Message, session: AsyncSession, state: FSMContext, bot: Bot
+) -> None:
+    assert message.document
+    await _accept_receipt(
+        message,
+        session,
+        state,
+        bot,
+        kind="document",
+        file_id=message.document.file_id,
     )
-    for aid in settings.admin_id_set:
+
+
+@router.message(PremiumStates.awaiting_receipt)
+async def premium_receipt_wrong(message: Message, session: AsyncSession) -> None:
+    user = await load_user(session, message.from_user.id)
+    assert user
+    await message.answer(t("premium_receipt_need_file", user.language))
+
+
+async def _accept_receipt(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    bot: Bot,
+    *,
+    kind: str,
+    file_id: str,
+) -> None:
+    user = await load_user(session, message.from_user.id)
+    assert user and message.from_user
+    data = await state.get_data()
+    order_id = data.get("order_id")
+    prompt_message_id = data.get("prompt_message_id")
+    if not order_id:
+        await state.clear()
+        return
+    order = await attach_receipt(session, order_id, user.tg_id, file_id, kind)
+    if order is None:
+        await state.clear()
+        await message.answer("—", reply_markup=main_menu_kb(user.language))
+        return
+    if prompt_message_id:
         try:
-            await bot.send_message(aid, admin_text, reply_markup=admin_kb)
+            await bot.edit_message_reply_markup(
+                chat_id=message.chat.id,
+                message_id=prompt_message_id,
+                reply_markup=None,
+            )
         except TelegramAPIError:
             pass
+    await state.clear()
+    await message.answer(
+        t("premium_paid_thanks", user.language, order_id=order.id),
+        reply_markup=main_menu_kb(user.language),
+    )
+    await _notify_admins_receipt(bot, user, order, kind, file_id)
 
 
 @router.callback_query(F.data == "prem:back")
-async def premium_back(callback: CallbackQuery, session: AsyncSession) -> None:
+async def premium_back(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
     user = await load_user(session, callback.from_user.id)
     assert user and callback.message
+    await state.clear()
     await callback.answer()
     try:
         await callback.message.edit_reply_markup(reply_markup=None)

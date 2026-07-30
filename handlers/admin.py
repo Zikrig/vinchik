@@ -261,6 +261,7 @@ async def _render_order(
         f"#{order.id}\n"
         f"user: {order.user_id}\n"
         f"plan: {order.plan_id}\n"
+        f"чек: {'есть' if order.receipt_file_id else 'нет'}\n"
         f"создана: {_fmt_dt(order.created_at)}"
     )
     return text, _order_kb(order.id, index, len(pending))

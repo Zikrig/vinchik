@@ -193,6 +193,8 @@ class PremiumOrder(Base):
     status: Mapped[OrderStatus] = mapped_column(
         Enum(OrderStatus, native_enum=False, length=16), default=OrderStatus.pending
     )
+    receipt_file_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    receipt_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)  # photo|document
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
