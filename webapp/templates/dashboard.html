@@ -231,7 +231,7 @@
     <p class="hint" id="link-range-label">Период: {{ tracking_stats.label }} · всего {{ tracking_stats.total }}</p>
 
     <div class="bar-chart" id="link-chart" aria-label="Диаграмма переходов">
-      {% for item in tracking_stats.items %}
+      {% for item in tracking_stats.links %}
       <div class="bar-col" data-link-id="{{ item.id }}" title="{{ item.name }}: {{ item.clicks }}">
         <div class="bar-val">{{ item.clicks }}</div>
         <div class="bar-track">
@@ -247,7 +247,7 @@
     <table id="links-table">
       <tr><th>Название</th><th>Переходы</th><th>Ссылка</th><th></th></tr>
       <tbody id="links-tbody">
-      {% for item in tracking_stats.items %}
+      {% for item in tracking_stats.links %}
       <tr data-link-id="{{ item.id }}">
         <td>
           <form method="post" action="{{ url('/links/' ~ item.id ~ '/rename') }}"
@@ -439,8 +439,8 @@
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || "error");
-    renderChart(data.items || []);
-    renderTable(data.items || []);
+    renderChart(data.links || []);
+    renderTable(data.links || []);
     if (labelEl) {
       labelEl.textContent = "Период: " + (data.label || "") + " · всего " + (data.total || 0);
     }

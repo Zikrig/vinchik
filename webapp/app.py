@@ -223,15 +223,15 @@ async def load_tracking_stats(
         preset=preset, date_from=date_from, date_to=date_to
     )
     rows = await click_counts(session, start=start, end=end)
-    items = [serialize_tracking_link(link, n) for link, n in rows]
+    links = [serialize_tracking_link(link, n) for link, n in rows]
     return {
         "label": label,
         "preset": preset or ("custom" if date_from or date_to else "all"),
         "date_from": date_from.isoformat() if date_from else "",
         "date_to": date_to.isoformat() if date_to else "",
-        "items": items,
-        "total": sum(i["clicks"] for i in items),
-        "max_clicks": max((i["clicks"] for i in items), default=0) or 1,
+        "links": links,
+        "total": sum(i["clicks"] for i in links),
+        "max_clicks": max((i["clicks"] for i in links), default=0) or 1,
     }
 
 
