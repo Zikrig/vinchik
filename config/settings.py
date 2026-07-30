@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     admin_ids: str = Field(alias="ADMIN_IDS")
     admin_web_password: str = Field(alias="ADMIN_WEB_PASSWORD")
     manager_contact: str = Field(default="@manager", alias="MANAGER_CONTACT")
+    support_contact: str = Field(default="@support", alias="SUPPORT_CONTACT")
     payment_card: str = Field(default="", alias="PAYMENT_CARD")
     payment_check_time: str = Field(default="в течение 24 часов", alias="PAYMENT_CHECK_TIME")
     bot_username: str = Field(default="", alias="BOT_USERNAME")

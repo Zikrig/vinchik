@@ -4,7 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from handlers.common import show_main_menu
+from handlers.common import blocked_text, show_main_menu
 from handlers.profile import begin_profile_flow
 from keyboards.inline import language_kb
 from locales import t
@@ -27,7 +27,7 @@ async def out_of_scenario_message(
         message.from_user.username,
     )
     if user.is_blocked:
-        await message.answer(t("you_are_blocked", user.language))
+        await message.answer(await blocked_text(session, user.language))
         return
     if not (user.profile and user.profile.is_complete):
         lang = user.language or "ru"

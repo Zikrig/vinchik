@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.types import ReplyKeyboardRemove
@@ -10,8 +12,16 @@ from keyboards.inline import main_menu_kb, my_profile_kb, premium_cta_kb
 from locales import t
 from services.browse import profile_caption
 from services.media import as_photo_input
-from services.settings_service import is_registration_only
+from services.settings_service import get_support_contact, is_registration_only
 from services.users import is_premium
+
+# Pause after premium promo before the first feed card (post-registration).
+_POST_PROMO_FEED_DELAY_SEC = 5.0
+
+
+async def blocked_text(session: AsyncSession, lang: str | None) -> str:
+    support = await get_support_contact(session)
+    return t("you_are_blocked", lang or "ru", support=support)
 
 
 async def load_user(session: AsyncSession, tg_id: int) -> User | None:
@@ -111,4 +121,5 @@ async def after_profile_ready(
             t("premium_promo", lang),
             reply_markup=premium_cta_kb(lang),
         )
+        await asyncio.sleep(_POST_PROMO_FEED_DELAY_SEC)
     await start_browse(message, session, user, state=state)

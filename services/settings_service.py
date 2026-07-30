@@ -17,6 +17,7 @@ DEFAULTS = {
     "registration_only": "true" if settings.registration_only_default else "false",
     "test_users_visible": "true",
     "manager_contact": settings.manager_contact,
+    "support_contact": settings.support_contact,
     "payment_card": settings.payment_card or "укажите карту в админке",
     "payment_check_time": settings.payment_check_time,
 }
@@ -117,6 +118,10 @@ async def get_manager_contact(session: AsyncSession) -> str:
     return await get_setting(session, "manager_contact", settings.manager_contact)
 
 
+async def get_support_contact(session: AsyncSession) -> str:
+    return await get_setting(session, "support_contact", settings.support_contact)
+
+
 async def get_payment_card(session: AsyncSession) -> str:
     return await get_setting(session, "payment_card", settings.payment_card)
 
@@ -128,6 +133,7 @@ async def get_payment_check_time(session: AsyncSession) -> str:
 async def get_payment_info(session: AsyncSession) -> dict[str, str]:
     return {
         "manager": await get_manager_contact(session),
+        "support": await get_support_contact(session),
         "card": await get_payment_card(session),
         "check_time": await get_payment_check_time(session),
     }

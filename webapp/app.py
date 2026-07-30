@@ -349,6 +349,7 @@ def create_app() -> FastAPI:
             "reshow_days": await get_profile_reshow_days(session),
             "registration_only": await is_registration_only(session),
             "manager": pay["manager"],
+            "support": pay["support"],
             "payment_card": pay["card"],
             "payment_check_time": pay["check_time"],
             "pending": pending,
@@ -769,6 +770,7 @@ def create_app() -> FastAPI:
         max_distance_km: float = Form(...),
         profile_reshow_days: int = Form(...),
         manager_contact: str = Form(...),
+        support_contact: str = Form(...),
         payment_card: str = Form(...),
         payment_check_time: str = Form(...),
         session: AsyncSession = Depends(get_db),
@@ -782,6 +784,7 @@ def create_app() -> FastAPI:
             session, "profile_reshow_days", str(max(0, int(profile_reshow_days)))
         )
         await set_setting(session, "manager_contact", manager_contact.strip())
+        await set_setting(session, "support_contact", support_contact.strip())
         await set_setting(session, "payment_card", payment_card.strip())
         await set_setting(session, "payment_check_time", payment_check_time.strip())
         return ok_response(
@@ -793,6 +796,7 @@ def create_app() -> FastAPI:
                 "max_distance_km": capped,
                 "profile_reshow_days": max(0, int(profile_reshow_days)),
                 "manager_contact": manager_contact.strip(),
+                "support_contact": support_contact.strip(),
                 "payment_card": payment_card.strip(),
                 "payment_check_time": payment_check_time.strip(),
             },

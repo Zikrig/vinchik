@@ -48,7 +48,9 @@ async def cmd_start(message: Message, session: AsyncSession, state: FSMContext) 
         message.from_user.username,
     )
     if user.is_blocked:
-        await message.answer(t("you_are_blocked", user.language or "ru"))
+        from handlers.common import blocked_text
+
+        await message.answer(await blocked_text(session, user.language or "ru"))
         return
 
     # Complete profiles already use a language; treat as chosen for legacy rows.

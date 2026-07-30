@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 from config import settings
@@ -158,17 +160,24 @@ def premium_cta_kb(lang: str, *, with_main_menu: bool = False) -> InlineKeyboard
 
 def empty_feed_kb(lang: str) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton(text=t("menu_browse", lang), callback_data="browse:start")]]
-    if settings.bot_username:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=t("menu_share", lang),
-                    url=f"https://t.me/{settings.bot_username}",
-                )
-            ]
-        )
+    share = _share_bot_button(lang)
+    if share is not None:
+        rows.append([share])
     rows.append([InlineKeyboardButton(text=t("back", lang), callback_data="menu:root")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _share_bot_button(lang: str) -> InlineKeyboardButton | None:
+    username = (settings.bot_username or "").lstrip("@").strip()
+    if not username:
+        return None
+    bot_url = f"https://t.me/{username}"
+    share_url = (
+        "https://t.me/share/url"
+        f"?url={quote(bot_url, safe='')}"
+        f"&text={quote(t('share_bot_text', lang), safe='')}"
+    )
+    return InlineKeyboardButton(text=t("menu_share", lang), url=share_url)
 
 
 def main_menu_kb(lang: str) -> InlineKeyboardMarkup:
@@ -179,15 +188,9 @@ def main_menu_kb(lang: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=t("menu_settings", lang), callback_data="menu:settings")],
         [InlineKeyboardButton(text=t("menu_stop", lang), callback_data="menu:stop")],
     ]
-    if settings.bot_username:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=t("menu_share", lang),
-                    url=f"https://t.me/{settings.bot_username}",
-                )
-            ]
-        )
+    share = _share_bot_button(lang)
+    if share is not None:
+        rows.append([share])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

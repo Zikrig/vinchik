@@ -49,7 +49,8 @@ _EDIT_PROMPTS = {
     AdminStates.edit_reshow.state: "Повтор анкеты в днях (0 = никогда; пауза в обе стороны после ❤️/👎/💌):",
     AdminStates.edit_card.state: "Новая карта для приёма платежей:",
     AdminStates.edit_check_time.state: "Новое время проверки оплаты:",
-    AdminStates.edit_manager.state: "Новые контакты менеджера:",
+    AdminStates.edit_manager.state: "Новые контакты менеджера (оплата Премиум):",
+    AdminStates.edit_support.state: "Новый контакт поддержки (для заблокированных):",
 }
 
 _ADD_CHANNEL_HINT = (
@@ -68,6 +69,7 @@ _EDIT_STATE_FILTER = StateFilter(
     AdminStates.edit_card,
     AdminStates.edit_check_time,
     AdminStates.edit_manager,
+    AdminStates.edit_support,
 )
 
 
@@ -137,6 +139,7 @@ def _settings_kb(reg_only: bool) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Карта оплаты", callback_data="adm:edit:card")],
             [InlineKeyboardButton(text="Время проверки", callback_data="adm:edit:check_time")],
             [InlineKeyboardButton(text="Контакты менеджера", callback_data="adm:edit:manager")],
+            [InlineKeyboardButton(text="Контакт поддержки", callback_data="adm:edit:support")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")],
         ]
     )
@@ -255,7 +258,8 @@ async def _settings_view(session: AsyncSession) -> tuple[str, InlineKeyboardMark
         f"Повтор анкеты (дней): {reshow}\n\n"
         f"Карта:\n{html.escape(pay['card'])}\n\n"
         f"Время проверки:\n{html.escape(pay['check_time'])}\n\n"
-        f"Менеджер:\n{html.escape(pay['manager'])}"
+        f"Менеджер:\n{html.escape(pay['manager'])}\n\n"
+        f"Поддержка:\n{html.escape(pay['support'])}"
     )
     return text, _settings_kb(reg_only)
 
@@ -362,6 +366,7 @@ async def adm_edit_start(callback: CallbackQuery, state: FSMContext, bot: Bot) -
         "card": AdminStates.edit_card,
         "check_time": AdminStates.edit_check_time,
         "manager": AdminStates.edit_manager,
+        "support": AdminStates.edit_support,
     }
     st = mapping.get(field)
     if st is None:
@@ -407,6 +412,10 @@ async def adm_edit_value(
             if not raw:
                 raise ValueError("empty")
             await set_setting(session, "manager_contact", raw)
+        elif current == AdminStates.edit_support.state:
+            if not raw:
+                raise ValueError("empty")
+            await set_setting(session, "support_contact", raw)
         else:
             await state.clear()
             return

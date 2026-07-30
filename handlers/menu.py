@@ -3,7 +3,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from handlers.common import callback_context, show_main_menu, show_my_profile
+from handlers.common import blocked_text, callback_context, show_main_menu, show_my_profile
 from handlers.profile import begin_profile_flow
 from keyboards.inline import language_kb, main_menu_kb, settings_kb, stop_confirm_kb
 from locales import t
@@ -33,7 +33,9 @@ async def menu_root(
         return
     user, message = ctx
     if user.is_blocked:
-        await callback.answer(t("you_are_blocked", user.language), show_alert=True)
+        await callback.answer(
+            await blocked_text(session, user.language), show_alert=True
+        )
         return
     await state.clear()
     await callback.answer()

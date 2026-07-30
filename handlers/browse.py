@@ -6,7 +6,7 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import LikeAction, User
-from handlers.common import callback_context, load_user, message_user, show_main_menu
+from handlers.common import blocked_text, callback_context, load_user, message_user, show_main_menu
 from keyboards.inline import (
     browse_reply_kb,
     channels_kb,
@@ -63,7 +63,9 @@ async def _guard_feed_user(
     """False if the user must not interact with the feed."""
     if user.is_blocked:
         await state.clear()
-        await message.answer(t("you_are_blocked", lang), reply_markup=ReplyKeyboardRemove())
+        await message.answer(
+            await blocked_text(session, lang), reply_markup=ReplyKeyboardRemove()
+        )
         return False
     if await is_registration_only(session):
         await state.clear()
@@ -112,7 +114,9 @@ async def start_browse(
     if user.is_blocked:
         if state:
             await state.clear()
-        await say(t("you_are_blocked", lang), reply_markup=ReplyKeyboardRemove())
+        await say(
+            await blocked_text(session, lang), reply_markup=ReplyKeyboardRemove()
+        )
         return
     if await is_registration_only(session):
         if state:
@@ -136,9 +140,12 @@ async def start_browse(
         await say(body, reply_markup=premium_cta_kb(lang, with_main_menu=True))
         return
     if not user.profile or not user.profile.is_complete:
-        if state:
-            await state.clear()
-        await say(t("ask_age", lang), reply_markup=main_menu_kb(lang))
+        from handlers.profile import begin_profile_flow
+
+        if state is None:
+            await say(t("ask_age", lang), reply_markup=main_menu_kb(lang))
+            return
+        await begin_profile_flow(message, session, state, user, refill=False)
         return
     if not user.profile.is_active:
         # Switched off by the user ("Больше не ищу") or by an admin — ask first.
@@ -241,7 +248,9 @@ async def _rate_from_message(
     except PermissionError as exc:
         await state.clear()
         if exc.args and exc.args[0] == "blocked":
-            await message.answer(t("you_are_blocked", lang), reply_markup=ReplyKeyboardRemove())
+            await message.answer(
+                await blocked_text(session, lang), reply_markup=ReplyKeyboardRemove()
+            )
         else:
             await _say_limit(message, lang)
         return
@@ -327,7 +336,7 @@ async def _report_from_message(
 ) -> None:
     lang = user.language or "ru"
     if user.is_blocked:
-        await message.answer(t("you_are_blocked", lang))
+        await message.answer(await blocked_text(session, lang))
         return
     if not await can_browse(session, user, user.profile):
         await state.clear()
@@ -353,7 +362,8 @@ async def _report_from_message(
             if target and not target.is_test:
                 try:
                     await bot.send_message(
-                        int(target_id), t("you_are_blocked", target.language or "ru")
+                        int(target_id),
+                        await blocked_text(session, target.language or "ru"),
                     )
                 except Exception:
                     pass
@@ -395,7 +405,9 @@ async def _finalize_message(
     except PermissionError as exc:
         await state.clear()
         if exc.args and exc.args[0] == "blocked":
-            await message.answer(t("you_are_blocked", lang), reply_markup=ReplyKeyboardRemove())
+            await message.answer(
+                await blocked_text(session, lang), reply_markup=ReplyKeyboardRemove()
+            )
         else:
             await _say_limit(message, lang)
         return

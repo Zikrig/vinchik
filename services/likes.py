@@ -188,11 +188,11 @@ async def notify_like_batch(bot: Bot, session: AsyncSession, to_user_id: int) ->
 
     now = datetime.now(UTC)
     last = target.last_like_notify_at
+    within_window = False
     if last is not None:
         if last.tzinfo is None:
             last = last.replace(tzinfo=UTC)
-        if now - last < timedelta(minutes=settings.like_notify_interval_minutes):
-            return
+        within_window = now - last < timedelta(minutes=settings.like_notify_interval_minutes)
 
     lang = target.language or "ru"
     text = t("liked_one", lang) if n == 1 else t("liked_many", lang, n=n)
@@ -201,6 +201,19 @@ async def notify_like_batch(bot: Bot, session: AsyncSession, to_user_id: int) ->
             [InlineKeyboardButton(text=t("btn_view_likes", lang), callback_data="likes:view")]
         ]
     )
+
+    # Within the batch window: refresh the same notification instead of staying silent.
+    if within_window and target.likes_notify_message_id:
+        try:
+            await bot.edit_message_text(
+                text,
+                chat_id=to_user_id,
+                message_id=target.likes_notify_message_id,
+                reply_markup=kb,
+            )
+            return
+        except TelegramAPIError:
+            pass
 
     if target.likes_notify_message_id:
         try:
