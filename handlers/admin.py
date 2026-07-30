@@ -33,8 +33,11 @@ from services.settings_service import (
     get_max_distance_km,
     get_payment_info,
     get_profile_reshow_days,
+    get_welcome_post,
     is_registration_only,
     set_setting,
+    set_welcome_post,
+    welcome_post_configured,
 )
 from states.admin import AdminStates
 
@@ -140,6 +143,7 @@ def _settings_kb(reg_only: bool) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Время проверки", callback_data="adm:edit:check_time")],
             [InlineKeyboardButton(text="Контакты менеджера", callback_data="adm:edit:manager")],
             [InlineKeyboardButton(text="Контакт поддержки", callback_data="adm:edit:support")],
+            [InlineKeyboardButton(text="Приветственный пост", callback_data="adm:edit:welcome")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")],
         ]
     )
@@ -249,13 +253,22 @@ async def _settings_view(session: AsyncSession) -> tuple[str, InlineKeyboardMark
     reshow = await get_profile_reshow_days(session)
     reg_only = await is_registration_only(session)
     pay = await get_payment_info(session)
+    welcome = await get_welcome_post(session)
     soft = "🟢 ON" if reg_only else "🔴 OFF"
+    if welcome_post_configured(welcome):
+        w_preview = (welcome["text"] or "").strip() or "(без текста)"
+        if len(w_preview) > 120:
+            w_preview = w_preview[:117] + "…"
+        welcome_line = f"Приветственный пост: ✅\n{html.escape(w_preview)}"
+    else:
+        welcome_line = "Приветственный пост: ❌ не задан (на /start — текст из локалей)"
     text = (
         "⚙️ Настройки\n\n"
         f"Soft-launch: {soft}\n"
         f"Лимит лайков / сутки UTC: {limit}\n"
         f"Радиус км: {dist:g}\n"
         f"Повтор анкеты (дней): {reshow}\n\n"
+        f"{welcome_line}\n\n"
         f"Карта:\n{html.escape(pay['card'])}\n\n"
         f"Время проверки:\n{html.escape(pay['check_time'])}\n\n"
         f"Менеджер:\n{html.escape(pay['manager'])}\n\n"
@@ -359,6 +372,18 @@ async def adm_edit_start(callback: CallbackQuery, state: FSMContext, bot: Bot) -
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
     field = (callback.data or "").split(":")[2]
+    if field == "welcome":
+        await state.set_state(AdminStates.edit_welcome)
+        await callback.answer()
+        await bot.send_message(
+            callback.from_user.id,
+            "👋 Приветственный пост (/start)\n\n"
+            "Пришли фото с подписью — это и будет пост вместо текстового приветствия.\n"
+            "Можно прислать только текст — обновится подпись (фото останется).\n"
+            "Или только фото — подпись сохранится прежней.",
+            reply_markup=_cancel_kb(),
+        )
+        return
     mapping = {
         "limit": AdminStates.edit_limit,
         "dist": AdminStates.edit_dist,
@@ -377,6 +402,56 @@ async def adm_edit_start(callback: CallbackQuery, state: FSMContext, bot: Bot) -
     await bot.send_message(
         callback.from_user.id, _EDIT_PROMPTS[st.state], reply_markup=_cancel_kb()
     )
+
+
+@router.message(StateFilter(AdminStates.edit_welcome), F.photo)
+async def adm_edit_welcome_photo(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> None:
+    if message.from_user is None or not _is_admin(message.from_user.id):
+        await state.clear()
+        return
+    if not message.photo:
+        return
+    file_id = message.photo[-1].file_id
+    caption = (message.caption or "").strip()
+    kwargs: dict = {"photo_file_id": file_id}
+    if caption:
+        kwargs["text"] = caption
+    await set_welcome_post(session, **kwargs)
+    await state.clear()
+    text, kb = await _settings_view(session)
+    await message.answer("✅ Приветственный пост сохранён.\n\n" + text, reply_markup=kb)
+
+
+@router.message(StateFilter(AdminStates.edit_welcome), F.text)
+async def adm_edit_welcome_text(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> None:
+    if message.from_user is None or not _is_admin(message.from_user.id):
+        await state.clear()
+        return
+    raw = (message.text or "").strip()
+    if not raw:
+        await message.answer("Нужен текст подписи или фото с подписью.")
+        return
+    current = await get_welcome_post(session)
+    if not welcome_post_configured(current):
+        await message.answer(
+            "Сначала пришли фото (с подписью). Один текст без картинки пост не включает."
+        )
+        return
+    await set_welcome_post(session, text=raw)
+    await state.clear()
+    text, kb = await _settings_view(session)
+    await message.answer("✅ Текст поста обновлён.\n\n" + text, reply_markup=kb)
+
+
+@router.message(StateFilter(AdminStates.edit_welcome))
+async def adm_edit_welcome_other(message: Message) -> None:
+    if message.from_user is None or not _is_admin(message.from_user.id):
+        return
+    await message.answer("Нужно фото (желательно с подписью) или текст подписи.")
 
 
 @router.message(_EDIT_STATE_FILTER, F.text)

@@ -8,10 +8,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from handlers.common import callback_context, show_main_menu
 from keyboards.inline import language_kb
 from locales import t
+from services.media import as_photo_input
+from services.settings_service import get_welcome_post, welcome_post_configured
 from services.users import get_or_create_user, set_language
 from states.profile import ProfileStates
 
 router = Router()
+
+
+async def _send_start_welcome(message: Message, session: AsyncSession, user) -> None:
+    """Welcome post with photo from admin settings, or locale text fallback."""
+    post = await get_welcome_post(session)
+    if welcome_post_configured(post):
+        photo = as_photo_input(post["photo_file_id"])
+        caption = (post.get("text") or "").strip() or None
+        if photo is not None:
+            try:
+                await message.answer_photo(photo, caption=caption)
+                return
+            except TelegramBadRequest:
+                pass
+        if caption:
+            await message.answer(caption)
+            return
+
+    if user.language_chosen:
+        await message.answer(t("welcome", user.language or "ru"))
+    else:
+        await message.answer(t("welcome_bilingual", "ru"))
 
 
 async def _continue_after_language(
@@ -58,10 +82,7 @@ async def cmd_start(message: Message, session: AsyncSession, state: FSMContext) 
         user.language_chosen = True
         await session.commit()
 
-    if user.language_chosen:
-        await message.answer(t("welcome", user.language or "ru"))
-    else:
-        await message.answer(t("welcome_bilingual", "ru"))
+    await _send_start_welcome(message, session, user)
 
     if user.profile and user.profile.is_complete:
         await show_main_menu(message, user)

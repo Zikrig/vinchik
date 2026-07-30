@@ -9,7 +9,7 @@ from pathlib import Path
 import httpx
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
-from fastapi import Depends, FastAPI, Form, Request
+from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -43,7 +43,7 @@ from services.accounts import (
     update_account_user,
 )
 from services.users import load_user_with_profile, is_premium
-from services.media import LOCAL_PREFIX, local_photo_path
+from services.media import LOCAL_PREFIX, local_photo_path, project_root
 from services.premium import (
     approve_order,
     list_pending_orders,
@@ -61,13 +61,17 @@ from services.channels import (
     toggle_channel as flip_required_channel,
 )
 from services.settings_service import (
+    WELCOME_CAPTION_MAX,
     ensure_defaults,
     get_daily_like_limit,
     get_max_distance_km,
     get_payment_info,
     get_profile_reshow_days,
+    get_welcome_post,
     is_registration_only,
     set_setting,
+    set_welcome_post,
+    welcome_post_configured,
 )
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -339,6 +343,7 @@ def create_app() -> FastAPI:
             await session.execute(select(RequiredChannel).order_by(RequiredChannel.id))
         ).scalars().all()
         pay = await get_payment_info(session)
+        welcome = await get_welcome_post(session)
         admin_ids = sorted(settings.admin_id_set)
         admin_geo = {}
         for aid in admin_ids:
@@ -352,6 +357,8 @@ def create_app() -> FastAPI:
             "support": pay["support"],
             "payment_card": pay["card"],
             "payment_check_time": pay["check_time"],
+            "welcome_text": welcome["text"],
+            "welcome_has_photo": welcome_post_configured(welcome),
             "pending": pending,
             "premiums": premiums,
             "channels": channels,
@@ -800,6 +807,104 @@ def create_app() -> FastAPI:
                 "payment_card": payment_card.strip(),
                 "payment_check_time": payment_check_time.strip(),
             },
+        )
+
+    @app.get("/settings/welcome/photo")
+    async def welcome_photo(
+        request: Request, session: AsyncSession = Depends(get_db)
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        post = await get_welcome_post(session)
+        fid = post.get("photo_file_id") or ""
+        if not fid:
+            return Response(status_code=404)
+        local = local_photo_path(fid)
+        if local is not None:
+            return FileResponse(local)
+        if fid.startswith(LOCAL_PREFIX):
+            return Response(status_code=404)
+        try:
+            f = await request.app.state.bot.get_file(fid)
+            if not f.file_path:
+                return Response(status_code=404)
+            url = f"https://api.telegram.org/file/bot{settings.bot_token}/{f.file_path}"
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+            ctype = resp.headers.get("content-type") or "image/jpeg"
+            return Response(content=resp.content, media_type=ctype)
+        except Exception:
+            return Response(status_code=404)
+
+    @app.post("/settings/welcome")
+    async def save_welcome(
+        request: Request,
+        welcome_text: str = Form(""),
+        photo: UploadFile | None = File(None),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        text = (welcome_text or "").strip()[:WELCOME_CAPTION_MAX]
+        current = await get_welcome_post(session)
+        photo_id: str | None = None
+
+        if photo is not None and photo.filename:
+            raw = await photo.read()
+            if not raw:
+                return err_response(
+                    request,
+                    settings.abs_path("/"),
+                    error="Пустой файл картинки.",
+                )
+            if len(raw) > 5 * 1024 * 1024:
+                return err_response(
+                    request,
+                    settings.abs_path("/"),
+                    error="Картинка больше 5 МБ.",
+                )
+            ctype = (photo.content_type or "").lower()
+            name = (photo.filename or "").lower()
+            if ctype.endswith(".png") or "png" in ctype:
+                ext = ".png"
+            elif name.endswith(".webp") or "webp" in ctype:
+                ext = ".webp"
+            elif name.endswith((".gif",)) or "gif" in ctype:
+                ext = ".gif"
+            else:
+                ext = ".jpg"
+            rel = f"data/welcome_post{ext}"
+            dest = project_root() / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(raw)
+            for old in (project_root() / "data").glob("welcome_post.*"):
+                if old.resolve() != dest.resolve():
+                    try:
+                        old.unlink()
+                    except OSError:
+                        pass
+            photo_id = f"{LOCAL_PREFIX}{rel}"
+
+        if photo_id is None and not welcome_post_configured(current):
+            return err_response(
+                request,
+                settings.abs_path("/"),
+                error="Нужна картинка для приветственного поста.",
+            )
+
+        post = await set_welcome_post(
+            session,
+            photo_file_id=photo_id,
+            text=text,
+        )
+        return ok_response(
+            request,
+            settings.abs_path("/"),
+            message="Приветственный пост сохранён.",
+            welcome_has_photo=welcome_post_configured(post),
+            welcome_text=post["text"],
+            fields={"welcome_text": post["text"]},
         )
 
     @app.post("/settings/soft-launch")

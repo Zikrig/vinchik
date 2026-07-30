@@ -9,4 +9,5 @@ class AdminStates(StatesGroup):
     edit_check_time = State()
     edit_manager = State()
     edit_support = State()
+    edit_welcome = State()
     add_channel = State()

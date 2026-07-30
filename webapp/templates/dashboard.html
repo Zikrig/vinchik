@@ -121,6 +121,31 @@
         <button type="submit">Сохранить</button>
       </div>
     </form>
+
+    <h3>Приветственный пост (/start)</h3>
+    <p class="hint">Фото с текстом вместо стандартного приветствия. Показывается всегда при /start.</p>
+    <form method="post" action="{{ url('/settings/welcome') }}" enctype="multipart/form-data"
+          class="js-ajax" data-ajax="welcome">
+      <div class="row" style="align-items:flex-start;gap:16px;flex-wrap:wrap">
+        <div>
+          <div id="welcome-preview-wrap" style="{% if not welcome_has_photo %}display:none{% endif %}">
+            <img id="welcome-preview" src="{{ url('/settings/welcome/photo') }}"
+                 alt="welcome" style="max-width:220px;max-height:220px;border-radius:8px;display:block">
+          </div>
+          <p id="welcome-no-photo" class="hint" style="{% if welcome_has_photo %}display:none{% endif %}">Картинка ещё не задана.</p>
+        </div>
+        <div style="flex:1;min-width:240px">
+          <label>Текст (подпись к фото, до 1024 символов)
+            <textarea name="welcome_text" rows="5" maxlength="1024"
+                      placeholder="Можно на двух языках">{{ welcome_text }}</textarea>
+          </label>
+          <label style="margin-top:8px;display:block">Картинка (jpg/png/gif/webp, ≤5 МБ)
+            <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp">
+          </label>
+          <button type="submit" style="margin-top:10px">Сохранить пост</button>
+        </div>
+      </div>
+    </form>
   </section>
 
   <section class="panel" id="channels">

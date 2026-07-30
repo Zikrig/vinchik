@@ -764,6 +764,17 @@
             if (profileForm) window.applyFormFields(profileForm, data.profile_fields);
           }
           applyHero(data.hero);
+        } else if (kind === "welcome") {
+          window.applyFormFields(form, data.fields || {});
+          const wrap = document.getElementById("welcome-preview-wrap");
+          const img = document.getElementById("welcome-preview");
+          const empty = document.getElementById("welcome-no-photo");
+          if (data.welcome_has_photo && img && wrap) {
+            wrap.style.display = "";
+            if (empty) empty.style.display = "none";
+            const base = img.src.split("?")[0];
+            img.src = base + "?t=" + Date.now();
+          }
         } else if (kind === "likes-clear") {
           applyLikes(data.likes);
         }

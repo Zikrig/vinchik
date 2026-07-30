@@ -20,7 +20,16 @@ DEFAULTS = {
     "support_contact": settings.support_contact,
     "payment_card": settings.payment_card or "укажите карту в админке",
     "payment_check_time": settings.payment_check_time,
+    # Empty photo = fallback to locale welcome texts on /start.
+    "welcome_photo_file_id": "",
+    "welcome_text": (
+        "👋 Привет! Это бот для знакомств в Таджикистане.\n"
+        "Салом! Ин бот барои шиносоӣ дар Тоҷикистон аст."
+    ),
 }
+
+WELCOME_CAPTION_MAX = 1024
+WELCOME_LOCAL_REL = "data/welcome_post.jpg"
 
 _CACHE_TTL_SECONDS = 30.0
 _setting_cache: dict[str, tuple[float, str]] = {}
@@ -137,3 +146,31 @@ async def get_payment_info(session: AsyncSession) -> dict[str, str]:
         "card": await get_payment_card(session),
         "check_time": await get_payment_check_time(session),
     }
+
+
+async def get_welcome_post(session: AsyncSession) -> dict[str, str]:
+    """Configured /start welcome: photo file_id (or local:) + caption."""
+    photo = (await get_setting(session, "welcome_photo_file_id", "")).strip()
+    text = await get_setting(session, "welcome_text", DEFAULTS["welcome_text"])
+    return {"photo_file_id": photo, "text": (text or "")[:WELCOME_CAPTION_MAX]}
+
+
+async def set_welcome_post(
+    session: AsyncSession,
+    *,
+    photo_file_id: str | None = None,
+    text: str | None = None,
+) -> dict[str, str]:
+    """Update welcome post fields; pass None to leave a field unchanged."""
+    current = await get_welcome_post(session)
+    if photo_file_id is not None:
+        await set_setting(session, "welcome_photo_file_id", photo_file_id.strip())
+    if text is not None:
+        await set_setting(
+            session, "welcome_text", (text or "")[:WELCOME_CAPTION_MAX]
+        )
+    return await get_welcome_post(session)
+
+
+def welcome_post_configured(post: dict[str, str]) -> bool:
+    return bool((post.get("photo_file_id") or "").strip())
