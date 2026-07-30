@@ -9,6 +9,7 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import func, select, update
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
@@ -102,11 +103,14 @@ async def record_action(
         await session.execute(
             select(User)
             .where(User.tg_id == from_user.tg_id)
+            .options(selectinload(User.profile))
             .with_for_update()
             .execution_options(populate_existing=True)
         )
     ).scalar_one()
     from_user = locked_user
+    if from_user.profile is not None:
+        from_profile = from_user.profile
 
     if from_user.is_blocked:
         raise PermissionError("blocked")

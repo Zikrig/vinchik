@@ -104,6 +104,12 @@ async def start_browse(
     bot: Bot | None = None,
     state: FSMContext | None = None,
 ) -> None:
+    # After record_action / notify commits the caller's User may be expired —
+    # never touch user.profile via lazy load (MissingGreenlet).
+    fresh = await load_user(session, user.tg_id)
+    if fresh is None:
+        return
+    user = fresh
     lang = user.language or "ru"
     dest = bot or message.bot
     chat_id = user.tg_id
