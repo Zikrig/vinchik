@@ -98,10 +98,26 @@ async def show_my_profile(message: Message, user: User, profile: Profile) -> Non
     await message.answer(caption, reply_markup=kb)
 
 
-async def show_main_menu(message: Message, user: User) -> None:
+async def show_main_menu(
+    message: Message, user: User, *, with_help: bool = False
+) -> None:
+    lang = user.language or "ru"
+    if with_help:
+        await message.answer(
+            t(
+                "main_menu_help",
+                lang,
+                browse=t("menu_browse", lang),
+                my=t("menu_my", lang),
+                premium=t("menu_premium", lang),
+                settings=t("menu_settings", lang),
+                stop=t("menu_stop", lang),
+                share=t("menu_share", lang),
+            )
+        )
     await message.answer(
-        t("main_menu_title", user.language or "ru"),
-        reply_markup=main_menu_kb(user.language),
+        t("main_menu_title", lang),
+        reply_markup=main_menu_kb(lang),
     )
 
 

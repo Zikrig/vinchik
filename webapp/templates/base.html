@@ -461,6 +461,33 @@
       align-items: center;
       gap: .45rem;
     }
+    .gender-stats {
+      margin-bottom: 1rem;
+      padding: 1rem 1.15rem;
+      text-align: left;
+    }
+    .gender-stats-lines {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: .35rem;
+      text-align: left;
+      font-size: 1.05rem;
+      line-height: 1.45;
+      font-variant-numeric: tabular-nums;
+    }
+    .gender-stats-line {
+      text-align: left;
+      font-weight: 600;
+      letter-spacing: .01em;
+    }
+    .gender-stats-line.male { color: var(--male); }
+    .gender-stats-line.female { color: var(--female); }
+    .gender-stats-line.total { color: var(--ink); margin-top: .15rem; }
+    .gender-stats-line strong {
+      font-weight: 800;
+      margin-left: .15rem;
+    }
     .toast-host {
       position: fixed;
       right: 1rem;

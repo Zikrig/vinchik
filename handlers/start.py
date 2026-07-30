@@ -48,7 +48,7 @@ async def _continue_after_language(
 ) -> None:
     lang = user.language or "ru"
     if user.profile and user.profile.is_complete:
-        await show_main_menu(message, user)
+        await show_main_menu(message, user, with_help=True)
         return
 
     if not tg_username:
@@ -85,7 +85,7 @@ async def cmd_start(message: Message, session: AsyncSession, state: FSMContext) 
     await _send_start_welcome(message, session, user)
 
     if user.profile and user.profile.is_complete:
-        await show_main_menu(message, user)
+        await show_main_menu(message, user, with_help=True)
         return
 
     if not user.language_chosen:

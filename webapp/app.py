@@ -21,6 +21,7 @@ from config import settings
 from database.models import PremiumOrder, RequiredChannel
 from database.session import async_session_maker, init_db
 from services.admin_tools import (
+    count_profiles_by_gender,
     DUSHANBE_CITY,
     DUSHANBE_LAT,
     DUSHANBE_LON,
@@ -369,6 +370,7 @@ def create_app() -> FastAPI:
             "dushanbe_city": DUSHANBE_CITY,
             "test_users_count": await count_test_users(session),
             "test_users_visible": await are_test_users_visible(session),
+            "gender_stats": await count_profiles_by_gender(session),
             "flash": request.query_params.get("flash"),
         }
         return TEMPLATES.TemplateResponse(request, "dashboard.html", ctx)

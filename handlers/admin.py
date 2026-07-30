@@ -21,6 +21,7 @@ from services.channels import (
     resolve_channel_ref,
     toggle_channel,
 )
+from services.admin_tools import count_profiles_by_gender
 from services.premium import (
     approve_order,
     list_pending_orders,
@@ -234,12 +235,29 @@ def _order_kb(order_id: int, index: int, total: int) -> InlineKeyboardMarkup:
     )
 
 
+def _gender_stats_block(stats: dict[str, int]) -> str:
+    """Left-aligned column; numbers padded for visual column."""
+    m = stats["male"]
+    f = stats["female"]
+    z = stats["total"]
+    width = max(len(str(m)), len(str(f)), len(str(z)), 1)
+    return (
+        f"<pre>"
+        f"Парней:   {m:>{width}}\n"
+        f"Девушек:  {f:>{width}}\n"
+        f"Всего:    {z:>{width}}"
+        f"</pre>"
+    )
+
+
 async def _root_view(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     pending = await list_pending_orders(session)
     reg_only = await is_registration_only(session)
+    stats = await count_profiles_by_gender(session)
     soft = "🟢 ON (только регистрация)" if reg_only else "🔴 OFF (лента открыта)"
     text = (
         "Админка Vinchik\n\n"
+        f"{_gender_stats_block(stats)}\n"
         f"Soft-launch: {soft}\n"
         f"Заявок на оплату: {len(pending)}\n\n"
         "Баны и аккаунты — в веб-админке."

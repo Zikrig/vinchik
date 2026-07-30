@@ -154,6 +154,27 @@ async def count_test_users(session: AsyncSession) -> int:
     return int(result.scalar_one())
 
 
+async def count_profiles_by_gender(session: AsyncSession) -> dict[str, int]:
+    """Real (non-test) profiles with gender set. total = male + female."""
+    result = await session.execute(
+        select(Profile.gender, func.count())
+        .join(User, User.tg_id == Profile.user_id)
+        .where(
+            User.is_test.is_(False),
+            Profile.gender.is_not(None),
+        )
+        .group_by(Profile.gender)
+    )
+    males = 0
+    females = 0
+    for gender, n in result.all():
+        if gender == Gender.male:
+            males = int(n)
+        elif gender == Gender.female:
+            females = int(n)
+    return {"male": males, "female": females, "total": males + females}
+
+
 async def are_test_users_visible(session: AsyncSession) -> bool:
     """Admin switch state (setting). Profiles are synced when the switch flips."""
     from services.settings_service import are_test_users_visible_setting

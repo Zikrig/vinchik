@@ -20,6 +20,14 @@
   {% if flash == "soft_on" %}<p class="flash-ok">Soft-launch включён.</p>{% endif %}
   {% if flash == "soft_off" %}<p class="flash-ok">Soft-launch выключен — лента открыта.</p>{% endif %}
 
+  <section class="panel gender-stats" aria-label="Статистика по полу">
+    <div class="gender-stats-lines">
+      <div class="gender-stats-line male">Парней: <strong>{{ gender_stats.male }}</strong></div>
+      <div class="gender-stats-line female">Девушек: <strong>{{ gender_stats.female }}</strong></div>
+      <div class="gender-stats-line total">Всего: <strong>{{ gender_stats.total }}</strong></div>
+    </div>
+  </section>
+
   <nav class="jump">
     <a href="#status">⚙️ Режимы</a>
     <a href="#accounts">👥 Аккаунты</a>
