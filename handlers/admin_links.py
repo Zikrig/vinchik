@@ -7,7 +7,6 @@ from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
-    CopyTextButton,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
@@ -74,12 +73,6 @@ async def _link_detail_view(session: AsyncSession, link_id: int) -> tuple[str, I
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="✏️ Название", callback_data=f"adm:link:ren:{link.id}")],
-            [
-                InlineKeyboardButton(
-                    text="📋 Копировать ссылку",
-                    copy_text=CopyTextButton(text=url),
-                )
-            ],
             [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"adm:link:del:{link.id}")],
             [InlineKeyboardButton(text="⬅️ К списку", callback_data="adm:links")],
         ]
@@ -160,12 +153,6 @@ async def adm_link_create_name(
         f"<code>{html.escape(url)}</code>",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="📋 Копировать",
-                        copy_text=CopyTextButton(text=url),
-                    )
-                ],
                 [InlineKeyboardButton(text="Открыть", callback_data=f"adm:link:{link.id}")],
                 [InlineKeyboardButton(text="К списку", callback_data="adm:links")],
             ]
