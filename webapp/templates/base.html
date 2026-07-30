@@ -553,6 +553,96 @@
       display: inline-block;
       text-align: right;
     }
+    .link-presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .4rem;
+    }
+    .preset-btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--bg-accent);
+      color: var(--ink);
+      border-radius: 999px;
+      padding: .35rem .75rem;
+      font: inherit;
+      font-size: .82rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .preset-btn:hover { border-color: var(--brand); }
+    .preset-btn.active {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+    }
+    .bar-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: .55rem;
+      min-height: 200px;
+      padding: 1rem .25rem .5rem;
+      overflow-x: auto;
+      margin-bottom: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fbfcfb 0%, var(--bg-accent) 100%);
+    }
+    .bar-col {
+      flex: 1 1 64px;
+      min-width: 56px;
+      max-width: 110px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .35rem;
+    }
+    .bar-track {
+      width: 100%;
+      height: 140px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      background: rgba(255,255,255,.55);
+      border-radius: 10px 10px 4px 4px;
+      border: 1px solid var(--line);
+      overflow: hidden;
+    }
+    .bar-fill {
+      width: 70%;
+      min-height: 2px;
+      border-radius: 8px 8px 0 0;
+      background: linear-gradient(180deg, #3d9b74 0%, var(--brand) 100%);
+    }
+    .bar-val {
+      font-size: .8rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+    }
+    .bar-name {
+      font-size: .72rem;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.25;
+      max-width: 100%;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      word-break: break-word;
+    }
+    .bar-empty { margin: auto; padding: 1rem; }
+    .link-url {
+      display: inline-block;
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    .link-rename input { min-width: 140px; flex: 1; }
+    #links-table td { vertical-align: middle; }
     .toast-host {
       position: fixed;
       right: 1rem;
@@ -822,6 +912,11 @@
           const table = document.querySelector("#channels table");
           if (table) table.insertAdjacentHTML("beforeend", channelRowHtml(data.channel));
           form.reset();
+        } else if (kind === "link-create" || kind === "link-rename" || kind === "link-delete") {
+          if (typeof window.refreshTrackingStats === "function") {
+            await window.refreshTrackingStats();
+          }
+          if (kind === "link-create") form.reset();
         } else if (kind === "premium-save") {
           const status = document.querySelector("[data-premium-status]");
           const untilField = data.premium_until || "";

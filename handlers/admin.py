@@ -121,6 +121,7 @@ def _root_kb(reg_only: bool, pending_n: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=orders, callback_data="adm:orders:0")],
             [InlineKeyboardButton(text="⭐ Премиум юзеры", callback_data="adm:premiums:0")],
+            [InlineKeyboardButton(text="🔗 Ссылки", callback_data="adm:links")],
             [InlineKeyboardButton(text="📢 Каналы", callback_data="adm:channels")],
             [InlineKeyboardButton(text=soft, callback_data="adm:toggle_reg")],
             [InlineKeyboardButton(text="⚙️ Настройки", callback_data="adm:settings")],

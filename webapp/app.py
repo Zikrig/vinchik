@@ -3,6 +3,7 @@ from __future__ import annotations
 import ipaddress
 import secrets
 import time
+from datetime import date
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -42,6 +43,14 @@ from services.accounts import (
     set_account_premium,
     update_account_profile,
     update_account_user,
+)
+from services.tracking_links import (
+    click_counts,
+    create_link,
+    delete_link,
+    public_url,
+    rename_link,
+    resolve_range,
 )
 from services.users import load_user_with_profile, is_premium
 from services.media import LOCAL_PREFIX, local_photo_path, project_root
@@ -186,8 +195,44 @@ def wants_json(request: Request) -> bool:
     )
 
 
-def form_truthy(value: str | None) -> bool:
-    return (value or "").lower() in {"1", "true", "on", "yes"}
+def serialize_tracking_link(link, clicks: int = 0) -> dict:
+    return {
+        "id": link.id,
+        "name": link.name,
+        "code": link.code,
+        "url": public_url(link.code),
+        "clicks": int(clicks),
+    }
+
+
+def parse_iso_date(raw: str | None) -> date | None:
+    s = (raw or "").strip()
+    if not s:
+        return None
+    return date.fromisoformat(s)
+
+
+async def load_tracking_stats(
+    session: AsyncSession,
+    *,
+    preset: str | None = "all",
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> dict:
+    start, end, label = resolve_range(
+        preset=preset, date_from=date_from, date_to=date_to
+    )
+    rows = await click_counts(session, start=start, end=end)
+    items = [serialize_tracking_link(link, n) for link, n in rows]
+    return {
+        "label": label,
+        "preset": preset or ("custom" if date_from or date_to else "all"),
+        "date_from": date_from.isoformat() if date_from else "",
+        "date_to": date_to.isoformat() if date_to else "",
+        "items": items,
+        "total": sum(i["clicks"] for i in items),
+        "max_clicks": max((i["clicks"] for i in items), default=0) or 1,
+    }
 
 
 def ok_response(request: Request, redirect: str, **payload):
@@ -371,6 +416,7 @@ def create_app() -> FastAPI:
             "test_users_count": await count_test_users(session),
             "test_users_visible": await are_test_users_visible(session),
             "gender_stats": await count_profiles_by_gender(session),
+            "tracking_stats": await load_tracking_stats(session, preset="all"),
             "flash": request.query_params.get("flash"),
         }
         return TEMPLATES.TemplateResponse(request, "dashboard.html", ctx)
@@ -925,6 +971,93 @@ def create_app() -> FastAPI:
             settings.abs_path(f"/?flash={flash}"),
             on=on,
             message="Soft-launch включён." if on else "Soft-launch выключен — лента открыта.",
+        )
+
+    @app.get("/links/stats")
+    async def links_stats(
+        request: Request,
+        preset: str = "all",
+        date_from: str = "",
+        date_to: str = "",
+        session: AsyncSession = Depends(get_db),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        try:
+            df = parse_iso_date(date_from) if date_from else None
+            dt = parse_iso_date(date_to) if date_to else None
+        except ValueError:
+            return err_response(
+                request, settings.abs_path("/"), error="Неверная дата."
+            )
+        use_calendar = bool(date_from or date_to)
+        stats = await load_tracking_stats(
+            session,
+            preset=None if use_calendar else preset,
+            date_from=df,
+            date_to=dt,
+        )
+        return ok_response(request, settings.abs_path("/"), **stats)
+
+    @app.post("/links/create")
+    async def links_create(
+        request: Request,
+        name: str = Form(...),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        try:
+            link = await create_link(session, name)
+        except ValueError as exc:
+            return err_response(
+                request, settings.abs_path("/"), error=str(exc)
+            )
+        return ok_response(
+            request,
+            settings.abs_path("/"),
+            message="Ссылка создана.",
+            link=serialize_tracking_link(link, 0),
+        )
+
+    @app.post("/links/{link_id}/rename")
+    async def links_rename(
+        request: Request,
+        link_id: int,
+        name: str = Form(...),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        try:
+            link = await rename_link(session, link_id, name)
+        except ValueError as exc:
+            return err_response(request, settings.abs_path("/"), error=str(exc))
+        if link is None:
+            return err_response(request, settings.abs_path("/"), error="Не найдено.")
+        return ok_response(
+            request,
+            settings.abs_path("/"),
+            message="Название обновлено.",
+            link=serialize_tracking_link(link),
+        )
+
+    @app.post("/links/{link_id}/delete")
+    async def links_delete(
+        request: Request,
+        link_id: int,
+        session: AsyncSession = Depends(get_db),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        ok = await delete_link(session, link_id)
+        if not ok:
+            return err_response(request, settings.abs_path("/"), error="Не найдено.")
+        return ok_response(
+            request,
+            settings.abs_path("/"),
+            message="Ссылка удалена.",
+            link_id=link_id,
         )
 
     @app.post("/channels/add")

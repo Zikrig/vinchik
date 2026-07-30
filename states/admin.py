@@ -11,3 +11,5 @@ class AdminStates(StatesGroup):
     edit_support = State()
     edit_welcome = State()
     add_channel = State()
+    link_create_name = State()
+    link_rename = State()

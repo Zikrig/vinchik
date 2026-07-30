@@ -139,6 +139,12 @@ async def init_db() -> None:
                 "ALTER TABLE premium_orders ADD COLUMN IF NOT EXISTS receipt_kind VARCHAR(16)"
             )
         )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_tracking_clicks_link_created "
+                "ON tracking_clicks (link_id, created_at)"
+            )
+        )
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

@@ -261,3 +261,38 @@ class Report(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class TrackingLink(Base):
+    """Deep-link for ads / campaigns: t.me/bot?start=<code>."""
+
+    __tablename__ = "tracking_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    clicks: Mapped[list[TrackingClick]] = relationship(
+        back_populates="link", cascade="all, delete-orphan"
+    )
+
+
+class TrackingClick(Base):
+    __tablename__ = "tracking_clicks"
+    __table_args__ = (
+        Index("ix_tracking_clicks_link_created", "link_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    link_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tracking_links.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    link: Mapped[TrackingLink] = relationship(back_populates="clicks")

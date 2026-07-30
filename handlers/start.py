@@ -1,6 +1,6 @@
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,7 @@ from keyboards.inline import language_kb
 from locales import t
 from services.media import as_photo_input
 from services.settings_service import get_welcome_post, welcome_post_configured
+from services.tracking_links import record_click
 from services.users import get_or_create_user, set_language
 from states.profile import ProfileStates
 
@@ -62,10 +63,19 @@ async def _continue_after_language(
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, session: AsyncSession, state: FSMContext) -> None:
+async def cmd_start(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    command: CommandObject,
+) -> None:
     await state.clear()
     if message.from_user is None:
         return
+    payload = (command.args or "").strip()
+    if payload:
+        await record_click(session, payload, message.from_user.id)
+
     user = await get_or_create_user(
         session,
         message.from_user.id,
