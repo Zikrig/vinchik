@@ -330,7 +330,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="Vinchik Admin",
+        title="Dilino Admin",
         root_path=settings.web_root_path or "",
         lifespan=lifespan,
     )

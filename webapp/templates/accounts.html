@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Аккаунты — Vinchik Admin{% endblock %}
+{% block title %}Аккаунты — Dilino Admin{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
@@ -42,13 +42,8 @@
 </style>
 {% endblock %}
 {% block body %}
-<div class="topbar">
-  <div class="brand">Vinchik <span>Admin</span></div>
-  <div class="nav">
-    {% set nav = 'accounts' %}
-    {% include "_admin_nav.html" %}
-  </div>
-</div>
+{% set nav = 'accounts' %}
+{% include "_admin_topbar.html" %}
 <div class="wrap">
   {% if flash and flash.startswith("test_created_") %}<p class="flash-ok">Создано тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
   {% if flash and flash.startswith("test_cleared_") %}<p class="flash-ok">Удалено тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}

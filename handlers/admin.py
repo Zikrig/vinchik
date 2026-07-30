@@ -258,7 +258,7 @@ async def _root_view(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     stats = await count_profiles_by_gender(session)
     soft = "🟢 ON (только регистрация)" if reg_only else "🔴 OFF (лента открыта)"
     text = (
-        "Админка Vinchik\n\n"
+        "Админка Dilino\n\n"
         f"{_gender_stats_block(stats)}\n"
         f"Soft-launch: {soft}\n"
         f"Заявок на оплату: {len(pending)}\n\n"

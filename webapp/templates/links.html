@@ -1,13 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Ссылки — Vinchik Admin{% endblock %}
+{% block title %}Ссылки — Dilino Admin{% endblock %}
 {% block body %}
-<div class="topbar">
-  <div class="brand">Vinchik <span>Ссылки</span></div>
-  <div class="nav">
-    {% set nav = 'links' %}
-    {% include "_admin_nav.html" %}
-  </div>
-</div>
+{% set nav = 'links' %}
+{% set brand_suffix = 'Ссылки' %}
+{% include "_admin_topbar.html" %}
 <div class="wrap">
   <section class="panel" id="links" data-stats-url="{{ url('/links/stats') }}">
     <h2 class="panel-title">🔗 Ссылки</h2>

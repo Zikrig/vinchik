@@ -7,7 +7,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Задача | Путь |
 |--------|------|
 | Точка входа бота | `bot.py` |
-| Веб-админка | `web.py`, `webapp/` |
+| Веб-админка | `web.py`, `webapp/`; шапка/навигация — `templates/_admin_topbar.html`, `_admin_nav.html`, `_switch_compact.html` |
 | Список аккаунтов (поиск/фильтры) | `webapp/` → `/accounts`, `services/accounts.py` |
 | Карточка аккаунта (блоки: премиум / лайки / аккаунт / анкета) | `/accounts/{tg_id}`; премиум активен только если `premium_until > now` (`is_premium`); снять → `2004-01-01` |
 | Баны / подозрительные | `/bans`; `is_blocked` + `is_suspicious` + `suspicious_reason`; сообщения 💌 |

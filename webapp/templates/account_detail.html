@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Аккаунт {{ u.tg_id }} — Vinchik Admin{% endblock %}
+{% block title %}Аккаунт {{ u.tg_id }} — Dilino Admin{% endblock %}
 {% block head %}
 <style>
   .wrap { max-width: 960px; }
@@ -218,15 +218,8 @@
 </style>
 {% endblock %}
 {% block body %}
-<div class="topbar">
-  <div class="brand">Vinchik <span>Admin</span></div>
-  <div class="nav">
-    <a href="{{ url('/accounts') }}">← Аккаунты</a>
-    <a href="{{ url('/bans') }}">🚫 Баны</a>
-    <a href="{{ url('/') }}">📊 Дашборд</a>
-    <a href="{{ url('/logout') }}">Выйти</a>
-  </div>
-</div>
+{% set nav = 'account' %}
+{% include "_admin_topbar.html" %}
 <div class="wrap">
   {% if flash == 'saved' %}
   <p class="flash-ok">Сохранено.</p>

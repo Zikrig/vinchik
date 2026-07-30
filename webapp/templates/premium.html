@@ -1,13 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Премиум — Vinchik Admin{% endblock %}
+{% block title %}Премиум — Dilino Admin{% endblock %}
 {% block body %}
-<div class="topbar">
-  <div class="brand">Vinchik <span>Премиум</span></div>
-  <div class="nav">
-    {% set nav = 'premium' %}
-    {% include "_admin_nav.html" %}
-  </div>
-</div>
+{% set nav = 'premium' %}
+{% set brand_suffix = 'Премиум' %}
+{% include "_admin_topbar.html" %}
 <div class="wrap">
   <nav class="jump">
     <a href="#orders">💳 Заявки</a>

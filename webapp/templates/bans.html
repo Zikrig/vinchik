@@ -1,13 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Баны — Vinchik Admin{% endblock %}
+{% block title %}Баны — Dilino Admin{% endblock %}
 {% block body %}
-<div class="topbar">
-  <div class="brand">Vinchik <span>Баны</span></div>
-  <div class="nav">
-    {% set nav = 'bans' %}
-    {% include "_admin_nav.html" %}
-  </div>
-</div>
+{% set nav = 'bans' %}
+{% set brand_suffix = 'Баны' %}
+{% include "_admin_topbar.html" %}
 <div class="wrap">
   {% if flash == "unbanned" %}<p class="flash-ok">Пользователь разбанен.</p>{% endif %}
   {% if flash == "cleared" %}<p class="flash-ok">Флаг «подозрительный» снят.</p>{% endif %}

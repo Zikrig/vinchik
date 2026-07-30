@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Vinchik Admin — вход{% endblock %}
+{% block title %}Dilino Admin — вход{% endblock %}
 {% block body %}
 <div class="login-shell">
   <div class="login-card">
-    <h1>Vinchik <span style="color:var(--brand)">Admin</span></h1>
+    <h1>Dilino <span style="color:var(--brand)">Admin</span></h1>
     <p class="hint">Панель управления ботом знакомств</p>
     {% if error %}<p class="err">{{ error }}</p>{% endif %}
     <form method="post" action="{{ url('/login') }}">

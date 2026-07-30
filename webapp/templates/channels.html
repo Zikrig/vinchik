@@ -1,13 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Каналы — Vinchik Admin{% endblock %}
+{% block title %}Каналы — Dilino Admin{% endblock %}
 {% block body %}
-<div class="topbar">
-  <div class="brand">Vinchik <span>Каналы</span></div>
-  <div class="nav">
-    {% set nav = 'channels' %}
-    {% include "_admin_nav.html" %}
-  </div>
-</div>
+{% set nav = 'channels' %}
+{% set brand_suffix = 'Каналы' %}
+{% include "_admin_topbar.html" %}
 <div class="wrap">
   <section class="panel" id="channels">
     <h2 class="panel-title">📢 Обязательные каналы</h2>
