@@ -628,6 +628,65 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, bot: Bot) -
     await _redraw(callback, bot, text, kb)
 
 
+async def _seal_receipt_notice(callback: CallbackQuery, line: str) -> None:
+    """Mark the receipt push as done — do not open the /admin orders queue."""
+    message = callback.message
+    if not isinstance(message, Message):
+        return
+    try:
+        await message.edit_reply_markup(reply_markup=None)
+    except TelegramBadRequest:
+        pass
+    if message.caption is not None:
+        caption = f"{message.caption}\n\n{line}"
+        try:
+            await message.edit_caption(caption=caption)
+        except TelegramBadRequest:
+            pass
+        return
+    if message.text:
+        try:
+            await message.edit_text(f"{message.text}\n\n{line}")
+        except TelegramBadRequest:
+            pass
+
+
+@router.callback_query(F.data.startswith("adm:rok:"))
+async def adm_receipt_ok(
+    callback: CallbackQuery, session: AsyncSession, bot: Bot
+) -> None:
+    """Approve from the receipt notification (not the admin orders browser)."""
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(t("no_access", "ru"), show_alert=True)
+        return
+    order_id = int((callback.data or "").split(":")[2])
+    result = await approve_order(session, order_id, callback.from_user.id)
+    if result:
+        order, user = result
+        await notify_premium_activated(bot, user)
+        await callback.answer("Одобрено")
+        await _seal_receipt_notice(callback, "✅ Одобрено")
+    else:
+        await callback.answer("Уже обработана", show_alert=True)
+        await _seal_receipt_notice(callback, "ℹ️ Уже обработана")
+
+
+@router.callback_query(F.data.startswith("adm:rno:"))
+async def adm_receipt_no(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Reject from the receipt notification (not the admin orders browser)."""
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(t("no_access", "ru"), show_alert=True)
+        return
+    order_id = int((callback.data or "").split(":")[2])
+    order = await reject_order(session, order_id, callback.from_user.id)
+    if order:
+        await callback.answer("Отклонено")
+        await _seal_receipt_notice(callback, "❌ Отклонено")
+    else:
+        await callback.answer("Уже обработана", show_alert=True)
+        await _seal_receipt_notice(callback, "ℹ️ Уже обработана")
+
+
 @router.callback_query(F.data.startswith("adm:ok:"))
 async def adm_ok(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
     if not _is_admin(callback.from_user.id):

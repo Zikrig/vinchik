@@ -127,10 +127,10 @@ async def _notify_admins_receipt(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="✅ Подтвердить", callback_data=f"adm:ok:{order.id}:0"
+                    text="✅ Подтвердить", callback_data=f"adm:rok:{order.id}"
                 ),
                 InlineKeyboardButton(
-                    text="❌ Отклонить", callback_data=f"adm:no:{order.id}:0"
+                    text="❌ Отклонить", callback_data=f"adm:rno:{order.id}"
                 ),
             ]
         ]
