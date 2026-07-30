@@ -494,7 +494,7 @@
   </style>
   {% block head %}{% endblock %}
 </head>
-<body>
+<body data-login-url="{{ url('/login') }}">
   {% block body %}{% endblock %}
   <div class="toast-host" id="toast-host" aria-live="polite"></div>
   <script>
@@ -549,7 +549,7 @@
         data = { ok: false, error: "Некорректный ответ сервера" };
       }
       if (res.status === 401) {
-        window.location.href = {{ url('/login') | tojson }};
+        window.location.href = document.body.dataset.loginUrl;
         throw new Error("auth");
       }
       if (res.status === 405) {
