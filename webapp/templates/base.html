@@ -63,38 +63,68 @@
       top: 0;
       z-index: 200;
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      gap: 1rem 1.5rem;
-      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 1rem;
       box-sizing: border-box;
       width: 100%;
+      min-height: 4.25rem;
       margin: 0 0 1.25rem;
-      padding: 0.7rem 1rem;
-      background: rgba(243, 246, 244, 0.96);
+      padding: 0.75rem 5.5rem 0.75rem 1rem;
+      background: rgba(214, 224, 218, 0.97);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(213, 224, 218, 0.9);
-      box-shadow: 0 8px 20px rgba(26, 36, 32, 0.05);
+      border-bottom: 1px solid rgba(170, 186, 178, 0.95);
+      box-shadow: 0 8px 22px rgba(26, 36, 32, 0.08);
     }
-    .topbar > .nav {
-      margin-left: auto;
-    }
-    .topbar-end {
+    .topbar-core {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
       display: flex;
       align-items: center;
-      gap: 1rem;
+      justify-content: center;
+      gap: 1rem 1.35rem;
       flex-wrap: wrap;
-      margin-left: auto;
+      max-width: min(920px, calc(100% - 11rem));
+      z-index: 0;
+      pointer-events: none;
     }
+    .topbar-core > * { pointer-events: auto; }
     .brand {
       font-family: Manrope, sans-serif;
       font-weight: 700;
-      font-size: 1.35rem;
+      font-size: 2rem;
+      white-space: nowrap;
     }
     .brand span { color: var(--brand); }
-    .nav { display: flex; gap: .85rem; align-items: center; flex-wrap: wrap; }
+    .nav { display: flex; gap: .85rem; align-items: center; flex-wrap: wrap; justify-content: center; }
     .nav a.is-active { color: var(--ink); font-weight: 700; text-decoration: none; }
+    .nav-logout {
+      position: absolute;
+      top: 0.35rem;
+      right: 0.65rem;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.38rem 0.85rem;
+      border-radius: 999px;
+      background: var(--ink);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.82rem;
+      letter-spacing: 0.02em;
+      text-decoration: none;
+      border: 1px solid #0f1613;
+      box-shadow: 0 2px 8px rgba(26, 36, 32, 0.22);
+    }
+    .nav-logout:hover {
+      background: #000;
+      color: #fff;
+      text-decoration: none;
+    }
     .btn {
       display: inline-flex;
       align-items: center;
@@ -568,6 +598,8 @@
       gap: .45rem;
     }
     .gender-stats {
+      position: relative;
+      z-index: 1;
       margin: 0;
       margin-right: auto;
       padding: 0;

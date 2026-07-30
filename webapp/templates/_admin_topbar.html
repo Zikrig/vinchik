@@ -2,7 +2,8 @@
    Set before include:
      nav — dashboard|accounts|channels|links|premium|bans|account
      brand_suffix — optional (default Admin)
-   Optional context: gender_stats {male,female,total} — left side of the bar.
+   Optional context: gender_stats {male,female,total} — left edge.
+   Logout — right edge. Brand + nav — centered.
 #}
 <div class="topbar">
   {% if gender_stats is defined and gender_stats %}
@@ -14,15 +15,17 @@
     </div>
   </div>
   {% endif %}
-  <div class="brand">Dilino <span>{{ brand_suffix|default('Admin') }}</span></div>
-  <div class="nav">
-    {% if nav == 'account' %}
-    <a href="{{ url('/accounts') }}">← Аккаунты</a>
-    <a href="{{ url('/bans') }}">🚫 Баны</a>
-    <a href="{{ url('/') }}">📊 Дашборд</a>
-    <a href="{{ url('/logout') }}">Выйти</a>
-    {% else %}
-    {% include "_admin_nav.html" %}
-    {% endif %}
+  <div class="topbar-core">
+    <div class="brand">Dilino <span>{{ brand_suffix|default('Admin') }}</span></div>
+    <div class="nav">
+      {% if nav == 'account' %}
+      <a href="{{ url('/accounts') }}">← Аккаунты</a>
+      <a href="{{ url('/bans') }}">🚫 Баны</a>
+      <a href="{{ url('/') }}">📊 Дашборд</a>
+      {% else %}
+      {% include "_admin_nav.html" %}
+      {% endif %}
+    </div>
   </div>
+  <a href="{{ url('/logout') }}" class="nav-logout">Выйти</a>
 </div>
