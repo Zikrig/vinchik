@@ -68,9 +68,9 @@
       gap: 1rem;
       box-sizing: border-box;
       width: 100%;
-      min-height: 4.25rem;
+      min-height: 6.75rem;
       margin: 0 0 1.25rem;
-      padding: 0.75rem 4rem 0.75rem 2.75rem;
+      padding: 1.15rem 4rem 1.25rem 2.75rem;
       background: rgba(214, 224, 218, 0.97);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
@@ -79,14 +79,14 @@
     }
     .topbar-core {
       position: absolute;
-      left: 50%;
-      top: 50%;
+      left: 48%;
+      top: 54%;
       transform: translate(-50%, -50%);
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 1rem 1.35rem;
-      flex-wrap: wrap;
+      gap: 0.55rem;
       max-width: min(920px, calc(100% - 11rem));
       z-index: 0;
       pointer-events: none;
@@ -96,14 +96,24 @@
       font-family: Manrope, sans-serif;
       font-weight: 700;
       font-size: 2.65rem;
+      line-height: 1.05;
       white-space: nowrap;
+      align-self: flex-start;
+      margin-left: -0.35rem;
     }
     .brand span { color: var(--brand); }
-    .nav { display: flex; gap: .85rem; align-items: center; flex-wrap: wrap; justify-content: center; }
+    .nav {
+      display: flex;
+      gap: .85rem;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+      line-height: 1.2;
+    }
     .nav a.is-active { color: var(--ink); font-weight: 700; text-decoration: none; }
     .nav-logout {
       position: absolute;
-      top: 0.45rem;
+      top: 1.35rem;
       right: 2.75rem;
       z-index: 1;
       display: inline-flex;
@@ -608,20 +618,20 @@
       border: 0;
       box-shadow: none;
       flex-shrink: 0;
-      text-align: left;
+      text-align: right;
     }
     .gender-stats-lines {
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
+      align-items: flex-end;
       gap: .2rem;
-      text-align: left;
+      text-align: right;
       font-size: .92rem;
       line-height: 1.35;
       font-variant-numeric: tabular-nums;
     }
     .gender-stats-line {
-      text-align: left;
+      text-align: right;
       font-weight: 600;
       letter-spacing: .01em;
       white-space: nowrap;
@@ -634,7 +644,7 @@
       margin-left: .25rem;
       min-width: 1.5ch;
       display: inline-block;
-      text-align: left;
+      text-align: right;
     }
     .link-presets {
       display: flex;
