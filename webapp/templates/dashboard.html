@@ -184,7 +184,7 @@
     </table>
     <h3>Добавить канал</h3>
     <form method="post" action="{{ url('/channels/add') }}" class="row js-ajax" data-ajax="channel-add">
-      <input name="channel_id" placeholder="@channel или https://t.me/channel" required>
+      <input type="text" name="channel_id" placeholder="@channel или https://t.me/channel" required>
       <button type="submit">Добавить</button>
     </form>
   </section>

@@ -126,7 +126,14 @@
     input[type="text"],
     input[type="password"],
     input[type="number"],
-    select {
+    input[type="search"],
+    input[type="url"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="datetime-local"],
+    input:not([type]),
+    select,
+    textarea {
       min-width: 140px;
       padding: .55rem .7rem;
       border: 1px solid var(--line);
@@ -134,10 +141,53 @@
       background: #fff;
       color: var(--ink);
       font: inherit;
+      line-height: 1.4;
+      transition: border-color .15s ease, box-shadow .15s ease;
     }
-    input:focus, select:focus {
+    label > :is(input, select, textarea) {
+      width: 100%;
+      min-width: 0;
+    }
+    .row > input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]) {
+      flex: 1 1 220px;
+      min-width: 180px;
+    }
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+    input[type="file"] {
+      width: 100%;
+      min-width: 0;
+      padding: .55rem .7rem;
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      background: var(--bg-accent);
+      color: var(--muted);
+      font: inherit;
+      cursor: pointer;
+    }
+    input[type="file"]:hover {
+      border-color: var(--brand);
+      color: var(--ink);
+    }
+    input::placeholder,
+    textarea::placeholder {
+      color: #8a9a92;
+      opacity: 1;
+    }
+    input:focus,
+    select:focus,
+    textarea:focus,
+    input[type="file"]:focus {
       outline: 2px solid rgba(31, 107, 79, .25);
       border-color: var(--brand);
+    }
+    input[readonly],
+    textarea[readonly] {
+      background: var(--bg-accent);
+      color: var(--ink);
+      cursor: default;
     }
     button, .btn {
       appearance: none;
