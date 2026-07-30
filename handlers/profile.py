@@ -13,6 +13,7 @@ from database.models import Gender, LookingFor, Profile, User
 from handlers.common import (
     after_profile_ready,
     callback_context,
+    drop_reply_keyboard,
     ensure_user,
     load_user,
     message_user,
@@ -183,7 +184,7 @@ async def set_looking(callback: CallbackQuery, session: AsyncSession, state: FSM
     await state.set_state(ProfileStates.location)
     reply, inline = location_kb(user.language, has_current=profile.lat is not None)
     await cb_message.answer(t("ask_location", user.language), reply_markup=reply)
-    await cb_message.answer(".", reply_markup=inline)
+    await cb_message.answer(t("location_more", user.language), reply_markup=inline)
 
 
 @router.message(ProfileStates.location, F.location)
@@ -196,7 +197,7 @@ async def set_location(message: Message, session: AsyncSession, state: FSMContex
     profile.lon = message.location.longitude
     profile.city_name = await reverse_geocode(profile.lat, profile.lon)
     await session.commit()
-    await message.answer("OK", reply_markup=ReplyKeyboardRemove())
+    await drop_reply_keyboard(message)
     await state.set_state(ProfileStates.name)
     kb = keep_kb(user.language, "keep:name") if profile.name else None
     await message.answer(t("ask_name", user.language), reply_markup=kb)
@@ -240,7 +241,7 @@ async def location_text_search(
     if not hits:
         reply, inline = location_kb(lang, has_current=profile.lat is not None)
         await message.answer(t("location_not_found", lang), reply_markup=reply)
-        await message.answer(".", reply_markup=inline)
+        await message.answer(t("location_more", lang), reply_markup=inline)
         await state.set_state(ProfileStates.location)
         return
 
@@ -341,7 +342,7 @@ async def keep_location(callback: CallbackQuery, session: AsyncSession, state: F
         return
     user, cb_message = ctx
     await callback.answer()
-    await cb_message.answer("OK", reply_markup=ReplyKeyboardRemove())
+    await drop_reply_keyboard(cb_message)
     await state.set_state(ProfileStates.name)
     kb = keep_kb(user.language, "keep:name") if user.profile and user.profile.name else None
     await cb_message.answer(t("ask_name", user.language), reply_markup=kb)

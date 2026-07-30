@@ -1,9 +1,9 @@
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, ReplyKeyboardRemove
+from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from handlers.common import blocked_text, callback_context, show_main_menu, show_my_profile
+from handlers.common import blocked_text, callback_context, drop_reply_keyboard, show_main_menu, show_my_profile
 from handlers.profile import begin_profile_flow
 from keyboards.inline import language_kb, main_menu_kb, settings_kb, stop_confirm_kb
 from locales import t
@@ -39,7 +39,7 @@ async def menu_root(
         return
     await state.clear()
     await callback.answer()
-    await message.answer("☰", reply_markup=ReplyKeyboardRemove())
+    await drop_reply_keyboard(message)
     await show_main_menu(message, user)
 
 

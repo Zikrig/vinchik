@@ -88,6 +88,8 @@ TEXTS = {
     "menu_stop": "🚫 Больше не ищу",
     "menu_share": "✈️ Поделиться ботом",
     "share_bot_text": "Бот для знакомств в Таджикистане — заходи!",
+    "main_menu_title": "Меню",
+    "location_more": "Или так:",
     "settings_title": "Настройки",
     "settings_language": "🌐 Язык",
     "settings_channels": "📢 Каналы",

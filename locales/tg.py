@@ -88,6 +88,8 @@ TEXTS = {
     "menu_stop": "🚫 Дигар намеҷӯям",
     "menu_share": "✈️ Мубодилаи бот",
     "share_bot_text": "Бот барои шиносоӣ дар Тоҷикистон — биё!",
+    "main_menu_title": "Меню",
+    "location_more": "Ё чунин:",
     "settings_title": "Танзимот",
     "settings_language": "🌐 Забон",
     "settings_channels": "📢 Каналҳо",

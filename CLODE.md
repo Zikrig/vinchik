@@ -55,10 +55,10 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - `/start` (`handlers/start.py`): если задан приветственный пост (фото) — он вместо `welcome` / `welcome_bilingual`; иначе тексты из локалей; выбор языка только если `language_chosen=False`; иначе продолжение регистрации / меню. Флаг ставится в `set_language`; у готовых анкет — автозаполнение для старых строк.
 - Вне FSM любое личное сообщение → главное меню (`handlers/fallback.py`).
 - Хендлеры не используют `assert` для входных данных: юзер берётся через `callback_context` / `message_user` / `ensure_user` (`handlers/common.py`), они же чинят пропавшую строку `users`. Протухшая кнопка (нет тела сообщения) → алерт `stale_button`. В админке экран перерисовывает `_redraw` (правка на месте, иначе новое сообщение).
-- Терминальные ответы (оплата отмечена, премиум включён, пустая лента, soft-launch, список лайков, reengage, лимит) — с `main_menu_kb`.
+- Терминальные ответы (оплата, премиум, пустая лента → `empty_feed_kb`, soft-launch, лайки, reengage, лимит) — с inline-меню; заголовок хаба — `main_menu_title` (не «☰»). Снятие reply-kb — `drop_reply_keyboard` (без «.» / «OK» / «🚪»).
 - Оплата Премиум: кнопка «Отправить чек» → FSM `PremiumStates.awaiting_receipt` (фото/документ + «Отмена», кнопка снимается после файла); `receipt_file_id`/`receipt_kind` в `premium_orders`; одна pending-заявка на пользователя (повтор «Купить» возвращает её); пересылка админам; веб `/orders/{id}/receipt` + превью в `#orders`.
 - Массовых рассылок нет.
-- Сообщения про лимит / like_sent слать через `bot.send_message(user_id)`, не через `callback.message.answer` (фото / InaccessibleMessage).
+- Сообщения про лимит / like_sent слать через `bot.send_message(user_id)`, не через `callback.message.answer` (фото / InaccessibleMessage). Последний лайк дня: одно сообщение «лайк отправлен» + текст лимита.
 
 ## Ловушки
 

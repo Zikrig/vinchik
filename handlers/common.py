@@ -87,11 +87,23 @@ async def show_my_profile(message: Message, user: User, profile: Profile) -> Non
         await message.answer(caption, reply_markup=kb)
         return
     await message.answer_media_group(media)
-    await message.answer("☰", reply_markup=kb)
+    await message.answer(t("my_profile_title", lang), reply_markup=kb)
 
 
 async def show_main_menu(message: Message, user: User) -> None:
-    await message.answer("☰", reply_markup=main_menu_kb(user.language))
+    await message.answer(
+        t("main_menu_title", user.language or "ru"),
+        reply_markup=main_menu_kb(user.language),
+    )
+
+
+async def drop_reply_keyboard(message: Message) -> None:
+    """Remove reply keyboard without leaving a visible '.' / junk message."""
+    rm = await message.answer("\u2060", reply_markup=ReplyKeyboardRemove())
+    try:
+        await rm.delete()
+    except Exception:
+        pass
 
 
 async def after_profile_ready(
@@ -115,7 +127,7 @@ async def after_profile_ready(
             )
         await show_my_profile(message, user, user.profile)  # type: ignore[arg-type]
         return
-    await message.answer(".", reply_markup=ReplyKeyboardRemove())
+    await drop_reply_keyboard(message)
     if not is_premium(user):
         await message.answer(
             t("premium_promo", lang),

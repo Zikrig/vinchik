@@ -6,10 +6,18 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import LikeAction, User
-from handlers.common import blocked_text, callback_context, load_user, message_user, show_main_menu
+from handlers.common import (
+    blocked_text,
+    callback_context,
+    drop_reply_keyboard,
+    load_user,
+    message_user,
+    show_main_menu,
+)
 from keyboards.inline import (
     browse_reply_kb,
     channels_kb,
+    empty_feed_kb,
     main_menu_kb,
     message_compose_kb,
     premium_cta_kb,
@@ -47,9 +55,13 @@ def _is_btn(text: str | None, key: str, lang: str) -> bool:
     return text in {t(key, lang), t(key, "ru"), t(key, "tg")}
 
 
-async def _say_limit(message: Message, lang: str) -> None:
+async def _say_limit(
+    message: Message, lang: str, *, preface: str | None = None
+) -> None:
+    await drop_reply_keyboard(message)
     body = _limit_promo_text(lang)
-    await message.answer(".", reply_markup=ReplyKeyboardRemove())
+    if preface:
+        body = f"{preface}\n\n{body}"
     await message.answer(body, reply_markup=premium_cta_kb(lang, with_main_menu=True))
 
 
@@ -69,8 +81,8 @@ async def _guard_feed_user(
         return False
     if await is_registration_only(session):
         await state.clear()
-        await message.answer(t("soft_launch", lang), reply_markup=ReplyKeyboardRemove())
-        await show_main_menu(message, user)
+        await drop_reply_keyboard(message)
+        await message.answer(t("soft_launch", lang), reply_markup=main_menu_kb(lang))
         return False
     return True
 
@@ -127,23 +139,21 @@ async def start_browse(
     if await is_registration_only(session):
         if state:
             await state.clear()
-        await say(t("soft_launch", lang), reply_markup=ReplyKeyboardRemove())
-        await say("☰", reply_markup=main_menu_kb(lang))
+        await drop_reply_keyboard(message)
+        await say(t("soft_launch", lang), reply_markup=main_menu_kb(lang))
         return
     if not await user_subscribed_all(dest, session, user):
         if state:
             await state.clear()
         channels = await list_active_channels(session)
         body = t("need_channels", lang, channels=format_channels_lines(channels))
-        await say(".", reply_markup=ReplyKeyboardRemove())
+        await drop_reply_keyboard(message)
         await say(body, reply_markup=channels_kb(lang, channels))
         return
     if not await can_browse(session, user, user.profile):
         if state:
             await state.clear()
-        body = _limit_promo_text(lang)
-        await say(".", reply_markup=ReplyKeyboardRemove())
-        await say(body, reply_markup=premium_cta_kb(lang, with_main_menu=True))
+        await _say_limit(message, lang)
         return
     if not user.profile or not user.profile.is_complete:
         from handlers.profile import begin_profile_flow
@@ -157,7 +167,7 @@ async def start_browse(
         # Switched off by the user ("Больше не ищу") or by an admin — ask first.
         if state:
             await state.clear()
-        await say(".", reply_markup=ReplyKeyboardRemove())
+        await drop_reply_keyboard(message)
         await say(t("profile_hidden", lang), reply_markup=profile_enable_kb(lang))
         return
 
@@ -167,8 +177,8 @@ async def start_browse(
     if profile is None:
         if state:
             await state.clear()
-        await say(t("empty_feed", lang), reply_markup=ReplyKeyboardRemove())
-        await say("☰", reply_markup=main_menu_kb(lang))
+        await drop_reply_keyboard(message)
+        await say(t("empty_feed", lang), reply_markup=empty_feed_kb(lang))
         return
 
     if state:
@@ -263,6 +273,20 @@ async def _rate_from_message(
 
     if like and action in (LikeAction.like, LikeAction.message):
         await notify_like_batch(bot, session, int(target_id))
+
+    fresh = await load_user(session, user.tg_id)
+    if fresh is None:
+        return
+    user = fresh
+
+    # Last like of the day: one message (confirm + limit), no junk ".".
+    if like and action == LikeAction.like and not await can_browse(
+        session, user, user.profile
+    ):
+        await state.clear()
+        await _say_limit(message, lang, preface=t("like_sent", lang))
+        return
+
     if like and action == LikeAction.like:
         await bot.send_message(user.tg_id, t("like_sent", lang))
 
@@ -298,7 +322,7 @@ async def browse_reply_action(
         return
     if _is_btn(text, "btn_sleep", lang):
         await state.clear()
-        await message.answer("🚪", reply_markup=ReplyKeyboardRemove())
+        await drop_reply_keyboard(message)
         await show_main_menu(message, user)
         return
 
@@ -328,11 +352,7 @@ async def _start_message_flow(
     )
     # ReplyKeyboardRemove and InlineKeyboard can't share one message — drop
     # the browse kb via a disposable message, then one visible prompt + Cancel.
-    rm = await message.answer("\u2060", reply_markup=ReplyKeyboardRemove())
-    try:
-        await rm.delete()
-    except Exception:
-        pass
+    await drop_reply_keyboard(message)
     await message.answer(
         t("ask_message", lang),
         reply_markup=message_compose_kb(lang),
@@ -426,6 +446,13 @@ async def _finalize_message(
     await state.clear()
     if like:
         await notify_like_batch(bot, session, target_id)
+        fresh = await load_user(session, user.tg_id)
+        if fresh is None:
+            return
+        user = fresh
+        if not await can_browse(session, user, user.profile):
+            await _say_limit(message, lang, preface=t("message_sent", lang))
+            return
         await message.answer(t("message_sent", lang))
     await start_browse(message, session, user, bot, state)
 
