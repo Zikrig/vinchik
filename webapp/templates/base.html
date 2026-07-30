@@ -670,62 +670,145 @@
       color: #fff;
     }
     .bar-chart {
+      --bar-plot: 200px;
       display: flex;
       align-items: flex-end;
-      gap: .55rem;
-      min-height: 200px;
-      padding: 1rem .25rem .5rem;
+      justify-content: flex-start;
+      gap: .85rem;
+      min-height: calc(var(--bar-plot) + 4.5rem);
+      padding: 1.35rem 1.15rem 1rem;
       overflow-x: auto;
-      margin-bottom: 1rem;
-      border: 1px solid var(--line);
+      margin-bottom: 1.25rem;
+      border: 1px solid rgba(170, 186, 178, 0.9);
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.82) 0%, rgba(236, 243, 238, .95) 100%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+      position: relative;
+    }
+    .bar-chart::before {
+      content: "";
+      position: absolute;
+      left: 1.15rem;
+      right: 1.15rem;
+      bottom: calc(1rem + 2.6rem);
+      height: var(--bar-plot);
+      pointer-events: none;
       border-radius: 12px;
-      background: linear-gradient(180deg, #fbfcfb 0%, var(--bg-accent) 100%);
+      background:
+        repeating-linear-gradient(
+          to top,
+          transparent 0,
+          transparent calc(25% - 1px),
+          rgba(26, 36, 32, 0.07) calc(25% - 1px),
+          rgba(26, 36, 32, 0.07) 25%
+        );
+      border-bottom: 1px solid rgba(26, 36, 32, 0.12);
+      opacity: .9;
     }
     .bar-col {
-      flex: 1 1 64px;
-      min-width: 56px;
-      max-width: 110px;
+      position: relative;
+      z-index: 1;
+      flex: 1 1 76px;
+      min-width: 68px;
+      max-width: 118px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: .35rem;
+      gap: .4rem;
     }
     .bar-track {
       width: 100%;
-      height: 140px;
+      height: var(--bar-plot);
       display: flex;
       align-items: flex-end;
       justify-content: center;
-      background: rgba(255,255,255,.55);
-      border-radius: 10px 10px 4px 4px;
-      border: 1px solid var(--line);
-      overflow: hidden;
+      background: transparent;
+      border: 0;
+      overflow: visible;
     }
     .bar-fill {
-      width: 70%;
-      min-height: 2px;
-      border-radius: 8px 8px 0 0;
-      background: linear-gradient(180deg, #3d9b74 0%, var(--brand) 100%);
+      width: 46%;
+      max-width: 42px;
+      min-width: 28px;
+      height: var(--bar-h, 0%);
+      min-height: 4px;
+      border-radius: 999px 999px 10px 10px;
+      background:
+        linear-gradient(180deg,
+          #7ed6b0 0%,
+          #3fa87a 38%,
+          var(--brand) 72%,
+          #164c38 100%);
+      box-shadow:
+        0 10px 22px rgba(31, 107, 79, 0.28),
+        inset 0 1px 0 rgba(255,255,255,.45),
+        inset 0 -8px 14px rgba(0,0,0,.08);
+      transform-origin: bottom center;
+      animation: bar-rise .55s cubic-bezier(.22, 1, .36, 1);
+      transition: filter .18s ease, box-shadow .18s ease;
+    }
+    .bar-col:nth-child(4n+2) .bar-fill {
+      background:
+        linear-gradient(180deg, #8ec5ff 0%, #4f8fdb 40%, #2563eb 75%, #1e3a8a 100%);
+      box-shadow:
+        0 10px 22px rgba(37, 99, 235, 0.24),
+        inset 0 1px 0 rgba(255,255,255,.45),
+        inset 0 -8px 14px rgba(0,0,0,.08);
+    }
+    .bar-col:nth-child(4n+3) .bar-fill {
+      background:
+        linear-gradient(180deg, #f7b3d2 0%, #e879b0 40%, #db2777 75%, #9d174d 100%);
+      box-shadow:
+        0 10px 22px rgba(219, 39, 119, 0.22),
+        inset 0 1px 0 rgba(255,255,255,.45),
+        inset 0 -8px 14px rgba(0,0,0,.08);
+    }
+    .bar-col:nth-child(4n+4) .bar-fill {
+      background:
+        linear-gradient(180deg, #f6d58a 0%, #e0b04a 40%, #a16207 75%, #713f12 100%);
+      box-shadow:
+        0 10px 22px rgba(161, 98, 7, 0.22),
+        inset 0 1px 0 rgba(255,255,255,.45),
+        inset 0 -8px 14px rgba(0,0,0,.08);
+    }
+    .bar-col:hover .bar-fill {
+      filter: brightness(1.07) saturate(1.05);
+      box-shadow:
+        0 14px 26px rgba(26, 36, 32, 0.22),
+        inset 0 1px 0 rgba(255,255,255,.5);
+    }
+    @keyframes bar-rise {
+      from { transform: scaleY(0); opacity: .35; }
+      to { transform: scaleY(1); opacity: 1; }
     }
     .bar-val {
-      font-size: .8rem;
-      font-weight: 700;
+      font-size: .78rem;
+      font-weight: 800;
       font-variant-numeric: tabular-nums;
       color: var(--ink);
+      background: rgba(255,255,255,.88);
+      border: 1px solid rgba(170, 186, 178, 0.85);
+      border-radius: 999px;
+      padding: .12rem .55rem;
+      line-height: 1.35;
+      box-shadow: 0 2px 8px rgba(26, 36, 32, 0.06);
     }
     .bar-name {
-      font-size: .72rem;
+      font-size: .74rem;
+      font-weight: 600;
       color: var(--muted);
       text-align: center;
-      line-height: 1.25;
+      line-height: 1.3;
       max-width: 100%;
+      min-height: 2.4em;
       overflow: hidden;
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       word-break: break-word;
     }
-    .bar-empty { margin: auto; padding: 1rem; }
+    .bar-empty { margin: auto; padding: 1.5rem; position: relative; z-index: 1; }
     .link-url {
       display: inline-block;
       max-width: 220px;

@@ -50,7 +50,7 @@
       <div class="bar-col" data-link-id="{{ item.id }}" title="{{ item.name }}: {{ item.clicks }}">
         <div class="bar-val">{{ item.clicks }}</div>
         <div class="bar-track">
-          <div class="bar-fill" style="height: {{ (item.clicks / tracking_stats.max_clicks * 100)|round(1) }}%"></div>
+          <div class="bar-fill" style="--bar-h: {{ (item.clicks / tracking_stats.max_clicks * 100)|round(1) }}%"></div>
         </div>
         <div class="bar-name">{{ item.name }}</div>
       </div>
@@ -125,7 +125,7 @@
       return (
         '<div class="bar-col" data-link-id="' + item.id + '" title="' + escapeHtml(item.name) + ": " + item.clicks + '">' +
         '<div class="bar-val">' + item.clicks + "</div>" +
-        '<div class="bar-track"><div class="bar-fill" style="height:' + h + '%"></div></div>' +
+        '<div class="bar-track"><div class="bar-fill" style="--bar-h:' + h + '%"></div></div>' +
         '<div class="bar-name">' + escapeHtml(item.name) + "</div></div>"
       );
     }).join("");
