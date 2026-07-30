@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,16 +98,22 @@ async def _send_profile_card(
     if len(photos) == 1:
         photo = as_photo_input(photos[0])
         if photo is not None:
-            await dest.send_photo(chat_id, photo, caption=caption, reply_markup=kb)
-        else:
-            await dest.send_message(chat_id, caption, reply_markup=kb)
-        return
-    media = media_photos_for_profile(profile, caption=caption)
-    if not media:
+            try:
+                await dest.send_photo(chat_id, photo, caption=caption, reply_markup=kb)
+                return
+            except TelegramBadRequest:
+                pass
         await dest.send_message(chat_id, caption, reply_markup=kb)
         return
-    await dest.send_media_group(chat_id, media)
-    await dest.send_message(chat_id, t("browse_hint", lang), reply_markup=kb)
+    media = media_photos_for_profile(profile, caption=caption)
+    if media:
+        try:
+            await dest.send_media_group(chat_id, media)
+            await dest.send_message(chat_id, t("browse_hint", lang), reply_markup=kb)
+            return
+        except TelegramBadRequest:
+            pass
+    await dest.send_message(chat_id, caption, reply_markup=kb)
 
 
 async def start_browse(

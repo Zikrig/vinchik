@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.types import ReplyKeyboardRemove
@@ -78,16 +79,23 @@ async def show_my_profile(message: Message, user: User, profile: Profile) -> Non
     if len(photos) == 1:
         photo = as_photo_input(photos[0])
         if photo is not None:
-            await message.answer_photo(photo, caption=caption, reply_markup=kb)
-        else:
-            await message.answer(caption, reply_markup=kb)
-        return
-    media = media_photos_for_profile(profile, caption=caption)
-    if not media:
+            try:
+                await message.answer_photo(photo, caption=caption, reply_markup=kb)
+                return
+            except TelegramBadRequest:
+                # Stale file_id (bot recreated / token changed) or bad local path.
+                pass
         await message.answer(caption, reply_markup=kb)
         return
-    await message.answer_media_group(media)
-    await message.answer(t("my_profile_title", lang), reply_markup=kb)
+    media = media_photos_for_profile(profile, caption=caption)
+    if media:
+        try:
+            await message.answer_media_group(media)
+            await message.answer(t("my_profile_title", lang), reply_markup=kb)
+            return
+        except TelegramBadRequest:
+            pass
+    await message.answer(caption, reply_markup=kb)
 
 
 async def show_main_menu(message: Message, user: User) -> None:
