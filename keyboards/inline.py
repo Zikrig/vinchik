@@ -231,6 +231,20 @@ def settings_kb(lang: str) -> InlineKeyboardMarkup:
     )
 
 
+def profile_enable_kb(lang: str) -> InlineKeyboardMarkup:
+    """Offered when the feed is requested while the profile is switched off."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=t("btn_profile_enable", lang), callback_data="profile:enable"
+                )
+            ],
+            [InlineKeyboardButton(text=t("btn_main_menu", lang), callback_data="menu:root")],
+        ]
+    )
+
+
 def stop_confirm_kb(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

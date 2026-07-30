@@ -19,6 +19,24 @@ from services.settings_service import ensure_defaults
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# asyncio keeps only weak references to tasks — hold them or they may be GC'd.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn_background(coro, name: str) -> None:
+    task = asyncio.create_task(coro, name=name)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    task.add_done_callback(lambda t: _log_background_exit(name, t))
+
+
+def _log_background_exit(name: str, task: asyncio.Task) -> None:
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error("background task %s stopped: %r", name, exc)
+
 
 async def build_dispatcher() -> Dispatcher:
     storage = RedisStorage.from_url(settings.redis_url)
@@ -96,8 +114,8 @@ async def main() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dp = await build_dispatcher()
-    asyncio.create_task(reengage_loop(bot))
-    asyncio.create_task(moderation_loop())
+    _spawn_background(reengage_loop(bot), "reengage")
+    _spawn_background(moderation_loop(), "moderation")
 
     if settings.use_webhook:
         await run_webhook(bot, dp)

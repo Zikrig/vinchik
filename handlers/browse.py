@@ -13,6 +13,7 @@ from keyboards.inline import (
     main_menu_kb,
     message_compose_kb,
     premium_cta_kb,
+    profile_enable_kb,
 )
 from locales import t
 from services.activity import touch_activity
@@ -140,7 +141,12 @@ async def start_browse(
         await say(t("ask_age", lang), reply_markup=main_menu_kb(lang))
         return
     if not user.profile.is_active:
-        user.profile.is_active = True
+        # Switched off by the user ("Больше не ищу") or by an admin — ask first.
+        if state:
+            await state.clear()
+        await say(".", reply_markup=ReplyKeyboardRemove())
+        await say(t("profile_hidden", lang), reply_markup=profile_enable_kb(lang))
+        return
 
     await touch_activity(session, user)
 
@@ -168,6 +174,19 @@ async def cb_browse(
     user = await load_user(session, callback.from_user.id)
     assert user and callback.message
     await callback.answer()
+    await start_browse(callback.message, session, user, bot, state)
+
+
+@router.callback_query(F.data == "profile:enable")
+async def cb_profile_enable(
+    callback: CallbackQuery, session: AsyncSession, bot: Bot, state: FSMContext
+) -> None:
+    user = await load_user(session, callback.from_user.id)
+    assert user and callback.message
+    await callback.answer()
+    if not user.is_blocked and user.profile and not user.profile.is_active:
+        user.profile.is_active = True
+        await session.commit()
     await start_browse(callback.message, session, user, bot, state)
 
 

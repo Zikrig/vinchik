@@ -96,8 +96,9 @@ async def attach_receipt(
 
 
 async def approve_order(
-    session: AsyncSession, order_id: int, admin_id: int
+    session: AsyncSession, order_id: int, admin_id: int | None
 ) -> tuple[PremiumOrder, User] | None:
+    """``admin_id=None`` marks an action from the web panel (no Telegram id)."""
     order_ref = await session.get(PremiumOrder, order_id)
     if order_ref is None:
         return None
@@ -133,7 +134,9 @@ async def approve_order(
     return order, user
 
 
-async def reject_order(session: AsyncSession, order_id: int, admin_id: int) -> PremiumOrder | None:
+async def reject_order(
+    session: AsyncSession, order_id: int, admin_id: int | None
+) -> PremiumOrder | None:
     order = (
         await session.execute(
             select(PremiumOrder)

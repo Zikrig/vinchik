@@ -8,6 +8,7 @@ from keyboards.inline import (
     main_menu_kb,
     msg_next_kb,
     my_profile_kb,
+    profile_enable_kb,
     settings_kb,
     stop_confirm_kb,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "main_menu_kb",
     "msg_next_kb",
     "my_profile_kb",
+    "profile_enable_kb",
     "settings_kb",
     "stop_confirm_kb",
 ]

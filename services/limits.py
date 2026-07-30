@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,9 +10,22 @@ from database.models import DailyLikeStat, Gender, Profile, User
 from services.settings_service import get_daily_like_limit
 from services.users import is_premium
 
+# Counters older than this are never read again — only the current UTC day matters.
+STATS_RETENTION_DAYS = 90
+
 
 def utc_today() -> date:
     return datetime.now(UTC).date()
+
+
+async def purge_old_like_stats(session: AsyncSession) -> int:
+    result = await session.execute(
+        delete(DailyLikeStat).where(
+            DailyLikeStat.utc_date < utc_today() - timedelta(days=STATS_RETENTION_DAYS)
+        )
+    )
+    await session.commit()
+    return result.rowcount or 0
 
 
 async def get_like_count_today(session: AsyncSession, user_id: int) -> int:

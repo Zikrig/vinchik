@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from time import monotonic
 
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
@@ -23,12 +24,19 @@ DEFAULTS = {
 _CACHE_TTL_SECONDS = 30.0
 _setting_cache: dict[str, tuple[float, str]] = {}
 
+# bot and web seed defaults at the same time; without this both can insert plans
+_SEED_LOCK_ID = 872314206
+
 
 async def ensure_defaults(session: AsyncSession) -> None:
-    for key, value in DEFAULTS.items():
-        existing = await session.get(Setting, key)
-        if existing is None:
-            session.add(Setting(key=key, value=value))
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": _SEED_LOCK_ID}
+    )
+    await session.execute(
+        insert(Setting)
+        .values([{"key": key, "value": value} for key, value in DEFAULTS.items()])
+        .on_conflict_do_nothing(index_elements=[Setting.key])
+    )
     result = await session.execute(select(PremiumPlan))
     if not result.scalars().first():
         session.add_all(

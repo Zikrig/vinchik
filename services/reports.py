@@ -49,7 +49,8 @@ async def file_report(
         )
     ).scalar_one_or_none()
     if created_id is None:
-        await session.rollback()
+        # ON CONFLICT DO NOTHING leaves the transaction usable; a rollback here
+        # would expire the caller's User/Profile and blow up on next attribute.
         return False, False
 
     target = (

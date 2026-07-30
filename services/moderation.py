@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -359,6 +359,23 @@ async def list_user_messages(
     return rows
 
 
+_last_stats_purge: date | None = None
+
+
+async def _purge_like_stats_daily(session: AsyncSession) -> None:
+    global _last_stats_purge
+
+    from services.limits import purge_old_like_stats
+
+    today = datetime.now(UTC).date()
+    if _last_stats_purge == today:
+        return
+    _last_stats_purge = today
+    removed = await purge_old_like_stats(session)
+    if removed:
+        logger.info("purged stale daily like stats rows=%s", removed)
+
+
 async def moderation_loop() -> None:
     await asyncio.sleep(20)
     while True:
@@ -367,6 +384,7 @@ async def moderation_loop() -> None:
                 n = await sweep_suspicious_candidates(session)
                 if n:
                     logger.info("moderation sweep flagged=%s", n)
+                await _purge_like_stats_daily(session)
         except Exception:
             logger.exception("moderation loop error")
         await asyncio.sleep(POLL_SECONDS)

@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import delete
 
 from database.models import DailyLikeStat, Gender, Like, LookingFor, Profile, User
+from services.media import set_profile_photos
 from services.users import load_user_with_profile
 
 MAP_MARKERS_LIMIT = 50
@@ -396,12 +397,12 @@ async def update_account_profile(
     p.is_active = is_active
     p.is_complete = is_complete
     if clear_photo:
-        p.photo_file_id = None
-        p.photo_file_ids = None
+        set_profile_photos(p, [])
     elif photo_file_id is not None:
-        raw = photo_file_id.strip() or None
-        p.photo_file_id = raw
-        p.photo_file_ids = [raw] if raw else None
+        # The form exposes only the first id — keep the rest of the album.
+        raw = photo_file_id.strip()
+        rest = [str(x) for x in (p.photo_file_ids or [])[1:] if x]
+        set_profile_photos(p, ([raw] if raw else []) + rest)
 
     if gender in {"male", "female"}:
         p.gender = Gender(gender)

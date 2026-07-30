@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 import html
+import logging
 import re
 from dataclasses import dataclass
 
 from aiogram import Bot
 from aiogram.enums import ChatMemberStatus, ChatType
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.types import Chat, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import RequiredChannel, User
 from services.users import is_premium
+
+logger = logging.getLogger(__name__)
 
 _TME = re.compile(
     r"(?:https?://)?(?:t\.me|telegram\.me)/(?:s/)?(@?[\w]+|\+[\w-]+|joinchat/[\w-]+)",
@@ -104,6 +107,10 @@ async def list_all_channels(session: AsyncSession) -> list[RequiredChannel]:
     return list(result.scalars().all())
 
 
+# Bot API wording when the account is simply not in the channel.
+_NOT_A_MEMBER_HINTS = ("user not found", "participant_id_invalid", "member not found")
+
+
 async def user_subscribed_all(bot: Bot, session: AsyncSession, user: User) -> bool:
     if is_premium(user):
         return True
@@ -113,12 +120,18 @@ async def user_subscribed_all(bot: Bot, session: AsyncSession, user: User) -> bo
     for ch in channels:
         try:
             member = await bot.get_chat_member(ch.channel_id, user.tg_id)
-            if member.status in {
-                ChatMemberStatus.LEFT,
-                ChatMemberStatus.KICKED,
-            }:
+        except TelegramBadRequest as exc:
+            reason = str(exc).lower()
+            if any(hint in reason for hint in _NOT_A_MEMBER_HINTS):
                 return False
-        except TelegramAPIError:
+            # Channel deleted, renamed or bot demoted — a misconfigured channel
+            # must not lock every free user out of the feed.
+            logger.warning("channel %s unreachable: %s", ch.channel_id, exc)
+            continue
+        except TelegramAPIError as exc:
+            logger.warning("subscription check failed for %s: %s", ch.channel_id, exc)
+            continue
+        if member.status in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}:
             return False
     return True
 

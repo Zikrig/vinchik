@@ -3,10 +3,12 @@ from __future__ import annotations
 import ipaddress
 import secrets
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
 from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError
 from fastapi import Depends, FastAPI, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
@@ -258,18 +260,26 @@ def serialize_account_hero(user) -> dict:
     }
 
 
-def create_app() -> FastAPI:
-    app = FastAPI(title="Vinchik Admin", root_path=settings.web_root_path or "")
-
-    @app.on_event("startup")
-    async def startup() -> None:
-        await init_db()
-        async with async_session_maker() as session:
-            await ensure_defaults(session)
-
-    @app.on_event("shutdown")
-    async def shutdown() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    async with async_session_maker() as session:
+        await ensure_defaults(session)
+    # One long-lived client instead of a fresh aiohttp session per request.
+    app.state.bot = Bot(token=settings.bot_token)
+    try:
+        yield
+    finally:
+        await app.state.bot.session.close()
         await login_redis.aclose()
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="Vinchik Admin",
+        root_path=settings.web_root_path or "",
+        lifespan=lifespan,
+    )
 
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(request: Request):
@@ -288,7 +298,10 @@ def create_app() -> FastAPI:
                 {"error": "Слишком много попыток. Попробуйте через 15 минут."},
                 status_code=429,
             )
-        if not secrets.compare_digest(password, settings.admin_web_password):
+        # compare_digest rejects non-ASCII str — compare the encoded forms.
+        if not secrets.compare_digest(
+            password.encode("utf-8"), settings.admin_web_password.encode("utf-8")
+        ):
             return TEMPLATES.TemplateResponse(
                 request,
                 "login.html",
@@ -679,20 +692,19 @@ def create_app() -> FastAPI:
             return FileResponse(local)
         if user.profile.photo_file_id.startswith(LOCAL_PREFIX):
             return Response(status_code=404)
-        bot = Bot(token=settings.bot_token)
         try:
-            f = await bot.get_file(user.profile.photo_file_id)
-            if not f.file_path:
+            f = await request.app.state.bot.get_file(user.profile.photo_file_id)
+        except TelegramAPIError:
+            return Response(status_code=404)
+        if not f.file_path:
+            return Response(status_code=404)
+        url = f"https://api.telegram.org/file/bot{settings.bot_token}/{f.file_path}"
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(url)
+            if resp.status_code != 200:
                 return Response(status_code=404)
-            url = f"https://api.telegram.org/file/bot{settings.bot_token}/{f.file_path}"
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                resp = await client.get(url)
-                if resp.status_code != 200:
-                    return Response(status_code=404)
-                ctype = resp.headers.get("content-type", "image/jpeg")
-                return Response(content=resp.content, media_type=ctype)
-        finally:
-            await bot.session.close()
+            ctype = resp.headers.get("content-type", "image/jpeg")
+            return Response(content=resp.content, media_type=ctype)
 
     @app.post("/users/{user_id}/unban")
     async def user_unban(
@@ -812,9 +824,8 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        bot = Bot(token=settings.bot_token)
         try:
-            resolved = await resolve_channel_ref(bot, channel_id)
+            resolved = await resolve_channel_ref(request.app.state.bot, channel_id)
             ch, created = await add_resolved_channel(session, resolved)
         except ChannelResolveError as exc:
             return err_response(
@@ -823,8 +834,11 @@ def create_app() -> FastAPI:
                 error=str(exc),
                 message=str(exc),
             )
-        finally:
-            await bot.session.close()
+        except TelegramAPIError:
+            message = "Telegram недоступен, попробуйте ещё раз."
+            return err_response(
+                request, settings.abs_path("/"), error=message, message=message
+            )
         verb = "добавлен" if created else "обновлён"
         return ok_response(
             request,
@@ -892,26 +906,25 @@ def create_app() -> FastAPI:
         order = await session.get(PremiumOrder, order_id)
         if not order or not order.receipt_file_id:
             return Response(status_code=404)
-        bot = Bot(token=settings.bot_token)
         try:
-            f = await bot.get_file(order.receipt_file_id)
-            if not f.file_path:
+            f = await request.app.state.bot.get_file(order.receipt_file_id)
+        except TelegramAPIError:
+            return Response(status_code=404)
+        if not f.file_path:
+            return Response(status_code=404)
+        url = f"https://api.telegram.org/file/bot{settings.bot_token}/{f.file_path}"
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(url)
+            if resp.status_code != 200:
                 return Response(status_code=404)
-            url = f"https://api.telegram.org/file/bot{settings.bot_token}/{f.file_path}"
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                resp = await client.get(url)
-                if resp.status_code != 200:
-                    return Response(status_code=404)
-                ctype = resp.headers.get("content-type") or "application/octet-stream"
-                if order.receipt_kind == "photo" and not ctype.startswith("image/"):
-                    ctype = "image/jpeg"
-                filename = Path(f.file_path).name
-                headers = {}
-                if order.receipt_kind == "document":
-                    headers["Content-Disposition"] = f'inline; filename="{filename}"'
-                return Response(content=resp.content, media_type=ctype, headers=headers)
-        finally:
-            await bot.session.close()
+            ctype = resp.headers.get("content-type") or "application/octet-stream"
+            if order.receipt_kind == "photo" and not ctype.startswith("image/"):
+                ctype = "image/jpeg"
+            filename = Path(f.file_path).name
+            headers = {}
+            if order.receipt_kind == "document":
+                headers["Content-Disposition"] = f'inline; filename="{filename}"'
+            return Response(content=resp.content, media_type=ctype, headers=headers)
 
     @app.post("/orders/{order_id}/approve")
     async def order_approve(
@@ -919,7 +932,7 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        result = await approve_order(session, order_id, admin_id=0)
+        result = await approve_order(session, order_id, admin_id=None)
         if result is None:
             return err_response(
                 request,
@@ -928,11 +941,7 @@ def create_app() -> FastAPI:
                 message="Заявка уже обработана или не найдена.",
             )
         _, user = result
-        bot = Bot(token=settings.bot_token)
-        try:
-            await notify_premium_activated(bot, user)
-        finally:
-            await bot.session.close()
+        await notify_premium_activated(request.app.state.bot, user)
         return ok_response(
             request,
             settings.abs_path("/"),
@@ -947,7 +956,7 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        result = await reject_order(session, order_id, admin_id=0)
+        result = await reject_order(session, order_id, admin_id=None)
         if result is None:
             return err_response(
                 request,
