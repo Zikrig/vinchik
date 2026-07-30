@@ -326,9 +326,15 @@ async def _start_message_flow(
         msg_target=int(target_id),
         msg_payload=empty_message_payload(),
     )
-    await message.answer(t("ask_message", lang), reply_markup=ReplyKeyboardRemove())
+    # ReplyKeyboardRemove and InlineKeyboard can't share one message — drop
+    # the browse kb via a disposable message, then one visible prompt + Cancel.
+    rm = await message.answer("\u2060", reply_markup=ReplyKeyboardRemove())
+    try:
+        await rm.delete()
+    except Exception:
+        pass
     await message.answer(
-        t("btn_cancel", lang),
+        t("ask_message", lang),
         reply_markup=message_compose_kb(lang),
     )
 
