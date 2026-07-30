@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Ссылки — Dilino Admin{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+{% endblock %}
 {% block body %}
 {% set nav = 'links' %}
 {% set brand_suffix = 'Ссылки' %}
@@ -45,18 +48,9 @@
     </form>
     <p class="hint" id="link-range-label">Период: {{ tracking_stats.label }} · всего {{ tracking_stats.total }}</p>
 
-    <div class="bar-chart" id="link-chart" aria-label="Диаграмма переходов">
-      {% for item in tracking_stats.links %}
-      <div class="bar-col" data-link-id="{{ item.id }}" title="{{ item.name }}: {{ item.clicks }}">
-        <div class="bar-val">{{ item.clicks }}</div>
-        <div class="bar-track">
-          <div class="bar-fill" style="--bar-h: {{ (item.clicks / tracking_stats.max_clicks * 100)|round(1) }}%"></div>
-        </div>
-        <div class="bar-name">{{ item.name }}</div>
-      </div>
-      {% else %}
-      <p class="hint bar-empty">Нет ссылок для диаграммы.</p>
-      {% endfor %}
+    <div class="link-chart-wrap" id="link-chart-wrap">
+      <canvas id="link-chart" aria-label="Диаграмма переходов"></canvas>
+      <p class="hint bar-empty" id="link-chart-empty" hidden>Нет ссылок для диаграммы.</p>
     </div>
 
     <table id="links-table">
@@ -96,7 +90,8 @@
   const root = document.getElementById("links");
   if (!root) return;
   const statsUrl = root.getAttribute("data-stats-url");
-  const chart = document.getElementById("link-chart");
+  const canvas = document.getElementById("link-chart");
+  const emptyEl = document.getElementById("link-chart-empty");
   const tbody = document.getElementById("links-tbody");
   const labelEl = document.getElementById("link-range-label");
   const presets = document.getElementById("link-presets");
@@ -104,6 +99,7 @@
   const dateFrom = document.getElementById("link-date-from");
   const dateTo = document.getElementById("link-date-to");
   let activePreset = "all";
+  let chart = null;
 
   function escapeHtml(s) {
     return String(s)
@@ -114,21 +110,94 @@
   }
 
   function renderChart(items) {
-    if (!chart) return;
+    if (!canvas || typeof Chart === "undefined") return;
+    const labels = items.map(function (i) { return i.name; });
+    const values = items.map(function (i) { return i.clicks; });
+
     if (!items.length) {
-      chart.innerHTML = '<p class="hint bar-empty">Нет ссылок для диаграммы.</p>';
+      if (chart) {
+        chart.destroy();
+        chart = null;
+      }
+      canvas.style.display = "none";
+      if (emptyEl) emptyEl.hidden = false;
       return;
     }
-    const max = Math.max.apply(null, items.map(function (i) { return i.clicks; }).concat([1]));
-    chart.innerHTML = items.map(function (item) {
-      const h = Math.round((item.clicks / max) * 1000) / 10;
-      return (
-        '<div class="bar-col" data-link-id="' + item.id + '" title="' + escapeHtml(item.name) + ": " + item.clicks + '">' +
-        '<div class="bar-val">' + item.clicks + "</div>" +
-        '<div class="bar-track"><div class="bar-fill" style="--bar-h:' + h + '%"></div></div>' +
-        '<div class="bar-name">' + escapeHtml(item.name) + "</div></div>"
-      );
-    }).join("");
+
+    canvas.style.display = "";
+    if (emptyEl) emptyEl.hidden = true;
+
+    if (chart) {
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = values;
+      chart.update();
+      return;
+    }
+
+    chart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Переходы",
+          data: values,
+          backgroundColor: "#1f6b4f",
+          borderColor: "#1f6b4f",
+          borderWidth: 0,
+          borderRadius: 0,
+          maxBarThickness: 48,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                return "Переходы: " + ctx.parsed.y;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: {
+              color: "#5c6b64",
+              maxRotation: 45,
+              minRotation: 0,
+              autoSkip: true,
+            },
+          },
+          y: {
+            beginAtZero: true,
+            grace: "5%",
+            ticks: {
+              color: "#5c6b64",
+              precision: 0,
+              stepSize: undefined,
+            },
+            title: {
+              display: true,
+              text: "Переходы",
+              color: "#5c6b64",
+            },
+            grid: {
+              color: "rgba(26, 36, 32, 0.08)",
+            },
+          },
+        },
+        datasets: {
+          bar: {
+            categoryPercentage: 0.7,
+            barPercentage: 0.9,
+          },
+        },
+      },
+    });
   }
 
   function renderTable(items) {
@@ -238,6 +307,8 @@
       window.prompt("Скопируй ссылку:", url);
     }
   });
+
+  renderChart({{ tracking_stats.links | tojson }});
 })();
 </script>
 {% endblock %}
