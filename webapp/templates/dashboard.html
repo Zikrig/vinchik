@@ -110,34 +110,57 @@
 
   <section class="panel" id="geo">
     <h2 class="panel-title">📍 Моя геолокация</h2>
-    <p>Координаты профиля админа для ленты и спавна тестов. По умолчанию — Душанбе.</p>
+    <p>Координаты профиля админа для ленты и спавна тестов. Без своих — подставляется Душанбе.</p>
     {% if not admin_ids %}
     <p class="flash-err">В <code>ADMIN_IDS</code> никого нет.</p>
     {% else %}
-    <form method="post" action="{{ url('/admin-geo') }}" class="js-ajax">
+    <form method="post" action="{{ url('/admin-geo') }}" class="js-ajax" id="admin-geo-form"
+          data-default-lat="{{ dushanbe_lat }}" data-default-lon="{{ dushanbe_lon }}">
       <div class="row">
         <label>Admin Telegram ID
-          <select name="admin_tg_id" required>
+          <select name="admin_tg_id" id="admin-geo-select" required>
             {% for aid in admin_ids %}
-            <option value="{{ aid }}">{{ aid }}
-              {% set g = admin_geo.get(aid) %}
-              {% if g and g.lat is not none %} (сейчас {{ g.lat }}, {{ g.lon }}){% endif %}
-            </option>
+            {% set g = admin_geo.get(aid) %}
+            <option value="{{ aid }}"
+              data-lat="{{ g.lat if g and g.lat is not none else '' }}"
+              data-lon="{{ g.lon if g and g.lon is not none else '' }}"
+              data-city={{ ((g.city_name if g and g.city_name else '')|tojson) }}>{{ aid }}</option>
             {% endfor %}
           </select>
         </label>
         <label>Широта (lat)
-          <input type="number" step="any" name="lat" value="{{ dushanbe_lat }}" required>
+          <input type="number" step="any" name="lat" id="admin-geo-lat" required>
         </label>
         <label>Долгота (lon)
-          <input type="number" step="any" name="lon" value="{{ dushanbe_lon }}" required>
-        </label>
-        <label>Город
-          <input type="text" name="city_name" value="{{ dushanbe_city }}" required>
+          <input type="number" step="any" name="lon" id="admin-geo-lon" required>
         </label>
         <button type="submit">Сохранить</button>
       </div>
+      <label style="margin-top:.75rem;max-width:320px">Город
+        <input type="text" name="city_name" id="admin-geo-city" placeholder="необязательно">
+      </label>
     </form>
+    <script>
+    (function () {
+      const form = document.getElementById("admin-geo-form");
+      if (!form) return;
+      const select = document.getElementById("admin-geo-select");
+      const lat = document.getElementById("admin-geo-lat");
+      const lon = document.getElementById("admin-geo-lon");
+      const city = document.getElementById("admin-geo-city");
+      const defLat = form.getAttribute("data-default-lat") || "";
+      const defLon = form.getAttribute("data-default-lon") || "";
+      function applyAdminGeo() {
+        const opt = select && select.options[select.selectedIndex];
+        if (!opt) return;
+        lat.value = opt.getAttribute("data-lat") || defLat;
+        lon.value = opt.getAttribute("data-lon") || defLon;
+        city.value = opt.getAttribute("data-city") || "";
+      }
+      select.addEventListener("change", applyAdminGeo);
+      applyAdminGeo();
+    })();
+    </script>
     {% endif %}
   </section>
 </div>
