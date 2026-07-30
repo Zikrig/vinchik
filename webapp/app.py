@@ -94,6 +94,19 @@ _login_failures: dict[str, list[float]] = {}
 login_redis = Redis.from_url(settings.redis_url, decode_responses=True)
 
 
+async def render_admin(
+    request: Request,
+    session: AsyncSession,
+    template: str,
+    context: dict | None = None,
+):
+    """HTML-страницы админки: всегда gender_stats для шапки."""
+    ctx = dict(context or {})
+    if "gender_stats" not in ctx:
+        ctx["gender_stats"] = await count_profiles_by_gender(session)
+    return TEMPLATES.TemplateResponse(request, template, ctx)
+
+
 async def get_db():
     async with async_session_maker() as session:
         yield session
@@ -414,7 +427,7 @@ def create_app() -> FastAPI:
             "gender_stats": await count_profiles_by_gender(session),
             "flash": request.query_params.get("flash"),
         }
-        return TEMPLATES.TemplateResponse(request, "dashboard.html", ctx)
+        return await render_admin(request, session, "dashboard.html", ctx)
 
     @app.get("/channels", response_class=HTMLResponse)
     async def channels_page(request: Request, session: AsyncSession = Depends(get_db)):
@@ -423,16 +436,17 @@ def create_app() -> FastAPI:
         channels = (
             await session.execute(select(RequiredChannel).order_by(RequiredChannel.id))
         ).scalars().all()
-        return TEMPLATES.TemplateResponse(
-            request, "channels.html", {"channels": channels}
+        return await render_admin(
+            request, session, "channels.html", {"channels": channels}
         )
 
     @app.get("/links", response_class=HTMLResponse)
     async def links_page(request: Request, session: AsyncSession = Depends(get_db)):
         if (redir := require_auth(request)) is not None:
             return redir
-        return TEMPLATES.TemplateResponse(
+        return await render_admin(
             request,
+            session,
             "links.html",
             {"tracking_stats": await load_tracking_stats(session, preset="all")},
         )
@@ -441,8 +455,9 @@ def create_app() -> FastAPI:
     async def premium_page(request: Request, session: AsyncSession = Depends(get_db)):
         if (redir := require_auth(request)) is not None:
             return redir
-        return TEMPLATES.TemplateResponse(
+        return await render_admin(
             request,
+            session,
             "premium.html",
             {
                 "pending": await list_pending_orders(session),
@@ -454,8 +469,9 @@ def create_app() -> FastAPI:
     async def bans_page(request: Request, session: AsyncSession = Depends(get_db)):
         if (redir := require_auth(request)) is not None:
             return redir
-        return TEMPLATES.TemplateResponse(
+        return await render_admin(
             request,
+            session,
             "bans.html",
             {
                 "blocked": await list_blocked_users(session),
@@ -482,8 +498,9 @@ def create_app() -> FastAPI:
         filters = filters_from_query(raw)
         rows = await search_accounts(session, **filters, limit=500)
         markers = await map_markers(session, admin_ids=settings.admin_id_set, limit=50)
-        return TEMPLATES.TemplateResponse(
+        return await render_admin(
             request,
+            session,
             "accounts.html",
             {
                 "rows": rows,
@@ -510,8 +527,9 @@ def create_app() -> FastAPI:
             return RedirectResponse(settings.abs_path("/accounts"), status_code=303)
         likes = await account_like_stats(session, user_id)
         flash = request.query_params.get("flash")
-        return TEMPLATES.TemplateResponse(
+        return await render_admin(
             request,
+            session,
             "account_detail.html",
             {
                 "u": user,

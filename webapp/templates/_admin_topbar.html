@@ -2,7 +2,7 @@
    Set before include:
      nav — dashboard|accounts|channels|links|premium|bans|account
      brand_suffix — optional (default Admin)
-   Optional context: gender_stats {male,female,total} — left edge.
+   Context (via render_admin): gender_stats {male,female,total} — left edge.
    Logout — right edge. Brand + nav — centered.
 #}
 <div class="topbar">
@@ -21,7 +21,7 @@
       {% if nav == 'account' %}
       <a href="{{ url('/accounts') }}">← Аккаунты</a>
       <a href="{{ url('/bans') }}">🚫 Баны</a>
-      <a href="{{ url('/') }}">📊 Дашборд</a>
+      <a href="{{ url('/') }}">📊 Основное</a>
       {% else %}
       {% include "_admin_nav.html" %}
       {% endif %}
