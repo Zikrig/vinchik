@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Каналы — Vinchik Admin{% endblock %}
+{% block body %}
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">Vinchik <span>Каналы</span></div>
+    <div class="nav">
+      {% set nav = 'channels' %}
+      {% include "_admin_nav.html" %}
+    </div>
+  </div>
+
+  <section class="panel" id="channels">
+    <h2 class="panel-title">📢 Обязательные каналы</h2>
+    <p class="hint">Бот должен быть администратором каждого канала — иначе проверка подписки не работает. Добавляй по @нику или публичной ссылке t.me/…</p>
+    <table>
+      <tr><th>ID</th><th>Название</th><th>Ссылка</th><th></th></tr>
+      {% for ch in channels %}
+      <tr data-channel-id="{{ ch.id }}">
+        <td>{{ ch.channel_id }}</td>
+        <td>{{ ch.title }}</td>
+        <td>{{ ch.invite_link }}</td>
+        <td class="row">
+          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/toggle') }}" class="js-ajax" data-ajax="channel-toggle">
+            <button type="submit" class="status-pill sm {{ 'on' if ch.is_active else 'off' }}">
+              <span class="dot"></span>
+              {% if ch.is_active %}ON{% else %}OFF{% endif %}
+            </button>
+          </form>
+          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/delete') }}" class="js-ajax" data-ajax="channel-delete"
+                data-confirm="Удалить канал?">
+            <button type="submit" class="danger">удалить</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    <h3>Добавить канал</h3>
+    <form method="post" action="{{ url('/channels/add') }}" class="row js-ajax" data-ajax="channel-add">
+      <input type="text" name="channel_id" placeholder="@channel или https://t.me/channel" required>
+      <button type="submit">Добавить</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

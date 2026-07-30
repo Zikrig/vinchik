@@ -1,0 +1,9 @@
+{# Compact ON/OFF switch. Expects: action, field_name, field_value (next toggle), on (bool), ajax_kind, label #}
+<form method="post" action="{{ action }}" class="switch-compact js-ajax" data-ajax="{{ ajax_kind }}">
+  <span class="switch-compact-label">{{ label }}</span>
+  <input type="hidden" name="{{ field_name }}" value="{{ field_value }}">
+  <button type="submit" class="status-pill sm {{ 'on' if on else 'off' }}">
+    <span class="dot"></span>
+    {% if on %}ON{% else %}OFF{% endif %}
+  </button>
+</form>

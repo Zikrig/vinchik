@@ -59,11 +59,23 @@
       padding: 1.5rem 1rem 3rem;
     }
     .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 200;
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 1.25rem;
-      margin-bottom: 1.25rem;
+      margin: -0.35rem -0.25rem 1.25rem;
+      padding: 0.75rem 0.5rem;
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(213, 224, 218, 0.85);
+      box-shadow: 0 8px 20px rgba(26, 36, 32, 0.04);
+    }
+    @supports not (background: color-mix(in srgb, white 50%, transparent)) {
+      .topbar { background: rgba(243, 246, 244, 0.94); }
     }
     .topbar-end {
       display: flex;
@@ -78,7 +90,8 @@
       font-size: 1.35rem;
     }
     .brand span { color: var(--brand); }
-    .nav { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    .nav { display: flex; gap: .85rem; align-items: center; flex-wrap: wrap; }
+    .nav a.is-active { color: var(--ink); font-weight: 700; text-decoration: none; }
     .btn {
       display: inline-flex;
       align-items: center;
@@ -291,6 +304,30 @@
     }
     .switch-row .label { font-weight: 600; color: var(--ink); }
     .switch-row .hint { font-size: .85rem; color: var(--muted); margin: .2rem 0 0; }
+    .switch-compact-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .45rem .55rem;
+      margin: 0 0 1rem;
+    }
+    .switch-compact {
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      width: auto;
+      max-width: 100%;
+      margin: 0;
+      padding: .3rem .5rem .3rem .65rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--bg-accent);
+    }
+    .switch-compact-label {
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--ink);
+      white-space: nowrap;
+    }
     .status-pill {
       display: inline-flex;
       align-items: center;
@@ -302,6 +339,15 @@
       border: 0;
       cursor: pointer;
       font: inherit;
+    }
+    .status-pill.sm {
+      padding: .2rem .5rem;
+      font-size: .72rem;
+      gap: .3rem;
+    }
+    .status-pill.sm .dot {
+      width: .5rem;
+      height: .5rem;
     }
     .status-pill .dot {
       width: .65rem;

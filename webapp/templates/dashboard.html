@@ -13,85 +13,50 @@
     <div class="topbar-end">
       <div class="brand">Vinchik <span>Admin</span></div>
       <div class="nav">
-        <a href="{{ url('/accounts') }}">👥 Все аккаунты</a>
-        <a href="{{ url('/bans') }}">🚫 Баны</a>
-        <a href="{{ url('/logout') }}">Выйти</a>
+        {% set nav = 'dashboard' %}
+        {% include "_admin_nav.html" %}
       </div>
     </div>
   </div>
 
   {% if flash == "geo_saved" %}<p class="flash-ok">Геолокация админа сохранена.</p>{% endif %}
   {% if flash == "bad_admin" %}<p class="flash-err">Неверный admin id.</p>{% endif %}
-  {% if flash and flash.startswith("test_created_") %}<p class="flash-ok">Создано тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
-  {% if flash and flash.startswith("test_cleared_") %}<p class="flash-ok">Удалено тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
-  {% if flash and flash.startswith("test_shown_") %}<p class="flash-ok">Тестовые показаны в ленте: {{ flash.split('_')[-1] }}.</p>{% endif %}
-  {% if flash and flash.startswith("test_hidden_") %}<p class="flash-ok">Тестовые скрыты из ленты: {{ flash.split('_')[-1] }}.</p>{% endif %}
   {% if flash == "soft_on" %}<p class="flash-ok">Soft-launch включён.</p>{% endif %}
   {% if flash == "soft_off" %}<p class="flash-ok">Soft-launch выключен — лента открыта.</p>{% endif %}
+  {% if flash and flash.startswith("test_shown_") %}<p class="flash-ok">Тестовые показаны в ленте.</p>{% endif %}
+  {% if flash and flash.startswith("test_hidden_") %}<p class="flash-ok">Тестовые скрыты из ленты.</p>{% endif %}
 
   <nav class="jump">
-    <a href="#status">⚙️ Режимы</a>
-    <a href="#accounts">👥 Аккаунты</a>
     <a href="#settings">🛠 Настройки</a>
-    <a href="#channels">📢 Каналы</a>
-    <a href="#links">🔗 Ссылки</a>
-    <a href="#orders">💳 Заявки</a>
-    <a href="#premiums">⭐ Премиум</a>
-    <a href="{{ url('/bans') }}">🚫 Баны</a>
     <a href="#geo">📍 Гео</a>
   </nav>
 
-  <section class="panel" id="status">
-    <h2 class="panel-title">⚙️ Режимы</h2>
-    <div class="switch-list">
-      <div class="switch-row">
-        <div>
-          <div class="label">🚧 Soft-launch</div>
-          <p class="hint">ON — только регистрация, лента закрыта. OFF — бот работает полностью.</p>
-        </div>
-        <form method="post" action="{{ url('/settings/soft-launch') }}" class="js-ajax" data-ajax="soft-launch">
-          <input type="hidden" name="registration_only" value="{{ '0' if registration_only else '1' }}">
-          <button type="submit" class="status-pill {{ 'on' if registration_only else 'off' }}">
-            <span class="dot"></span>
-            {% if registration_only %}ON{% else %}OFF{% endif %}
-          </button>
-        </form>
-      </div>
-      <div class="switch-row">
-        <div>
-          <div class="label">🧪 Тестовые в ленте</div>
-          <p class="hint">Показать или скрыть все тестовые анкеты сразу (сейчас <span data-test-count>{{ test_users_count }}</span>).</p>
-        </div>
-        <form method="post" action="{{ url('/test-users/visibility') }}" class="js-ajax" data-ajax="test-visibility">
-          <input type="hidden" name="visible" value="{{ '0' if test_users_visible else '1' }}">
-          <button type="submit" class="status-pill {{ 'on' if test_users_visible else 'off' }}">
-            <span class="dot"></span>
-            {% if test_users_visible %}ON{% else %}OFF{% endif %}
-          </button>
-        </form>
-      </div>
-    </div>
-  </section>
-
-  <section class="panel" id="accounts">
-    <h2 class="panel-title">👥 Аккаунты</h2>
-    <p><a class="btn" href="{{ url('/accounts') }}">Открыть список</a></p>
-    <h3>🧪 Тестовые</h3>
-    <p class="hint">Сейчас: <strong data-test-count>{{ test_users_count }}</strong></p>
-    <form method="post" action="{{ url('/test-users/create') }}" class="row js-ajax" data-ajax="test-create">
-      <label>Сколько
-        <input type="number" name="count" value="10" min="1" max="100" required>
-      </label>
-      <button type="submit">Добавить</button>
-    </form>
-    <form method="post" action="{{ url('/test-users/clear') }}" class="js-ajax" data-ajax="test-clear"
-          data-confirm="Удалить всех тестовых пользователей?" style="margin-top:.75rem;">
-      <button type="submit" class="secondary">Удалить всех тестовых</button>
-    </form>
-  </section>
-
   <section class="panel" id="settings">
     <h2 class="panel-title">🛠 Настройки</h2>
+    <div class="switch-compact-list">
+      {% with
+        action=url('/settings/soft-launch'),
+        field_name='registration_only',
+        field_value=('0' if registration_only else '1'),
+        on=registration_only,
+        ajax_kind='soft-launch',
+        label='🚧 Soft-launch'
+      %}
+        {% include "_switch_compact.html" %}
+      {% endwith %}
+      {% with
+        action=url('/test-users/visibility'),
+        field_name='visible',
+        field_value=('0' if test_users_visible else '1'),
+        on=test_users_visible,
+        ajax_kind='test-visibility',
+        label='🧪 Тестовые в ленте'
+      %}
+        {% include "_switch_compact.html" %}
+      {% endwith %}
+    </div>
+    <p class="hint" style="margin-top:-.35rem">Soft-launch: ON — только регистрация. Тестовые: сейчас <strong data-test-count>{{ test_users_count }}</strong>. Управление тестовыми — на странице <a href="{{ url('/accounts') }}">Аккаунты</a>.</p>
+
     <form method="post" action="{{ url('/settings') }}" class="js-ajax" data-ajax="settings">
       <div class="row">
         <label>Лимит лайков / сутки UTC
@@ -104,7 +69,7 @@
           <input type="number" name="profile_reshow_days" value="{{ reshow_days }}" min="0" required>
         </label>
       </div>
-      <p class="hint">Повтор анкеты: после ❤️/👎/💌 пара скрывается друг от друга в ленте на N дней (0 = навсегда). 🚪 в likes не пишет. Soft-launch — в блоке «Режимы».</p>
+      <p class="hint">Повтор анкеты: после ❤️/👎/💌 пара скрывается друг от друга в ленте на N дней (0 = навсегда). 🚪 в likes не пишет.</p>
       <h3>Оплата Премиум</h3>
       <div class="row">
         <label style="flex:1;min-width:220px">Карта для приёма платежей
@@ -158,171 +123,6 @@
     </form>
   </section>
 
-  <section class="panel" id="channels">
-    <h2 class="panel-title">📢 Обязательные каналы</h2>
-    <p class="hint">Бот должен быть администратором каждого канала — иначе проверка подписки не работает. Добавляй по @нику или публичной ссылке t.me/…</p>
-    <table>
-      <tr><th>ID</th><th>Название</th><th>Ссылка</th><th></th></tr>
-      {% for ch in channels %}
-      <tr data-channel-id="{{ ch.id }}">
-        <td>{{ ch.channel_id }}</td>
-        <td>{{ ch.title }}</td>
-        <td>{{ ch.invite_link }}</td>
-        <td class="row">
-          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/toggle') }}" class="js-ajax" data-ajax="channel-toggle">
-            <button type="submit" class="status-pill {{ 'on' if ch.is_active else 'off' }}">
-              <span class="dot"></span>
-              {% if ch.is_active %}ON{% else %}OFF{% endif %}
-            </button>
-          </form>
-          <form method="post" action="{{ url('/channels/' ~ ch.id ~ '/delete') }}" class="js-ajax" data-ajax="channel-delete"
-                data-confirm="Удалить канал?">
-            <button type="submit" class="danger">удалить</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </table>
-    <h3>Добавить канал</h3>
-    <form method="post" action="{{ url('/channels/add') }}" class="row js-ajax" data-ajax="channel-add">
-      <input type="text" name="channel_id" placeholder="@channel или https://t.me/channel" required>
-      <button type="submit">Добавить</button>
-    </form>
-  </section>
-
-  <section class="panel" id="links" data-stats-url="{{ url('/links/stats') }}">
-    <h2 class="panel-title">🔗 Ссылки</h2>
-    <p class="hint">Полные t.me-ссылки с аргументом. Каждый /start по коду считает переход. Статистика — Asia/Dushanbe.</p>
-
-    <form method="post" action="{{ url('/links/create') }}" class="row js-ajax" data-ajax="link-create"
-          style="margin-bottom:1rem;">
-      <label style="flex:1;min-width:220px">Название
-        <input type="text" name="name" required maxlength="128" placeholder="Instagram / реклама …">
-      </label>
-      <button type="submit">Создать</button>
-    </form>
-
-    <div class="link-presets" id="link-presets">
-      {% set presets = [
-        ('today', 'Сегодня'),
-        ('yesterday', 'Вчера'),
-        ('day_before', 'Позавчера'),
-        ('last_3_days', '3 дня'),
-        ('week', 'Неделя'),
-        ('month', 'Месяц'),
-        ('quarter', '3 месяца'),
-        ('year', 'Год'),
-        ('all', 'Всё время')
-      ] %}
-      {% for key, label in presets %}
-      <button type="button" class="preset-btn {% if tracking_stats.preset == key %}active{% endif %}"
-              data-preset="{{ key }}">{{ label }}</button>
-      {% endfor %}
-    </div>
-    <form class="row link-calendar" id="link-calendar" style="margin:.75rem 0 1rem;">
-      <label>С
-        <input type="date" name="date_from" id="link-date-from">
-      </label>
-      <label>По
-        <input type="date" name="date_to" id="link-date-to">
-      </label>
-      <button type="submit" class="secondary">По календарю</button>
-    </form>
-    <p class="hint" id="link-range-label">Период: {{ tracking_stats.label }} · всего {{ tracking_stats.total }}</p>
-
-    <div class="bar-chart" id="link-chart" aria-label="Диаграмма переходов">
-      {% for item in tracking_stats.links %}
-      <div class="bar-col" data-link-id="{{ item.id }}" title="{{ item.name }}: {{ item.clicks }}">
-        <div class="bar-val">{{ item.clicks }}</div>
-        <div class="bar-track">
-          <div class="bar-fill" style="height: {{ (item.clicks / tracking_stats.max_clicks * 100)|round(1) }}%"></div>
-        </div>
-        <div class="bar-name">{{ item.name }}</div>
-      </div>
-      {% else %}
-      <p class="hint bar-empty">Нет ссылок для диаграммы.</p>
-      {% endfor %}
-    </div>
-
-    <table id="links-table">
-      <tr><th>Название</th><th>Переходы</th><th>Ссылка</th><th></th></tr>
-      <tbody id="links-tbody">
-      {% for item in tracking_stats.links %}
-      <tr data-link-id="{{ item.id }}">
-        <td>
-          <form method="post" action="{{ url('/links/' ~ item.id ~ '/rename') }}"
-                class="row js-ajax link-rename" data-ajax="link-rename">
-            <input type="text" name="name" value="{{ item.name }}" required maxlength="128">
-            <button type="submit" class="secondary">OK</button>
-          </form>
-        </td>
-        <td class="link-clicks">{{ item.clicks }}</td>
-        <td>
-          <code class="link-url">{{ item.url }}</code>
-          <button type="button" class="secondary link-copy" data-url="{{ item.url }}">📋</button>
-        </td>
-        <td>
-          <form method="post" action="{{ url('/links/' ~ item.id ~ '/delete') }}"
-                class="js-ajax" data-ajax="link-delete"
-                data-confirm="Удалить ссылку и её статистику?">
-            <button type="submit" class="danger">удалить</button>
-          </form>
-        </td>
-      </tr>
-      {% else %}
-      <tr class="links-empty"><td colspan="4" class="hint">Пока нет ссылок.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </section>
-
-  <section class="panel" id="orders">
-    <h2 class="panel-title">💳 Заявки на Премиум {% if pending %}<span class="meta">({{ pending|length }})</span>{% endif %}</h2>
-    {% if not pending %}<p class="hint">Нет заявок.</p>{% endif %}
-    <table>
-      {% for o in pending %}
-      <tr>
-        <td>#{{ o.id }}</td>
-        <td>user {{ o.user_id }}</td>
-        <td>plan {{ o.plan_id }}</td>
-        <td>
-          {% if o.receipt_file_id %}
-            {% if o.receipt_kind == 'photo' %}
-              <a href="{{ url('/orders/' ~ o.id ~ '/receipt') }}" target="_blank" rel="noopener">
-                <img src="{{ url('/orders/' ~ o.id ~ '/receipt') }}" alt="чек"
-                     style="max-height:72px;max-width:120px;object-fit:cover;border-radius:8px;vertical-align:middle">
-              </a>
-            {% else %}
-              <a href="{{ url('/orders/' ~ o.id ~ '/receipt') }}" target="_blank" rel="noopener">📄 Чек</a>
-            {% endif %}
-          {% else %}
-            <span class="hint">нет чека</span>
-          {% endif %}
-        </td>
-        <td class="row">
-          <form method="post" action="{{ url('/orders/' ~ o.id ~ '/approve') }}" class="js-ajax" data-ajax="order"><button type="submit">OK</button></form>
-          <form method="post" action="{{ url('/orders/' ~ o.id ~ '/reject') }}" class="js-ajax" data-ajax="order"><button type="submit" class="secondary">Reject</button></form>
-        </td>
-      </tr>
-      {% endfor %}
-    </table>
-  </section>
-
-  <section class="panel" id="premiums">
-    <h2 class="panel-title">⭐ Активный Премиум</h2>
-    <table>
-      {% for u in premiums %}
-      <tr>
-        <td>{{ u.tg_id }}</td>
-        <td>@{{ u.username or '-' }}</td>
-        <td>до {{ u.premium_until.strftime('%d.%m.%Y %H:%M') if u.premium_until else '—' }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="3" class="hint">Пока никого.</td></tr>
-      {% endfor %}
-    </table>
-  </section>
-
   <section class="panel" id="geo">
     <h2 class="panel-title">📍 Моя геолокация</h2>
     <p>Координаты профиля админа для ленты и спавна тестов. По умолчанию — Душанбе.</p>
@@ -356,153 +156,4 @@
     {% endif %}
   </section>
 </div>
-<script>
-(function () {
-  const root = document.getElementById("links");
-  if (!root) return;
-  const statsUrl = root.getAttribute("data-stats-url");
-  const chart = document.getElementById("link-chart");
-  const tbody = document.getElementById("links-tbody");
-  const labelEl = document.getElementById("link-range-label");
-  const presets = document.getElementById("link-presets");
-  const cal = document.getElementById("link-calendar");
-  const dateFrom = document.getElementById("link-date-from");
-  const dateTo = document.getElementById("link-date-to");
-  let activePreset = "all";
-
-  function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-
-  function renderChart(items) {
-    if (!chart) return;
-    if (!items.length) {
-      chart.innerHTML = '<p class="hint bar-empty">Нет ссылок для диаграммы.</p>';
-      return;
-    }
-    const max = Math.max.apply(null, items.map(function (i) { return i.clicks; }).concat([1]));
-    chart.innerHTML = items.map(function (item) {
-      const h = Math.round((item.clicks / max) * 1000) / 10;
-      return (
-        '<div class="bar-col" data-link-id="' + item.id + '" title="' + escapeHtml(item.name) + ": " + item.clicks + '">' +
-        '<div class="bar-val">' + item.clicks + "</div>" +
-        '<div class="bar-track"><div class="bar-fill" style="height:' + h + '%"></div></div>' +
-        '<div class="bar-name">' + escapeHtml(item.name) + "</div></div>"
-      );
-    }).join("");
-  }
-
-  function renderTable(items) {
-    if (!tbody) return;
-    if (!items.length) {
-      tbody.innerHTML = '<tr class="links-empty"><td colspan="4" class="hint">Пока нет ссылок.</td></tr>';
-      return;
-    }
-    tbody.innerHTML = items.map(function (item) {
-      const renameAction = {{ url('/links/') | tojson }} + item.id + "/rename";
-      const deleteAction = {{ url('/links/') | tojson }} + item.id + "/delete";
-      return (
-        '<tr data-link-id="' + item.id + '">' +
-        "<td><form method=\"post\" action=\"" + renameAction + "\" class=\"row js-ajax link-rename\" data-ajax=\"link-rename\">" +
-        '<input type="text" name="name" value="' + escapeHtml(item.name) + '" required maxlength="128">' +
-        '<button type="submit" class="secondary">OK</button></form></td>' +
-        '<td class="link-clicks">' + item.clicks + "</td>" +
-        "<td><code class=\"link-url\">" + escapeHtml(item.url) + "</code> " +
-        '<button type="button" class="secondary link-copy" data-url="' + escapeHtml(item.url) + '">📋</button></td>' +
-        "<td><form method=\"post\" action=\"" + deleteAction + "\" class=\"js-ajax\" data-ajax=\"link-delete\" " +
-        'data-confirm="Удалить ссылку и её статистику?"><button type="submit" class="danger">удалить</button></form></td>' +
-        "</tr>"
-      );
-    }).join("");
-  }
-
-  function setPresetActive(key) {
-    activePreset = key || "all";
-    if (!presets) return;
-    presets.querySelectorAll(".preset-btn").forEach(function (btn) {
-      btn.classList.toggle("active", btn.getAttribute("data-preset") === activePreset);
-    });
-  }
-
-  async function fetchStats(params) {
-    const url = new URL(statsUrl, window.location.origin);
-    Object.keys(params).forEach(function (k) {
-      if (params[k]) url.searchParams.set(k, params[k]);
-    });
-    const res = await fetch(url.toString(), {
-      headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
-      credentials: "same-origin",
-    });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || "error");
-    renderChart(data.links || []);
-    renderTable(data.links || []);
-    if (labelEl) {
-      labelEl.textContent = "Период: " + (data.label || "") + " · всего " + (data.total || 0);
-    }
-    if (data.date_from || data.date_to) {
-      setPresetActive("");
-      if (dateFrom) dateFrom.value = data.date_from || "";
-      if (dateTo) dateTo.value = data.date_to || "";
-    } else {
-      setPresetActive(data.preset || "all");
-    }
-    return data;
-  }
-
-  window.refreshTrackingStats = function () {
-    if (dateFrom && dateTo && (dateFrom.value || dateTo.value) && !activePreset) {
-      return fetchStats({ date_from: dateFrom.value, date_to: dateTo.value });
-    }
-    return fetchStats({ preset: activePreset || "all" });
-  };
-
-  if (presets) {
-    presets.addEventListener("click", function (e) {
-      const btn = e.target.closest(".preset-btn");
-      if (!btn) return;
-      const key = btn.getAttribute("data-preset");
-      setPresetActive(key);
-      if (dateFrom) dateFrom.value = "";
-      if (dateTo) dateTo.value = "";
-      fetchStats({ preset: key }).catch(function (err) {
-        if (window.showToast) window.showToast(String(err.message || err), false);
-      });
-    });
-  }
-
-  if (cal) {
-    cal.addEventListener("submit", function (e) {
-      e.preventDefault();
-      setPresetActive("");
-      fetchStats({
-        date_from: dateFrom && dateFrom.value,
-        date_to: dateTo && dateTo.value,
-      }).catch(function (err) {
-        if (window.showToast) window.showToast(String(err.message || err), false);
-      });
-    });
-  }
-
-  root.addEventListener("click", function (e) {
-    const btn = e.target.closest(".link-copy");
-    if (!btn) return;
-    const url = btn.getAttribute("data-url") || "";
-    if (!url) return;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(function () {
-        if (window.showToast) window.showToast("Ссылка скопирована", true);
-      }).catch(function () {
-        window.prompt("Скопируй ссылку:", url);
-      });
-    } else {
-      window.prompt("Скопируй ссылку:", url);
-    }
-  });
-})();
-</script>
 {% endblock %}

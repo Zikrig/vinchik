@@ -46,11 +46,42 @@
   <div class="topbar">
     <div class="brand">Vinchik <span>Admin</span></div>
     <div class="nav">
-      <a href="{{ url('/') }}">📊 Дашборд</a>
-      <a href="{{ url('/bans') }}">🚫 Баны</a>
-      <a href="{{ url('/logout') }}">Выйти</a>
+      {% set nav = 'accounts' %}
+      {% include "_admin_nav.html" %}
     </div>
   </div>
+
+  {% if flash and flash.startswith("test_created_") %}<p class="flash-ok">Создано тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
+  {% if flash and flash.startswith("test_cleared_") %}<p class="flash-ok">Удалено тестовых: {{ flash.split('_')[-1] }}.</p>{% endif %}
+  {% if flash and flash.startswith("test_shown_") %}<p class="flash-ok">Тестовые показаны в ленте.</p>{% endif %}
+  {% if flash and flash.startswith("test_hidden_") %}<p class="flash-ok">Тестовые скрыты из ленты.</p>{% endif %}
+
+  <section class="panel" id="test-users">
+    <h2 class="panel-title">🧪 Тестовые аккаунты</h2>
+    <div class="switch-compact-list">
+      {% with
+        action=url('/test-users/visibility'),
+        field_name='visible',
+        field_value=('0' if test_users_visible else '1'),
+        on=test_users_visible,
+        ajax_kind='test-visibility',
+        label='🧪 Тестовые в ленте'
+      %}
+        {% include "_switch_compact.html" %}
+      {% endwith %}
+    </div>
+    <p class="hint">Сейчас: <strong data-test-count>{{ test_users_count }}</strong>. Спаун у гео админа / Душанбе.</p>
+    <form method="post" action="{{ url('/test-users/create') }}" class="row js-ajax" data-ajax="test-create">
+      <label>Сколько
+        <input type="number" name="count" value="10" min="1" max="100" required>
+      </label>
+      <button type="submit">Добавить</button>
+    </form>
+    <form method="post" action="{{ url('/test-users/clear') }}" class="js-ajax" data-ajax="test-clear"
+          data-confirm="Удалить всех тестовых пользователей?" style="margin-top:.75rem;">
+      <button type="submit" class="secondary">Удалить всех тестовых</button>
+    </form>
+  </section>
 
   <section class="panel">
     <h2>Карта</h2>

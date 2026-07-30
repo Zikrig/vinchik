@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Премиум — Vinchik Admin{% endblock %}
+{% block body %}
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">Vinchik <span>Премиум</span></div>
+    <div class="nav">
+      {% set nav = 'premium' %}
+      {% include "_admin_nav.html" %}
+    </div>
+  </div>
+
+  <nav class="jump">
+    <a href="#orders">💳 Заявки</a>
+    <a href="#premiums">⭐ Активные</a>
+  </nav>
+
+  <section class="panel" id="orders">
+    <h2 class="panel-title">💳 Заявки на Премиум {% if pending %}<span class="meta">({{ pending|length }})</span>{% endif %}</h2>
+    {% if not pending %}<p class="hint">Нет заявок.</p>{% endif %}
+    <table>
+      {% for o in pending %}
+      <tr>
+        <td>#{{ o.id }}</td>
+        <td>user {{ o.user_id }}</td>
+        <td>plan {{ o.plan_id }}</td>
+        <td>
+          {% if o.receipt_file_id %}
+            {% if o.receipt_kind == 'photo' %}
+              <a href="{{ url('/orders/' ~ o.id ~ '/receipt') }}" target="_blank" rel="noopener">
+                <img src="{{ url('/orders/' ~ o.id ~ '/receipt') }}" alt="чек"
+                     style="max-height:72px;max-width:120px;object-fit:cover;border-radius:8px;vertical-align:middle">
+              </a>
+            {% else %}
+              <a href="{{ url('/orders/' ~ o.id ~ '/receipt') }}" target="_blank" rel="noopener">📄 Чек</a>
+            {% endif %}
+          {% else %}
+            <span class="hint">нет чека</span>
+          {% endif %}
+        </td>
+        <td class="row">
+          <form method="post" action="{{ url('/orders/' ~ o.id ~ '/approve') }}" class="js-ajax" data-ajax="order"><button type="submit">OK</button></form>
+          <form method="post" action="{{ url('/orders/' ~ o.id ~ '/reject') }}" class="js-ajax" data-ajax="order"><button type="submit" class="secondary">Reject</button></form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </section>
+
+  <section class="panel" id="premiums">
+    <h2 class="panel-title">⭐ Активный Премиум</h2>
+    <table>
+      {% for u in premiums %}
+      <tr>
+        <td>{{ u.tg_id }}</td>
+        <td>@{{ u.username or '-' }}</td>
+        <td>до {{ u.premium_until.strftime('%d.%m.%Y %H:%M') if u.premium_until else '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="hint">Пока никого.</td></tr>
+      {% endfor %}
+    </table>
+  </section>
+</div>
+{% endblock %}

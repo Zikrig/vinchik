@@ -1,0 +1,8 @@
+{# Shared admin nav. Set `nav` to: dashboard|accounts|channels|links|premium|bans #}
+<a href="{{ url('/') }}"{% if nav == 'dashboard' %} class="is-active"{% endif %}>📊 Дашборд</a>
+<a href="{{ url('/accounts') }}"{% if nav == 'accounts' %} class="is-active"{% endif %}>👥 Аккаунты</a>
+<a href="{{ url('/channels') }}"{% if nav == 'channels' %} class="is-active"{% endif %}>📢 Каналы</a>
+<a href="{{ url('/links') }}"{% if nav == 'links' %} class="is-active"{% endif %}>🔗 Ссылки</a>
+<a href="{{ url('/premium') }}"{% if nav == 'premium' %} class="is-active"{% endif %}>⭐ Премиум</a>
+<a href="{{ url('/bans') }}"{% if nav == 'bans' %} class="is-active"{% endif %}>🚫 Баны</a>
+<a href="{{ url('/logout') }}">Выйти</a>

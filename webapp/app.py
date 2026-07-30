@@ -195,6 +195,10 @@ def wants_json(request: Request) -> bool:
     )
 
 
+def form_truthy(value: str | None) -> bool:
+    return (value or "").lower() in {"1", "true", "on", "yes"}
+
+
 def serialize_tracking_link(link, clicks: int = 0) -> dict:
     return {
         "id": link.id,
@@ -383,11 +387,6 @@ def create_app() -> FastAPI:
     async def dashboard(request: Request, session: AsyncSession = Depends(get_db)):
         if (redir := require_auth(request)) is not None:
             return redir
-        pending = await list_pending_orders(session)
-        premiums = await list_premium_users(session)
-        channels = (
-            await session.execute(select(RequiredChannel).order_by(RequiredChannel.id))
-        ).scalars().all()
         pay = await get_payment_info(session)
         welcome = await get_welcome_post(session)
         admin_ids = sorted(settings.admin_id_set)
@@ -405,9 +404,6 @@ def create_app() -> FastAPI:
             "payment_check_time": pay["check_time"],
             "welcome_text": welcome["text"],
             "welcome_has_photo": welcome_post_configured(welcome),
-            "pending": pending,
-            "premiums": premiums,
-            "channels": channels,
             "admin_ids": admin_ids,
             "admin_geo": admin_geo,
             "dushanbe_lat": DUSHANBE_LAT,
@@ -416,10 +412,43 @@ def create_app() -> FastAPI:
             "test_users_count": await count_test_users(session),
             "test_users_visible": await are_test_users_visible(session),
             "gender_stats": await count_profiles_by_gender(session),
-            "tracking_stats": await load_tracking_stats(session, preset="all"),
             "flash": request.query_params.get("flash"),
         }
         return TEMPLATES.TemplateResponse(request, "dashboard.html", ctx)
+
+    @app.get("/channels", response_class=HTMLResponse)
+    async def channels_page(request: Request, session: AsyncSession = Depends(get_db)):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        channels = (
+            await session.execute(select(RequiredChannel).order_by(RequiredChannel.id))
+        ).scalars().all()
+        return TEMPLATES.TemplateResponse(
+            request, "channels.html", {"channels": channels}
+        )
+
+    @app.get("/links", response_class=HTMLResponse)
+    async def links_page(request: Request, session: AsyncSession = Depends(get_db)):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        return TEMPLATES.TemplateResponse(
+            request,
+            "links.html",
+            {"tracking_stats": await load_tracking_stats(session, preset="all")},
+        )
+
+    @app.get("/premium", response_class=HTMLResponse)
+    async def premium_page(request: Request, session: AsyncSession = Depends(get_db)):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        return TEMPLATES.TemplateResponse(
+            request,
+            "premium.html",
+            {
+                "pending": await list_pending_orders(session),
+                "premiums": await list_premium_users(session),
+            },
+        )
 
     @app.get("/bans", response_class=HTMLResponse)
     async def bans_page(request: Request, session: AsyncSession = Depends(get_db)):
@@ -464,6 +493,9 @@ def create_app() -> FastAPI:
                 "map_limit": 50,
                 "dushanbe_lat": DUSHANBE_LAT,
                 "dushanbe_lon": DUSHANBE_LON,
+                "test_users_count": await count_test_users(session),
+                "test_users_visible": await are_test_users_visible(session),
+                "flash": request.query_params.get("flash"),
             },
         )
 
@@ -1015,7 +1047,7 @@ def create_app() -> FastAPI:
             )
         return ok_response(
             request,
-            settings.abs_path("/"),
+            settings.abs_path("/links"),
             message="Ссылка создана.",
             link=serialize_tracking_link(link, 0),
         )
@@ -1252,7 +1284,7 @@ def create_app() -> FastAPI:
         total = await count_test_users(session)
         return ok_response(
             request,
-            settings.abs_path(f"/?flash=test_created_{n}"),
+            settings.abs_path(f"/accounts?flash=test_created_{n}"),
             n=n,
             count=total,
             message=f"Создано тестовых: {n}.",
@@ -1271,7 +1303,7 @@ def create_app() -> FastAPI:
         flash = "test_shown" if on else "test_hidden"
         return ok_response(
             request,
-            settings.abs_path(f"/?flash={flash}_{n}"),
+            settings.abs_path(f"/accounts?flash={flash}_{n}"),
             visible=on,
             n=n,
             count=await count_test_users(session),
@@ -1291,7 +1323,7 @@ def create_app() -> FastAPI:
         n = await clear_test_users(session)
         return ok_response(
             request,
-            settings.abs_path(f"/?flash=test_cleared_{n}"),
+            settings.abs_path(f"/accounts?flash=test_cleared_{n}"),
             n=n,
             count=0,
             message=f"Удалено тестовых: {n}.",
