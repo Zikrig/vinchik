@@ -14,7 +14,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Обязательные каналы | `services/channels.py`; веб `/channels`; бот `/admin` → 📢 Каналы (@ник / t.me / forward); юзер: Настройки → Каналы |
 | Карта пользователей (≤50, админ красным) | `/accounts` (Leaflet), `map_markers()` |
 | Гео админа / тестовые юзеры | `services/admin_tools.py`, `services/media.py`; веб: тесты на `/accounts`, свитч видимости также в настройках дашборда |
-| Трекинг-ссылки (deep-link + клики) | `services/tracking_links.py`, `handlers/admin_links.py`, веб `/links`; модели `TrackingLink` / `TrackingClick` |
+| Трекинг-ссылки (deep-link + клики) | `services/tracking_links.py`, `handlers/admin_links.py`, веб `/links`; код `?start=` — явный или латиница из названия (не random); модели `TrackingLink` / `TrackingClick` |
 | Справочник НП (текст+координаты) | `data/settlements/settlements.csv.gz` (**только TJ+RU**), `services/settlements*.py`, `scripts/build_settlements_dump.py` |
 | Тестовое фото | `data/test.png` (опционально; без файла тестовые анкеты текстовые) |
 | Роутеры | `handlers/` |

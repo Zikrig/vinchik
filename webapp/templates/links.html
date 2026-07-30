@@ -14,11 +14,18 @@
 
     <form method="post" action="{{ url('/links/create') }}" class="row js-ajax" data-ajax="link-create"
           style="margin-bottom:1rem;">
-      <label style="flex:1;min-width:220px">Название
-        <input type="text" name="name" required maxlength="128" placeholder="Instagram / реклама …">
+      <label style="flex:1;min-width:200px">Название
+        <input type="text" name="name" required maxlength="128" placeholder="Instagram / реклама …"
+               id="link-create-name">
+      </label>
+      <label style="flex:1;min-width:180px">Аргумент (?start=)
+        <input type="text" name="code" maxlength="64" placeholder="авто из названия"
+               id="link-create-code" pattern="[A-Za-z0-9][A-Za-z0-9_-]*"
+               title="Латиница, цифры, _ и -">
       </label>
       <button type="submit">Создать</button>
     </form>
+    <p class="hint" style="margin-top:-.5rem">Пустой аргумент → латиница из названия (например «Инстаграм ads» → <code>instagram_ads</code>). Свой код — осмысленный, без рандома.</p>
 
     <div class="link-presets" id="link-presets">
       {% set presets = [
@@ -50,7 +57,6 @@
 
     <div class="link-chart-wrap" id="link-chart-wrap">
       <canvas id="link-chart" aria-label="Диаграмма переходов"></canvas>
-      <p class="hint bar-empty" id="link-chart-empty" hidden>Нет ссылок для диаграммы.</p>
     </div>
 
     <table id="links-table">
@@ -91,7 +97,6 @@
   if (!root) return;
   const statsUrl = root.getAttribute("data-stats-url");
   const canvas = document.getElementById("link-chart");
-  const emptyEl = document.getElementById("link-chart-empty");
   const tbody = document.getElementById("links-tbody");
   const labelEl = document.getElementById("link-range-label");
   const presets = document.getElementById("link-presets");
@@ -100,6 +105,16 @@
   const dateTo = document.getElementById("link-date-to");
   let activePreset = "all";
   let chart = null;
+  const BAR_COLORS = [
+    "#1f6b4f", "#2563eb", "#db2777", "#a16207",
+    "#0f766e", "#7c3aed", "#c2410c", "#0369a1",
+  ];
+
+  function barColors(n) {
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(BAR_COLORS[i % BAR_COLORS.length]);
+    return out;
+  }
 
   function escapeHtml(s) {
     return String(s)
@@ -113,23 +128,12 @@
     if (!canvas || typeof Chart === "undefined") return;
     const labels = items.map(function (i) { return i.name; });
     const values = items.map(function (i) { return i.clicks; });
-
-    if (!items.length) {
-      if (chart) {
-        chart.destroy();
-        chart = null;
-      }
-      canvas.style.display = "none";
-      if (emptyEl) emptyEl.hidden = false;
-      return;
-    }
-
-    canvas.style.display = "";
-    if (emptyEl) emptyEl.hidden = true;
+    const colors = barColors(values.length);
 
     if (chart) {
       chart.data.labels = labels;
       chart.data.datasets[0].data = values;
+      chart.data.datasets[0].backgroundColor = colors;
       chart.update();
       return;
     }
@@ -141,8 +145,7 @@
         datasets: [{
           label: "Переходы",
           data: values,
-          backgroundColor: "#1f6b4f",
-          borderColor: "#1f6b4f",
+          backgroundColor: colors,
           borderWidth: 0,
           borderRadius: 0,
           maxBarThickness: 48,
@@ -166,7 +169,8 @@
           x: {
             grid: { display: false },
             ticks: {
-              color: "#5c6b64",
+              color: "#1a2420",
+              font: { size: 14, weight: "600" },
               maxRotation: 45,
               minRotation: 0,
               autoSkip: true,
@@ -178,12 +182,13 @@
             ticks: {
               color: "#5c6b64",
               precision: 0,
-              stepSize: undefined,
+              font: { size: 12 },
             },
             title: {
               display: true,
               text: "Переходы",
               color: "#5c6b64",
+              font: { size: 13 },
             },
             grid: {
               color: "rgba(26, 36, 32, 0.08)",

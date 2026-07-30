@@ -1035,15 +1035,16 @@ def create_app() -> FastAPI:
     async def links_create(
         request: Request,
         name: str = Form(...),
+        code: str = Form(""),
         session: AsyncSession = Depends(get_db),
     ):
         if (redir := require_auth(request)) is not None:
             return redir
         try:
-            link = await create_link(session, name)
+            link = await create_link(session, name, code or None)
         except ValueError as exc:
             return err_response(
-                request, settings.abs_path("/"), error=str(exc)
+                request, settings.abs_path("/links"), error=str(exc)
             )
         return ok_response(
             request,

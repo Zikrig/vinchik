@@ -128,7 +128,10 @@ async def adm_links_new(callback: CallbackQuery, state: FSMContext, bot: Bot) ->
     await callback.answer()
     await bot.send_message(
         callback.from_user.id,
-        "➕ Новая ссылка\n\nПришли название (его видно в статистике):",
+        "➕ Новая ссылка\n\n"
+        "Пришли название (видно в статистике).\n"
+        "Аргумент ?start= по умолчанию — латиница из названия.\n"
+        "Свой код: <code>Название | moy_kod</code>",
         reply_markup=_links_cancel_kb(),
     )
 
@@ -139,15 +142,21 @@ async def adm_link_create_name(
 ) -> None:
     if message.from_user is None or not _is_admin(message.from_user.id):
         return
+    raw = message.text or ""
+    if "|" in raw:
+        name_part, code_part = raw.split("|", 1)
+    else:
+        name_part, code_part = raw, ""
     try:
-        link = await create_link(session, message.text or "")
+        link = await create_link(session, name_part, code_part or None)
     except ValueError as exc:
         await message.answer(str(exc), reply_markup=_links_cancel_kb())
         return
     await state.clear()
     url = public_url(link.code)
     await message.answer(
-        f"✅ Создано: <b>{html.escape(link.name)}</b>\n\n"
+        f"✅ Создано: <b>{html.escape(link.name)}</b>\n"
+        f"Код: <code>{html.escape(link.code)}</code>\n\n"
         f"<code>{html.escape(url)}</code>",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[

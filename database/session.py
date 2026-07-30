@@ -145,6 +145,11 @@ async def init_db() -> None:
                 "ON tracking_clicks (link_id, created_at)"
             )
         )
+        await conn.execute(
+            text(
+                "ALTER TABLE tracking_links ALTER COLUMN code TYPE VARCHAR(64)"
+            )
+        )
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
