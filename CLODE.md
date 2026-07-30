@@ -64,6 +64,8 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Дамп населённых пунктов лежит в `data/` (volume) — без `settlements.csv.gz` текстовый поиск гео не работает.
 - `session.get(User, …, options=[selectinload])` ненадёжен (identity map) — грузить через `load_user_with_profile` / `select`+`selectinload`.
 - После `rollback` ORM-объекты expire → lazy load в async = MissingGreenlet; не трогать expired instance.
+- Лента выбирает карточку одним SQL: bbox → точная дистанция → диагональная волна; реакции исключаются через `NOT EXISTS`. Feed/likes/reports/reengage индексы создаются в `init_db`.
+- Настройки БД кэшируются в процессе на 30 сек (между bot/web допустима такая задержка); пул каждого процесса задаётся `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_POOL_TIMEOUT_SECONDS`, `DB_POOL_RECYCLE_SECONDS`.
 - Reengage: не слать тестовым (`is_test` / `tg_id<=0`).
 - Лента: кнопка на старой карточке после удаления тестовых → `record_action` проверяет, что `to_user` ещё есть (иначе None, без IntegrityError).
 - БД: в `.env` только `POSTGRES_*`; URL собирает `config/settings.py`.

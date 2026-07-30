@@ -90,15 +90,26 @@ async def list_blocked_users(session: AsyncSession) -> list[dict]:
         .where(User.is_blocked.is_(True))
         .order_by(User.blocked_at.desc().nulls_last())
     )
+    users = result.all()
+    user_ids = [user.tg_id for user, _ in users]
+    report_counts: dict[int, int] = {}
+    if user_ids:
+        since = datetime.now(UTC) - timedelta(days=REPORT_WINDOW_DAYS)
+        count_result = await session.execute(
+            select(Report.to_user_id, func.count())
+            .where(Report.to_user_id.in_(user_ids), Report.created_at >= since)
+            .group_by(Report.to_user_id)
+        )
+        report_counts = {int(uid): int(n) for uid, n in count_result.all()}
+
     out: list[dict] = []
-    for user, profile in result.all():
-        n = await count_reports_recent(session, user.tg_id)
+    for user, profile in users:
         out.append(
             {
                 "tg_id": user.tg_id,
                 "username": user.username,
                 "blocked_at": user.blocked_at,
-                "reports_n": n,
+                "reports_n": report_counts.get(user.tg_id, 0),
                 "profile": None
                 if profile is None
                 else {

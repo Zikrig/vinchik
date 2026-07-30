@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from time import monotonic
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +19,9 @@ DEFAULTS = {
     "payment_card": settings.payment_card or "укажите карту в админке",
     "payment_check_time": settings.payment_check_time,
 }
+
+_CACHE_TTL_SECONDS = 30.0
+_setting_cache: dict[str, tuple[float, str]] = {}
 
 
 async def ensure_defaults(session: AsyncSession) -> None:
@@ -37,12 +42,20 @@ async def ensure_defaults(session: AsyncSession) -> None:
 
 
 async def get_setting(session: AsyncSession, key: str, default: str | None = None) -> str:
+    cached = _setting_cache.get(key)
+    now = monotonic()
+    if cached is not None and cached[0] > now:
+        return cached[1]
+
     row = await session.get(Setting, key)
     if row:
-        return row.value
-    if key in DEFAULTS:
-        return DEFAULTS[key]
-    return default or ""
+        value = row.value
+    elif key in DEFAULTS:
+        value = DEFAULTS[key]
+    else:
+        return default or ""
+    _setting_cache[key] = (now + _CACHE_TTL_SECONDS, value)
+    return value
 
 
 async def set_setting(session: AsyncSession, key: str, value: str) -> None:
@@ -52,6 +65,7 @@ async def set_setting(session: AsyncSession, key: str, value: str) -> None:
     else:
         row.value = value
     await session.commit()
+    _setting_cache[key] = (monotonic() + _CACHE_TTL_SECONDS, value)
 
 
 async def get_daily_like_limit(session: AsyncSession) -> int:

@@ -28,7 +28,7 @@ from services.likes import (
     notify_like_batch,
     record_action,
 )
-from services.limits import can_browse, can_like
+from services.limits import can_browse
 from services.reports import file_report
 from services.settings_service import is_registration_only
 from states.browse import BrowseStates, MessageStates
@@ -141,7 +141,6 @@ async def start_browse(
         return
     if not user.profile.is_active:
         user.profile.is_active = True
-        await session.commit()
 
     await touch_activity(session, user)
 
@@ -169,14 +168,6 @@ async def cb_browse(
     user = await load_user(session, callback.from_user.id)
     assert user and callback.message
     await callback.answer()
-    if not await can_browse(session, user, user.profile):
-        await state.clear()
-        await bot.send_message(
-            callback.from_user.id,
-            _limit_promo_text(user.language or "ru"),
-            reply_markup=premium_cta_kb(user.language or "ru", with_main_menu=True),
-        )
-        return
     await start_browse(callback.message, session, user, bot, state)
 
 
@@ -232,12 +223,6 @@ async def _rate_from_message(
         await notify_like_batch(bot, session, int(target_id))
     if like and action == LikeAction.like:
         await bot.send_message(user.tg_id, t("like_sent", lang))
-
-    if action in (LikeAction.like, LikeAction.message) and like is not None:
-        if not await can_like(session, user, user.profile):
-            await state.clear()
-            await _say_limit(message, lang)
-            return
 
     await start_browse(message, session, user, bot, state)
 

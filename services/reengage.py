@@ -35,18 +35,22 @@ async def process_reengage(bot: Bot) -> None:
     now = datetime.now(UTC)
     async with async_session_maker() as session:
         result = await session.execute(
-            select(User).where(
-                User.last_activity_at.is_not(None),
+            select(
+                User.tg_id,
+                User.last_activity_at,
+                User.reengage_level,
+                User.language,
+            ).where(
+                User.last_activity_at <= now - timedelta(days=1),
                 User.reengage_level < 3,
                 User.is_test.is_(False),
                 User.tg_id > 0,
                 User.is_blocked.is_(False),
             )
         )
-        # Snapshot scalars — do not touch ORM after rollback/commit of other rows.
         candidates = [
-            (u.tg_id, u.last_activity_at, u.reengage_level, u.language or "ru")
-            for u in result.scalars().all()
+            (tg_id, last_activity_at, reengage_level, language or "ru")
+            for tg_id, last_activity_at, reengage_level, language in result.all()
         ]
 
     for tg_id, last_activity_at, reengage_level, lang in candidates:

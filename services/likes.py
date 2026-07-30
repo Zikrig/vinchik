@@ -8,7 +8,7 @@ from typing import Any
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
@@ -64,15 +64,15 @@ async def list_unseen_likers(session: AsyncSession, user_id: int) -> list[tuple[
 
 
 async def mark_likes_seen(session: AsyncSession, user_id: int) -> None:
-    result = await session.execute(
-        select(Like).where(
+    await session.execute(
+        update(Like)
+        .where(
             Like.to_user_id == user_id,
             Like.action.in_([LikeAction.like, LikeAction.message]),
             Like.is_seen.is_(False),
         )
+        .values(is_seen=True)
     )
-    for like in result.scalars().all():
-        like.is_seen = True
     await session.commit()
 
 
@@ -149,11 +149,14 @@ async def record_action(
         existing.message_payload = payload
         existing.is_seen = False
         existing.created_at = now
-        await session.commit()
         if action in (LikeAction.like, LikeAction.message):
             from services.moderation import on_like_recorded
 
-            await on_like_recorded(session, from_user.tg_id, action, text)
+            await session.flush()
+            await on_like_recorded(
+                session, from_user.tg_id, action, text, commit=False
+            )
+        await session.commit()
         return existing
 
     like = Like(
@@ -165,11 +168,12 @@ async def record_action(
         created_at=now,
     )
     session.add(like)
-    await session.commit()
     if action in (LikeAction.like, LikeAction.message):
         from services.moderation import on_like_recorded
 
-        await on_like_recorded(session, from_user.tg_id, action, text)
+        await session.flush()
+        await on_like_recorded(session, from_user.tg_id, action, text, commit=False)
+    await session.commit()
     return like
 
 

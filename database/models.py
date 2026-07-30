@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -51,6 +52,16 @@ class OrderStatus(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        Index(
+            "ix_users_reengage_activity",
+            "last_activity_at",
+            postgresql_where=text(
+                "last_activity_at IS NOT NULL AND reengage_level < 3 "
+                "AND is_test = FALSE AND is_blocked = FALSE"
+            ),
+        ),
+    )
 
     tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -84,6 +95,20 @@ class User(Base):
 
 class Profile(Base):
     __tablename__ = "profiles"
+    __table_args__ = (
+        Index(
+            "ix_profiles_feed",
+            "gender",
+            "looking_for",
+            "lat",
+            "lon",
+            "age",
+            postgresql_where=text(
+                "is_active = TRUE AND is_complete = TRUE "
+                "AND lat IS NOT NULL AND lon IS NOT NULL"
+            ),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
@@ -150,11 +175,15 @@ class SettlementAlias(Base):
 
 class Like(Base):
     __tablename__ = "likes"
-    __table_args__ = (UniqueConstraint("from_user_id", "to_user_id", name="uq_like_pair"),)
+    __table_args__ = (
+        UniqueConstraint("from_user_id", "to_user_id", name="uq_like_pair"),
+        Index("ix_likes_to_action_seen", "to_user_id", "action", "is_seen"),
+        Index("ix_likes_to_created", "to_user_id", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     from_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id"))
-    to_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id"), index=True)
+    to_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id"))
     action: Mapped[LikeAction] = mapped_column(Enum(LikeAction, native_enum=False, length=16))
     message_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     message_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -223,11 +252,12 @@ class Report(Base):
     __tablename__ = "reports"
     __table_args__ = (
         UniqueConstraint("from_user_id", "to_user_id", name="uq_report_pair"),
+        Index("ix_reports_to_created", "to_user_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     from_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id"), index=True)
-    to_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id"), index=True)
+    to_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

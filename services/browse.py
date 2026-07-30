@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import html
+import math
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, case, func, literal, or_, select, union
+from sqlalchemy import and_, case, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -35,21 +36,6 @@ def profile_caption(profile: Profile) -> str:
     desc = html.escape((profile.description or "").strip())
     head = f"{name}, {age}, {city}"
     return f"{head}\n{desc}" if desc else head
-
-
-def recently_rated_subquery(viewer_tg_id: int, since: datetime | None):
-    """Hide the other user after like/dislike/message in either direction.
-
-    Sleep does not create a Like. If ``since`` is set, only reactions at/after
-    that time count (older pairs can appear again). If ``since`` is None
-    (profile_reshow_days=0), hide forever.
-    """
-    outgoing = select(Like.to_user_id).where(Like.from_user_id == viewer_tg_id)
-    incoming = select(Like.from_user_id).where(Like.to_user_id == viewer_tg_id)
-    if since is not None:
-        outgoing = outgoing.where(Like.created_at >= since)
-        incoming = incoming.where(Like.created_at >= since)
-    return union(outgoing, incoming)
 
 
 async def next_profile(
@@ -92,7 +78,17 @@ async def next_profile(
         if reshow_days <= 0
         else datetime.now(UTC) - timedelta(days=reshow_days)
     )
-    rated = recently_rated_subquery(viewer.tg_id, since)
+    outgoing = select(Like.id).where(
+        Like.from_user_id == viewer.tg_id,
+        Like.to_user_id == Profile.user_id,
+    )
+    incoming = select(Like.id).where(
+        Like.to_user_id == viewer.tg_id,
+        Like.from_user_id == Profile.user_id,
+    )
+    if since is not None:
+        outgoing = outgoing.where(Like.created_at >= since)
+        incoming = incoming.where(Like.created_at >= since)
 
     gender_filter = True
     if viewer_profile.looking_for == LookingFor.male:
@@ -107,6 +103,20 @@ async def next_profile(
 
     lat = float(viewer_profile.lat)
     lon = float(viewer_profile.lon)
+    # Cheap indexed rectangle first; exact great-circle distance stays below.
+    lat_delta = min(180.0, max_km / 111.045)
+    lon_delta = min(
+        180.0,
+        max_km / (111.045 * max(abs(math.cos(math.radians(lat))), 1e-6)),
+    )
+    lat_bounds = Profile.lat.between(max(-90.0, lat - lat_delta), min(90.0, lat + lat_delta))
+    lon_min, lon_max = lon - lon_delta, lon + lon_delta
+    if lon_min < -180.0:
+        lon_bounds = or_(Profile.lon >= lon_min + 360.0, Profile.lon <= lon_max)
+    elif lon_max > 180.0:
+        lon_bounds = or_(Profile.lon >= lon_min, Profile.lon <= lon_max - 360.0)
+    else:
+        lon_bounds = Profile.lon.between(lon_min, lon_max)
     dot = (
         func.sin(func.radians(lat)) * func.sin(func.radians(Profile.lat))
         + func.cos(func.radians(lat))
@@ -140,9 +150,12 @@ async def next_profile(
             Profile.is_complete.is_(True),
             User.is_blocked.is_(False),
             Profile.user_id != viewer.tg_id,
-            Profile.user_id.not_in(rated),
+            ~outgoing.exists(),
+            ~incoming.exists(),
             Profile.lat.is_not(None),
             Profile.lon.is_not(None),
+            lat_bounds,
+            lon_bounds,
             gender_filter,
             looking_back,
         )
@@ -151,6 +164,7 @@ async def next_profile(
 
     n_r = len(tiers)
     n_a = len(AGE_TOLERANCE_YEARS)
+    wave_whens = []
     for wave in range(n_r + n_a - 1):
         wave_conditions = []
         for ri, radius in enumerate(tiers):
@@ -163,12 +177,14 @@ async def next_profile(
             )
         if not wave_conditions:
             continue
-        result = await session.execute(
-            base_q.where(or_(*wave_conditions))
-            .order_by(premium_rank, age_diff, distance_km)
-            .limit(1)
-        )
-        matched = result.scalar_one_or_none()
-        if matched is not None:
-            return matched
-    return None
+        wave_whens.append((or_(*wave_conditions), wave))
+
+    if not wave_whens:
+        return None
+    wave_rank = case(*wave_whens, else_=n_r + n_a)
+    result = await session.execute(
+        base_q.where(distance_km <= max_km, wave_rank < n_r + n_a)
+        .order_by(wave_rank, premium_rank, age_diff, distance_km)
+        .limit(1)
+    )
+    return result.scalar_one_or_none()

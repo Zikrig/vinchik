@@ -109,13 +109,16 @@ async def count_actions_today(
     return int(result.scalar_one())
 
 
-async def check_user_volume(session: AsyncSession, user_id: int) -> None:
+async def check_user_volume(
+    session: AsyncSession, user_id: int, *, commit: bool = True
+) -> None:
     likes = await count_actions_today(session, user_id, LikeAction.like)
     if likes > DAILY_LIKE_SUSPICIOUS:
         await mark_suspicious(
             session,
             user_id,
             f"более {DAILY_LIKE_SUSPICIOUS} лайков за сутки UTC ({likes})",
+            commit=commit,
         )
         return
     msgs = await count_actions_today(session, user_id, LikeAction.message)
@@ -124,16 +127,20 @@ async def check_user_volume(session: AsyncSession, user_id: int) -> None:
             session,
             user_id,
             f"более {DAILY_MESSAGE_SUSPICIOUS} сообщений за сутки UTC ({msgs})",
+            commit=commit,
         )
 
 
-async def check_message_layouts(session: AsyncSession, user_id: int, text: str) -> None:
+async def check_message_layouts(
+    session: AsyncSession, user_id: int, text: str, *, commit: bool = True
+) -> None:
     layouts = detect_layouts(text)
     if len(layouts) > MAX_LAYOUTS_BEFORE_FLAG:
         await mark_suspicious(
             session,
             user_id,
             f"в сообщении более {MAX_LAYOUTS_BEFORE_FLAG} раскладок: {', '.join(layouts)}",
+            commit=commit,
         )
 
 
@@ -142,13 +149,15 @@ async def on_like_recorded(
     user_id: int,
     action: LikeAction,
     message_text: str | None = None,
+    *,
+    commit: bool = True,
 ) -> None:
     """Hook after a successful like/message — silent checks."""
     try:
         if action == LikeAction.message and message_text:
-            await check_message_layouts(session, user_id, message_text)
+            await check_message_layouts(session, user_id, message_text, commit=commit)
         if action in (LikeAction.like, LikeAction.message):
-            await check_user_volume(session, user_id)
+            await check_user_volume(session, user_id, commit=commit)
     except Exception:
         logger.exception("moderation hook failed user=%s", user_id)
 
@@ -172,7 +181,10 @@ async def sweep_suspicious_candidates(session: AsyncSession) -> int:
         )
         for uid, n in result.all():
             if await mark_suspicious(
-                session, int(uid), f"более {thr} {label} за сутки UTC ({int(n)})"
+                session,
+                int(uid),
+                f"более {thr} {label} за сутки UTC ({int(n)})",
+                commit=False,
             ):
                 flagged += 1
 
@@ -202,6 +214,7 @@ async def sweep_suspicious_candidates(session: AsyncSession) -> int:
                 session,
                 like.from_user_id,
                 f"в сообщении более {MAX_LAYOUTS_BEFORE_FLAG} раскладок: {', '.join(layouts)}",
+                commit=False,
             ):
                 flagged += 1
 
@@ -217,13 +230,16 @@ async def sweep_suspicious_candidates(session: AsyncSession) -> int:
             session,
             int(uid),
             f"жалоб за {REPORT_WINDOW_DAYS} дн.: {int(n)}",
+            commit=False,
         ):
             flagged += 1
+    if flagged:
+        await session.commit()
     return flagged
 
 
 async def list_suspicious_users(session: AsyncSession) -> list[dict]:
-    from services.reports import count_reports_recent
+    from services.reports import REPORT_WINDOW_DAYS
 
     result = await session.execute(
         select(User, Profile)
@@ -231,9 +247,64 @@ async def list_suspicious_users(session: AsyncSession) -> list[dict]:
         .where(User.is_suspicious.is_(True))
         .order_by(User.suspicious_at.desc().nulls_last())
     )
+    users = result.all()
+    user_ids = [user.tg_id for user, _ in users]
+    report_counts: dict[int, int] = {}
+    messages_by_user: dict[int, list[dict]] = {uid: [] for uid in user_ids}
+    if user_ids:
+        reports_since = datetime.now(UTC) - timedelta(days=REPORT_WINDOW_DAYS)
+        report_result = await session.execute(
+            select(Report.to_user_id, func.count())
+            .where(
+                Report.to_user_id.in_(user_ids),
+                Report.created_at >= reports_since,
+            )
+            .group_by(Report.to_user_id)
+        )
+        report_counts = {int(uid): int(n) for uid, n in report_result.all()}
+
+        ranked_messages = (
+            select(
+                Like.from_user_id.label("from_user_id"),
+                Like.to_user_id.label("to_user_id"),
+                Like.message_text.label("message_text"),
+                Like.created_at.label("created_at"),
+                func.row_number()
+                .over(
+                    partition_by=Like.from_user_id,
+                    order_by=Like.created_at.desc(),
+                )
+                .label("row_n"),
+            )
+            .where(
+                Like.from_user_id.in_(user_ids),
+                Like.action == LikeAction.message,
+                Like.message_text.is_not(None),
+            )
+            .subquery()
+        )
+        message_result = await session.execute(
+            select(ranked_messages)
+            .where(ranked_messages.c.row_n <= 20)
+            .order_by(
+                ranked_messages.c.from_user_id,
+                ranked_messages.c.created_at.desc(),
+            )
+        )
+        for row in message_result.mappings():
+            text = (row["message_text"] or "").strip()
+            if text:
+                messages_by_user[int(row["from_user_id"])].append(
+                    {
+                        "to_user_id": row["to_user_id"],
+                        "text": text,
+                        "created_at": row["created_at"],
+                        "layouts": detect_layouts(text),
+                    }
+                )
+
     out: list[dict] = []
-    for user, profile in result.all():
-        msgs = await list_user_messages(session, user.tg_id, limit=20)
+    for user, profile in users:
         out.append(
             {
                 "tg_id": user.tg_id,
@@ -241,8 +312,8 @@ async def list_suspicious_users(session: AsyncSession) -> list[dict]:
                 "is_blocked": user.is_blocked,
                 "suspicious_at": user.suspicious_at,
                 "suspicious_reason": user.suspicious_reason or "",
-                "reports_n": await count_reports_recent(session, user.tg_id),
-                "messages": msgs,
+                "reports_n": report_counts.get(user.tg_id, 0),
+                "messages": messages_by_user.get(user.tg_id, []),
                 "profile": None
                 if profile is None
                 else {
