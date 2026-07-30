@@ -549,7 +549,7 @@
         data = { ok: false, error: "Некорректный ответ сервера" };
       }
       if (res.status === 401) {
-        window.location.href = new URL("login", window.location.href).href;
+        window.location.href = {{ url('/login') | tojson }};
         throw new Error("auth");
       }
       if (res.status === 405) {

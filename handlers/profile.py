@@ -457,12 +457,14 @@ async def keep_photo(callback: CallbackQuery, session: AsyncSession, state: FSMC
     await _finish_photos(callback.message, session, state, user, existing)
 
 
-@router.message(ProfileStates.edit_photo, F.photo)
+@router.message(ProfileStates.edit_photo, F.photo | F.document)
 async def edit_photo(message: Message, session: AsyncSession, state: FSMContext, bot: Bot) -> None:
     user = await load_user(session, message.from_user.id)  # type: ignore[union-attr]
     assert user and user.profile
     lang = user.language or "ru"
-    file_id = await _extract_photo_id(message, bot, lang, from_document=False)
+    file_id = await _extract_photo_id(
+        message, bot, lang, from_document=message.document is not None
+    )
     if not file_id:
         return
     data = await state.get_data()

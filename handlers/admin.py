@@ -1,3 +1,5 @@
+import html
+
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -155,8 +157,9 @@ async def _channels_view(session: AsyncSession) -> tuple[str, InlineKeyboardMark
         ]
         for ch in channels:
             mark = "🟢" if ch.is_active else "🔴"
-            title = ch.title or ch.channel_id
-            lines.append(f"{mark} {title}\n   {ch.channel_id}")
+            title = html.escape(ch.title or ch.channel_id)
+            channel_id = html.escape(ch.channel_id)
+            lines.append(f"{mark} {title}\n   {channel_id}")
         text = "\n".join(lines)
     rows: list[list[InlineKeyboardButton]] = []
     for ch in channels:
@@ -234,9 +237,9 @@ async def _settings_view(session: AsyncSession) -> tuple[str, InlineKeyboardMark
         f"Лимит лайков / сутки UTC: {limit}\n"
         f"Радиус км: {dist:g}\n"
         f"Повтор анкеты (дней): {reshow}\n\n"
-        f"Карта:\n{pay['card']}\n\n"
-        f"Время проверки:\n{pay['check_time']}\n\n"
-        f"Менеджер:\n{pay['manager']}"
+        f"Карта:\n{html.escape(pay['card'])}\n\n"
+        f"Время проверки:\n{html.escape(pay['check_time'])}\n\n"
+        f"Менеджер:\n{html.escape(pay['manager'])}"
     )
     return text, _settings_kb(reg_only)
 
@@ -435,7 +438,7 @@ async def _finish_add_channel(
     verb = "добавлен" if created else "обновлён (уже был в списке)"
     text, kb = await _channels_view(session)
     await message.answer(
-        f"✅ Канал {verb}: {ch.title or ch.channel_id}\n\n{text}",
+        f"✅ Канал {verb}: {html.escape(ch.title or ch.channel_id)}\n\n{text}",
         reply_markup=kb,
     )
 

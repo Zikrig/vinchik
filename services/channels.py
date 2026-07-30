@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 from dataclasses import dataclass
 
@@ -82,10 +83,10 @@ def channel_button_url(ch: RequiredChannel) -> str | None:
 def format_channels_lines(channels: list[RequiredChannel]) -> str:
     lines: list[str] = []
     for ch in channels:
-        title = (ch.title or ch.channel_id or "канал").strip()
+        title = html.escape((ch.title or ch.channel_id or "канал").strip())
         url = channel_button_url(ch)
         if url:
-            lines.append(f"• {title}\n  {url}")
+            lines.append(f"• {title}\n  {html.escape(url)}")
         else:
             lines.append(f"• {title}")
     return "\n".join(lines)
@@ -117,7 +118,7 @@ async def user_subscribed_all(bot: Bot, session: AsyncSession, user: User) -> bo
                 ChatMemberStatus.KICKED,
             }:
                 return False
-        except Exception:
+        except TelegramAPIError:
             return False
     return True
 

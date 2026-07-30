@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import DailyLikeStat, Gender, Profile, User
@@ -25,21 +26,32 @@ async def get_like_count_today(session: AsyncSession, user_id: int) -> int:
     return row.count if row else 0
 
 
-async def increment_like_count(session: AsyncSession, user_id: int) -> int:
-    result = await session.execute(
-        select(DailyLikeStat).where(
-            DailyLikeStat.user_id == user_id,
-            DailyLikeStat.utc_date == utc_today(),
+async def consume_like_slot(
+    session: AsyncSession,
+    user: User,
+    profile: Profile | None,
+) -> bool:
+    """Atomically reserve one daily like slot in the caller's transaction."""
+    if not await is_like_limited(session, user, profile):
+        return True
+
+    limit = await get_daily_like_limit(session)
+    if limit <= 0:
+        return False
+
+    day = utc_today()
+    stmt = (
+        insert(DailyLikeStat)
+        .values(user_id=user.tg_id, utc_date=day, count=1)
+        .on_conflict_do_update(
+            constraint="uq_daily_like",
+            set_={"count": DailyLikeStat.count + 1},
+            where=DailyLikeStat.count < limit,
         )
+        .returning(DailyLikeStat.count)
     )
-    row = result.scalar_one_or_none()
-    if row is None:
-        row = DailyLikeStat(user_id=user_id, utc_date=utc_today(), count=1)
-        session.add(row)
-    else:
-        row.count += 1
-    await session.commit()
-    return row.count
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none() is not None
 
 
 async def is_like_limited(session: AsyncSession, user: User, profile: Profile | None) -> bool:

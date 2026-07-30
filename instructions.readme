@@ -52,11 +52,11 @@ docker compose logs -f bot
    ```
    USE_WEBHOOK=true
    WEBHOOK_BASE_URL=https://krigz.com
-   WEBHOOK_PATH=/webhook/bot
+   WEBHOOK_PATH=/vinchik/webhook
    WEBHOOK_SECRET=длинный-секрет
    ```
 3. В nginx, например:
-   - `/vinchik/webhook` → `http://127.0.0.1:8181/webhook/bot`
+   - `/vinchik/webhook` → `http://127.0.0.1:8181` (без переписывания пути)
    - `/vinchik/` → `http://127.0.0.1:8180/`
 4. `docker compose up -d --build`
 

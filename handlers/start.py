@@ -83,6 +83,7 @@ async def on_language(callback: CallbackQuery, session: AsyncSession, state: FSM
         session, callback.from_user.id, callback.from_user.username, language=lang
     )
     await set_language(session, user, lang)
+    await state.clear()
     await callback.answer()
     await callback.message.edit_text(t("language_saved", lang))
 

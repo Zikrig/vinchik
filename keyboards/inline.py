@@ -154,6 +154,14 @@ def browse_reply_kb(lang: str) -> ReplyKeyboardMarkup:
     )
 
 
+def message_compose_kb(lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t("btn_cancel", lang), callback_data="msg:cancel")]
+        ]
+    )
+
+
 def msg_next_kb(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

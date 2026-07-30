@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
@@ -234,7 +235,7 @@ async def premium_order_detail(callback: CallbackQuery, session: AsyncSession) -
             "premium_order_detail",
             lang,
             order_id=order.id,
-            plan=plan.title if plan else "—",
+            plan=html.escape(plan.title) if plan else "—",
             status=f"{_status_emoji(order.status)} {_status_label(order.status, lang)}",
             created=_fmt_dt(order.created_at),
             processed_line=processed_line,
@@ -253,6 +254,9 @@ async def premium_buy(callback: CallbackQuery, session: AsyncSession) -> None:
     assert user and callback.data and callback.message
     plan_id = int(callback.data.split(":")[2])
     order = await create_order(session, user.tg_id, plan_id)
+    if order is None:
+        await callback.answer("—", show_alert=True)
+        return
     pay = await get_payment_info(session)
     await callback.answer()
     try:
@@ -264,9 +268,9 @@ async def premium_buy(callback: CallbackQuery, session: AsyncSession) -> None:
             "premium_pay",
             user.language,
             order_id=order.id,
-            manager=pay["manager"],
-            card=pay["card"],
-            check_time=pay["check_time"],
+            manager=html.escape(pay["manager"]),
+            card=html.escape(pay["card"]),
+            check_time=html.escape(pay["check_time"]),
         ),
         reply_markup=_premium_pay_kb(user.language, order.id),
     )

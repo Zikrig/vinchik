@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database.models import Gender, LookingFor, Profile, User
-from services.media import TEST_PHOTO_MARKER
+from services.media import TEST_PHOTO_MARKER, local_photo_path
 from services.users import get_or_create_user
 
 # Dushanbe, capital of Tajikistan
@@ -100,6 +100,11 @@ async def create_test_users(session: AsyncSession, count: int) -> int:
 
     visible = await are_test_users_visible_setting(session)
     center_lat, center_lon, city = await _test_spawn_center(session)
+    test_photo = (
+        TEST_PHOTO_MARKER
+        if local_photo_path(TEST_PHOTO_MARKER) is not None
+        else None
+    )
     created = 0
     for _ in range(count):
         tg_id = await _next_test_tg_id(session)
@@ -129,8 +134,8 @@ async def create_test_users(session: AsyncSession, count: int) -> int:
             lon=lon,
             city_name=city,
             description="Тестовая анкета",
-            photo_file_id=TEST_PHOTO_MARKER,
-            photo_file_ids=[TEST_PHOTO_MARKER],
+            photo_file_id=test_photo,
+            photo_file_ids=[test_photo] if test_photo else None,
             is_active=visible,
             is_complete=True,
         )

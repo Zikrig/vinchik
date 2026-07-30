@@ -73,9 +73,12 @@ async def settings_channels(callback: CallbackQuery, session: AsyncSession) -> N
 
 
 @router.callback_query(F.data == "settings:lang")
-async def settings_lang(callback: CallbackQuery, session: AsyncSession) -> None:
+async def settings_lang(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
     user = await load_user(session, callback.from_user.id)
     assert user and callback.message
+    await state.clear()
     await callback.answer()
     await callback.message.answer(t("choose_language", user.language), reply_markup=language_kb())
 

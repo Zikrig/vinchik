@@ -7,7 +7,7 @@ import logging
 import re
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import Like, LikeAction, Profile, Report, User
@@ -51,6 +51,8 @@ async def mark_suspicious(
     session: AsyncSession,
     user_id: int,
     reason: str,
+    *,
+    commit: bool = True,
 ) -> bool:
     """Set suspicious flag. Returns True if newly flagged or reason updated. Silent."""
     user = await session.get(User, user_id)
@@ -71,8 +73,9 @@ async def mark_suspicious(
         user.suspicious_reason = f"{prev}; {reason}"[:500] if prev else reason
         user.suspicious_at = now
         changed = True
-    if changed:
+    if changed and commit:
         await session.commit()
+    if changed:
         logger.info("suspicious user=%s reason=%s", user_id, reason)
     return changed
 
@@ -179,13 +182,20 @@ async def sweep_suspicious_candidates(session: AsyncSession) -> int:
         .where(
             Like.action == LikeAction.message,
             Like.created_at >= since,
-            Like.message_text.is_not(None),
+            or_(
+                Like.message_text.is_not(None),
+                Like.message_payload.is_not(None),
+            ),
         )
         .order_by(Like.created_at.desc())
         .limit(500)
     )
+    from services.likes import _like_payload, payload_text
+
     for like in result.scalars().all():
-        text = like.message_text or ""
+        text = (like.message_text or "").strip()
+        if not text:
+            text = payload_text(_like_payload(like)) or ""
         if layouts_over_limit(text):
             layouts = detect_layouts(text)
             if await mark_suspicious(

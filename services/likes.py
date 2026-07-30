@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -13,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 from database.models import Like, LikeAction, Profile, User
 from locales import t
-from services.limits import can_like, increment_like_count
+from services.limits import consume_like_slot
 
 MAX_MESSAGE_ATTACHMENTS = 3  # unused; kept for imports safety
 MAX_MESSAGE_ATTACH_BYTES = 10 * 1024 * 1024
@@ -95,6 +96,21 @@ async def record_action(
     """
     from services.settings_service import get_profile_reshow_days
 
+    # Serialize all reactions from one sender. This closes duplicate-pair and
+    # daily-limit races while keeping counter + reaction in one transaction.
+    locked_user = (
+        await session.execute(
+            select(User)
+            .where(User.tg_id == from_user.tg_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    from_user = locked_user
+
+    if from_user.is_blocked:
+        raise PermissionError("blocked")
+
     target = await session.get(User, to_user_id)
     if target is None:
         return None
@@ -118,9 +134,8 @@ async def record_action(
             return None
 
     if action in (LikeAction.like, LikeAction.message):
-        if not await can_like(session, from_user, from_profile):
+        if not await consume_like_slot(session, from_user, from_profile):
             raise PermissionError("limit")
-        await increment_like_count(session, from_user.tg_id)
 
     text = message_text
     payload = message_payload
@@ -219,35 +234,42 @@ def _like_payload(like: Like) -> dict:
 
 def format_likes_list(rows: list[tuple[User, Profile, Like]], lang: str) -> str:
     if not rows:
-        return t("likes_list_empty", lang)
-    lines = [t("likes_list_title", lang)]
+        return html.escape(t("likes_list_empty", lang))
+    lines = [html.escape(t("likes_list_title", lang))]
     for user, profile, like in rows:
-        name = profile.name or "—"
+        name = html.escape(profile.name or "—")
         if user.username:
-            safe_name = name.replace("[", "\\[").replace("]", "\\]")
-            lines.append(f"[{safe_name}](https://t.me/{user.username})")
+            lines.append(f'<a href="https://t.me/{user.username}">{name}</a>')
         else:
             lines.append(name)
         payload = _like_payload(like)
         text = payload_text(payload) or (like.message_text or "").strip()
         if text:
-            lines.append(t("likes_list_message", lang, text=text.replace('"', "'")))
+            lines.append(
+                t(
+                    "likes_list_message",
+                    lang,
+                    text=html.escape(text.replace('"', "'")),
+                )
+            )
         if payload.get("voice_file_id"):
-            lines.append(t("likes_list_voice", lang))
+            lines.append(html.escape(t("likes_list_voice", lang)))
         if payload.get("video_note_file_id"):
-            lines.append(t("likes_list_video_note", lang))
+            lines.append(html.escape(t("likes_list_video_note", lang)))
         if len(rows) > 1:
             lines.append("")
     return "\n".join(lines).rstrip()
 
 
-async def deliver_like_media(bot: Bot, chat_id: int, like: Like) -> None:
-    """Forward stored voice / video note to the recipient."""
+async def deliver_like_media(bot: Bot, chat_id: int, like: Like) -> bool:
+    """Forward stored voice / video note to the recipient. Returns True if all sent."""
     payload = _like_payload(like)
+    ok = True
     try:
         if payload.get("voice_file_id"):
             await bot.send_voice(chat_id, payload["voice_file_id"])
         if payload.get("video_note_file_id"):
             await bot.send_video_note(chat_id, payload["video_note_file_id"])
     except TelegramAPIError:
-        pass
+        ok = False
+    return ok

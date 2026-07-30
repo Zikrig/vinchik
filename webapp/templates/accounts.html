@@ -192,7 +192,8 @@
           <td>
             <a class="btn secondary" href="{{ url('/accounts/' ~ u.tg_id) }}">Открыть</a>
             {% if u.is_blocked %}
-            <form method="post" action="{{ url('/users/' ~ u.tg_id ~ '/unban') }}" style="margin-top:.4rem"
+            <form method="post" action="{{ url('/users/' ~ u.tg_id ~ '/unban') }}" class="js-ajax"
+                  data-ajax="unban" style="margin-top:.4rem"
                   onclick="event.stopPropagation()">
               <button type="submit" class="secondary">Разбан</button>
             </form>

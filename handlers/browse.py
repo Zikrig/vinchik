@@ -11,6 +11,7 @@ from keyboards.inline import (
     browse_reply_kb,
     channels_kb,
     main_menu_kb,
+    message_compose_kb,
     premium_cta_kb,
 )
 from locales import t
@@ -47,8 +48,28 @@ def _is_btn(text: str | None, key: str, lang: str) -> bool:
 
 async def _say_limit(message: Message, lang: str) -> None:
     body = _limit_promo_text(lang)
-    await message.answer(body, reply_markup=ReplyKeyboardRemove())
+    await message.answer(".", reply_markup=ReplyKeyboardRemove())
     await message.answer(body, reply_markup=premium_cta_kb(lang, with_main_menu=True))
+
+
+async def _guard_feed_user(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+    state: FSMContext,
+    lang: str,
+) -> bool:
+    """False if the user must not interact with the feed."""
+    if user.is_blocked:
+        await state.clear()
+        await message.answer(t("you_are_blocked", lang), reply_markup=ReplyKeyboardRemove())
+        return False
+    if await is_registration_only(session):
+        await state.clear()
+        await message.answer(t("soft_launch", lang), reply_markup=ReplyKeyboardRemove())
+        await show_main_menu(message, user)
+        return False
+    return True
 
 
 async def _send_profile_card(
@@ -189,6 +210,9 @@ async def _rate_from_message(
         await show_main_menu(message, user)
         return
 
+    if not await _guard_feed_user(message, session, user, state, lang):
+        return
+
     if not await can_browse(session, user, user.profile):
         await state.clear()
         await _say_limit(message, lang)
@@ -196,9 +220,12 @@ async def _rate_from_message(
 
     try:
         like = await record_action(session, user, user.profile, int(target_id), action)
-    except PermissionError:
+    except PermissionError as exc:
         await state.clear()
-        await _say_limit(message, lang)
+        if exc.args and exc.args[0] == "blocked":
+            await message.answer(t("you_are_blocked", lang), reply_markup=ReplyKeyboardRemove())
+        else:
+            await _say_limit(message, lang)
         return
 
     if like and action in (LikeAction.like, LikeAction.message):
@@ -254,6 +281,8 @@ async def _start_message_flow(
     message: Message, session: AsyncSession, state: FSMContext, user: User
 ) -> None:
     lang = user.language or "ru"
+    if not await _guard_feed_user(message, session, user, state, lang):
+        return
     if not await can_browse(session, user, user.profile):
         await state.clear()
         await _say_limit(message, lang)
@@ -270,6 +299,10 @@ async def _start_message_flow(
         msg_payload=empty_message_payload(),
     )
     await message.answer(t("ask_message", lang), reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        t("btn_cancel", lang),
+        reply_markup=message_compose_kb(lang),
+    )
 
 
 async def _report_from_message(
@@ -327,7 +360,14 @@ async def _finalize_message(
     assert user and user.profile
     lang = user.language or "ru"
     data = await state.get_data()
-    target_id = int(data["msg_target"])
+    target_id_raw = data.get("msg_target")
+    if target_id_raw is None:
+        await state.clear()
+        await message.answer(t("msg_cancelled", lang), reply_markup=main_menu_kb(lang))
+        return
+    target_id = int(target_id_raw)
+    if not await _guard_feed_user(message, session, user, state, lang):
+        return
     try:
         like = await record_action(
             session,
@@ -337,15 +377,42 @@ async def _finalize_message(
             LikeAction.message,
             message_payload=payload,
         )
-    except PermissionError:
+    except PermissionError as exc:
         await state.clear()
-        await _say_limit(message, lang)
+        if exc.args and exc.args[0] == "blocked":
+            await message.answer(t("you_are_blocked", lang), reply_markup=ReplyKeyboardRemove())
+        else:
+            await _say_limit(message, lang)
         return
     await state.clear()
     if like:
         await notify_like_batch(bot, session, target_id)
         await message.answer(t("message_sent", lang))
     await start_browse(message, session, user, bot, state)
+
+
+@router.callback_query(MessageStates.content, F.data == "msg:cancel")
+async def msg_content_cancel(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+) -> None:
+    user = await load_user(session, callback.from_user.id)
+    assert user and callback.message
+    lang = user.language or "ru"
+    data = await state.get_data()
+    browse_target = data.get("browse_target")
+    await state.clear()
+    await state.set_state(BrowseStates.viewing)
+    if browse_target is not None:
+        await state.update_data(browse_target=browse_target)
+    await callback.answer()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(
+        t("msg_cancelled", lang),
+        reply_markup=browse_reply_kb(lang),
+    )
 
 
 @router.message(MessageStates.content, F.voice)
@@ -400,7 +467,6 @@ async def cb_view_likes(
     rows = await list_unseen_likers(session, user.tg_id)
     text = format_likes_list(rows, user.language)
     likes = [like for _, _, like in rows]
-    await mark_likes_seen(session, user.tg_id)
     await callback.answer()
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
@@ -408,9 +474,10 @@ async def cb_view_likes(
         pass
     await callback.message.answer(
         text,
-        parse_mode="Markdown",
+        parse_mode="HTML",
         disable_web_page_preview=True,
         reply_markup=main_menu_kb(user.language),
     )
     for like in likes:
         await deliver_like_media(bot, user.tg_id, like)
+    await mark_likes_seen(session, user.tg_id)

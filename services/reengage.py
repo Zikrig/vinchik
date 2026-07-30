@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from database.models import User
 from database.session import async_session_maker
@@ -56,9 +56,27 @@ async def process_reengage(bot: Bot) -> None:
         for days, level in REENGAGE_STEPS:
             if idle >= days and reengage_level < level:
                 next_level = level
-                break
         if next_level is None:
             continue
+
+        # Reserve this step before sending so parallel bot instances cannot
+        # deliver the same re-engagement notification.
+        async with async_session_maker() as session:
+            reserved = await session.execute(
+                update(User)
+                .where(
+                    User.tg_id == tg_id,
+                    User.reengage_level == reengage_level,
+                    User.last_activity_at == last_activity_at,
+                    User.is_blocked.is_(False),
+                )
+                .values(reengage_level=next_level)
+                .returning(User.tg_id)
+            )
+            if reserved.scalar_one_or_none() is None:
+                await session.rollback()
+                continue
+            await session.commit()
 
         try:
             await bot.send_message(
@@ -68,16 +86,22 @@ async def process_reengage(bot: Bot) -> None:
             )
         except TelegramAPIError:
             logger.info("reengage skip chat %s", tg_id)
-            continue
         except Exception:
             logger.exception("reengage failed for %s", tg_id)
+        else:
             continue
 
+        # A transient Telegram failure should not permanently consume a step.
         async with async_session_maker() as session:
-            user = await session.get(User, tg_id)
-            if user is None:
-                continue
-            user.reengage_level = next_level
+            await session.execute(
+                update(User)
+                .where(
+                    User.tg_id == tg_id,
+                    User.reengage_level == next_level,
+                    User.last_activity_at == last_activity_at,
+                )
+                .values(reengage_level=reengage_level)
+            )
             await session.commit()
 
 

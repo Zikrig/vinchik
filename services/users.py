@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -23,15 +24,20 @@ async def get_or_create_user(
     username: str | None,
     language: str | None = None,
 ) -> User:
+    await session.execute(
+        insert(User)
+        .values(tg_id=tg_id, username=username, language=language or "ru")
+        .on_conflict_do_nothing(index_elements=[User.tg_id])
+    )
+    await session.execute(
+        insert(Profile)
+        .values(user_id=tg_id)
+        .on_conflict_do_nothing(index_elements=[Profile.user_id])
+    )
+    await session.commit()
+
     user = await load_user_with_profile(session, tg_id)
-    if user is None:
-        user = User(tg_id=tg_id, username=username, language=language or "ru")
-        session.add(user)
-        session.add(Profile(user_id=tg_id))
-        await session.commit()
-        user = await load_user_with_profile(session, tg_id)
-        assert user is not None
-        return user
+    assert user is not None
     if username and user.username != username:
         user.username = username
         await session.commit()
@@ -46,11 +52,26 @@ async def set_language(session: AsyncSession, user: User, lang: str) -> None:
     await session.commit()
 
 
+def aware_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt
+
+
+def premium_extension_base(user: User, now: datetime | None = None) -> datetime:
+    """Start of premium extension: active until or now."""
+    now = now or datetime.now(UTC)
+    until = aware_utc(user.premium_until)
+    if until is not None and until > now:
+        return until
+    return now
+
+
 def is_premium(user: User) -> bool:
     if user.premium_until is None:
         return False
-    now = datetime.now(UTC)
-    until = user.premium_until
-    if until.tzinfo is None:
-        until = until.replace(tzinfo=UTC)
-    return until > now
+    until = aware_utc(user.premium_until)
+    assert until is not None
+    return until > datetime.now(UTC)

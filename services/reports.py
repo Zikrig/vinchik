@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from database.models import Profile, Report, User
 
@@ -38,18 +40,27 @@ async def file_report(
     if target_exists is None:
         return False, False
 
-    existing = await session.execute(
-        select(Report).where(
-            Report.from_user_id == from_user_id,
-            Report.to_user_id == to_user_id,
+    created_id = (
+        await session.execute(
+            insert(Report)
+            .values(from_user_id=from_user_id, to_user_id=to_user_id)
+            .on_conflict_do_nothing(constraint="uq_report_pair")
+            .returning(Report.id)
         )
-    )
-    if existing.scalar_one_or_none():
+    ).scalar_one_or_none()
+    if created_id is None:
+        await session.rollback()
         return False, False
 
-    session.add(Report(from_user_id=from_user_id, to_user_id=to_user_id))
-    await session.commit()
-
+    target = (
+        await session.execute(
+            select(User)
+            .where(User.tg_id == to_user_id)
+            .options(selectinload(User.profile))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
     count = await count_reports_recent(session, to_user_id)
     if count >= REPORT_SUSPICIOUS_THRESHOLD:
         from services.moderation import mark_suspicious
@@ -58,19 +69,16 @@ async def file_report(
             session,
             to_user_id,
             f"жалоб за {REPORT_WINDOW_DAYS} дн.: {count}",
+            commit=False,
         )
     just_blocked = False
-    if count > REPORT_BLOCK_THRESHOLD:
-        from services.users import load_user_with_profile
-
-        target = await load_user_with_profile(session, to_user_id)
-        if target and not target.is_blocked:
-            target.is_blocked = True
-            target.blocked_at = datetime.now(UTC)
-            if target.profile:
-                target.profile.is_active = False
-            await session.commit()
-            just_blocked = True
+    if count > REPORT_BLOCK_THRESHOLD and not target.is_blocked:
+        target.is_blocked = True
+        target.blocked_at = datetime.now(UTC)
+        if target.profile:
+            target.profile.is_active = False
+        just_blocked = True
+    await session.commit()
     return True, just_blocked
 
 

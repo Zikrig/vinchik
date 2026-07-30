@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-import asyncio
+import ipaddress
+import secrets
+import time
 from pathlib import Path
 
 import httpx
@@ -8,13 +10,14 @@ from aiogram import Bot
 from fastapi import Depends, FastAPI, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
-from itsdangerous import BadSignature, URLSafeSerializer
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database.models import PremiumOrder, RequiredChannel
-from database.session import async_session_maker
+from database.session import async_session_maker, init_db
 from services.admin_tools import (
     DUSHANBE_CITY,
     DUSHANBE_LAT,
@@ -38,7 +41,7 @@ from services.accounts import (
     update_account_user,
 )
 from services.users import load_user_with_profile, is_premium
-from services.media import local_photo_path
+from services.media import LOCAL_PREFIX, local_photo_path
 from services.premium import (
     approve_order,
     list_pending_orders,
@@ -68,7 +71,11 @@ from services.settings_service import (
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 TEMPLATES.env.globals["url"] = settings.abs_path
 TEMPLATES.env.globals["is_premium"] = is_premium
-signer = URLSafeSerializer(settings.web_secret_key, salt="vinchik-admin")
+signer = URLSafeTimedSerializer(settings.web_secret_key, salt="vinchik-admin")
+LOGIN_WINDOW_SECONDS = 15 * 60
+LOGIN_MAX_FAILURES = 5
+_login_failures: dict[str, list[float]] = {}
+login_redis = Redis.from_url(settings.redis_url, decode_responses=True)
 
 
 async def get_db():
@@ -81,10 +88,80 @@ def is_logged_in(request: Request) -> bool:
     if not token:
         return False
     try:
-        data = signer.loads(token)
+        data = signer.loads(
+            token,
+            max_age=settings.admin_session_max_age_seconds,
+        )
         return data.get("ok") is True
-    except BadSignature:
+    except (BadSignature, SignatureExpired):
         return False
+
+
+def _login_client_key(request: Request) -> str:
+    peer = request.client.host if request.client else "unknown"
+    try:
+        peer_ip = ipaddress.ip_address(peer)
+    except ValueError:
+        return peer
+    trusted_proxy = False
+    for raw in settings.web_trusted_proxy_ips.split(","):
+        try:
+            if peer_ip in ipaddress.ip_network(raw.strip(), strict=False):
+                trusted_proxy = True
+                break
+        except ValueError:
+            continue
+    if trusted_proxy:
+        forwarded = request.headers.get("x-real-ip", "").strip()
+        try:
+            if forwarded:
+                return str(ipaddress.ip_address(forwarded))
+        except ValueError:
+            pass
+    return peer
+
+
+def _prune_local_login_failures() -> None:
+    cutoff = time.monotonic() - LOGIN_WINDOW_SECONDS
+    for key, attempts in list(_login_failures.items()):
+        fresh = [stamp for stamp in attempts if stamp >= cutoff]
+        if fresh:
+            _login_failures[key] = fresh
+        else:
+            _login_failures.pop(key, None)
+
+
+async def _login_is_limited(request: Request) -> bool:
+    key = _login_client_key(request)
+    try:
+        attempts = await login_redis.eval(
+            """
+            local count = redis.call('INCR', KEYS[1])
+            if count == 1 then
+                redis.call('EXPIRE', KEYS[1], ARGV[1])
+            end
+            return count
+            """,
+            1,
+            f"vinchik:web-login:{key}",
+            LOGIN_WINDOW_SECONDS,
+        )
+        return int(attempts) > LOGIN_MAX_FAILURES
+    except Exception:
+        _prune_local_login_failures()
+        if key not in _login_failures and len(_login_failures) >= 10_000:
+            _login_failures.pop(next(iter(_login_failures)))
+        _login_failures.setdefault(key, []).append(time.monotonic())
+        return len(_login_failures[key]) > LOGIN_MAX_FAILURES
+
+
+async def _clear_login_failures(request: Request) -> None:
+    key = _login_client_key(request)
+    _login_failures.pop(key, None)
+    try:
+        await login_redis.delete(f"vinchik:web-login:{key}")
+    except Exception:
+        pass
 
 
 def require_auth(request: Request):
@@ -186,19 +263,13 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup() -> None:
-        # схему создаёт bot (init_db); web только сиды, с ретраями
-        last_exc: Exception | None = None
-        for _ in range(30):
-            try:
-                async with async_session_maker() as session:
-                    await ensure_defaults(session)
-                last_exc = None
-                break
-            except Exception as exc:  # noqa: BLE001 — ждём готовности схемы
-                last_exc = exc
-                await asyncio.sleep(1)
-        if last_exc is not None:
-            raise last_exc
+        await init_db()
+        async with async_session_maker() as session:
+            await ensure_defaults(session)
+
+    @app.on_event("shutdown")
+    async def shutdown() -> None:
+        await login_redis.aclose()
 
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(request: Request):
@@ -210,19 +281,31 @@ def create_app() -> FastAPI:
 
     @app.post("/login")
     async def login(request: Request, password: str = Form(...)):
-        if password != settings.admin_web_password:
+        if await _login_is_limited(request):
+            return TEMPLATES.TemplateResponse(
+                request,
+                "login.html",
+                {"error": "Слишком много попыток. Попробуйте через 15 минут."},
+                status_code=429,
+            )
+        if not secrets.compare_digest(password, settings.admin_web_password):
             return TEMPLATES.TemplateResponse(
                 request,
                 "login.html",
                 {"error": "Неверный пароль"},
                 status_code=401,
             )
+        await _clear_login_failures(request)
         resp = RedirectResponse(settings.abs_path("/"), status_code=303)
+        forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        cookie_secure = request.url.scheme == "https" or forwarded_proto == "https"
         resp.set_cookie(
             "admin_session",
             signer.dumps({"ok": True}),
             httponly=True,
             samesite="lax",
+            secure=cookie_secure,
+            max_age=settings.admin_session_max_age_seconds,
             path=settings.web_root_path or "/",
         )
         return resp
@@ -593,7 +676,9 @@ def create_app() -> FastAPI:
             return Response(status_code=404)
         local = local_photo_path(user.profile.photo_file_id)
         if local is not None:
-            return FileResponse(local, media_type="image/png")
+            return FileResponse(local)
+        if user.profile.photo_file_id.startswith(LOCAL_PREFIX):
+            return Response(status_code=404)
         bot = Bot(token=settings.bot_token)
         try:
             f = await bot.get_file(user.profile.photo_file_id)
@@ -615,7 +700,14 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        await unban_user(session, user_id)
+        user = await unban_user(session, user_id)
+        if user is None:
+            return err_response(
+                request,
+                settings.abs_path("/bans"),
+                error="user_not_found",
+                message="Пользователь не найден.",
+            )
         referer = request.headers.get("referer") or ""
         if f"/accounts/{user_id}" in referer:
             dest = settings.abs_path(f"/accounts/{user_id}?flash=saved")
@@ -635,7 +727,14 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        await ban_user(session, user_id)
+        user = await ban_user(session, user_id)
+        if user is None:
+            return err_response(
+                request,
+                settings.abs_path("/bans"),
+                error="user_not_found",
+                message="Пользователь не найден.",
+            )
         dest = settings.abs_path("/bans?flash=banned")
         return ok_response(request, dest, message="Забанен.", user_id=user_id)
 
@@ -747,12 +846,18 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         ch = await flip_required_channel(session, channel_pk)
-        active = bool(ch and ch.is_active)
+        if ch is None:
+            return err_response(
+                request,
+                settings.abs_path("/"),
+                error="channel_not_found",
+                message="Канал не найден.",
+            )
         return ok_response(
             request,
             settings.abs_path("/"),
             id=channel_pk,
-            active=active,
+            active=ch.is_active,
             message="Канал обновлён.",
         )
 
@@ -762,7 +867,14 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        await remove_required_channel(session, channel_pk)
+        removed = await remove_required_channel(session, channel_pk)
+        if not removed:
+            return err_response(
+                request,
+                settings.abs_path("/"),
+                error="channel_not_found",
+                message="Канал не найден.",
+            )
         return ok_response(
             request,
             settings.abs_path("/"),
@@ -808,13 +920,19 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         result = await approve_order(session, order_id, admin_id=0)
-        if result:
-            _, user = result
-            bot = Bot(token=settings.bot_token)
-            try:
-                await notify_premium_activated(bot, user)
-            finally:
-                await bot.session.close()
+        if result is None:
+            return err_response(
+                request,
+                settings.abs_path("/"),
+                error="order_already_processed",
+                message="Заявка уже обработана или не найдена.",
+            )
+        _, user = result
+        bot = Bot(token=settings.bot_token)
+        try:
+            await notify_premium_activated(bot, user)
+        finally:
+            await bot.session.close()
         return ok_response(
             request,
             settings.abs_path("/"),
@@ -829,7 +947,14 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        await reject_order(session, order_id, admin_id=0)
+        result = await reject_order(session, order_id, admin_id=0)
+        if result is None:
+            return err_response(
+                request,
+                settings.abs_path("/"),
+                error="order_already_processed",
+                message="Заявка уже обработана или не найдена.",
+            )
         return ok_response(
             request,
             settings.abs_path("/"),

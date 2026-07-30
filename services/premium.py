@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import OrderStatus, PremiumOrder, PremiumPlan, User
 from keyboards.inline import main_menu_kb
 from locales import t
+from services.users import premium_extension_base
 
 _TZ = ZoneInfo("Asia/Dushanbe")
 
@@ -39,7 +40,37 @@ async def list_active_plans(session: AsyncSession) -> list[PremiumPlan]:
     return list(result.scalars().all())
 
 
-async def create_order(session: AsyncSession, user_id: int, plan_id: int) -> PremiumOrder:
+async def create_order(session: AsyncSession, user_id: int, plan_id: int) -> PremiumOrder | None:
+    plan = await session.get(PremiumPlan, plan_id)
+    if plan is None or not plan.is_active:
+        return None
+
+    # One pending order per user, including concurrent button presses.
+    user = (
+        await session.execute(
+            select(User).where(User.tg_id == user_id).with_for_update()
+        )
+    ).scalar_one_or_none()
+    if user is None:
+        return None
+
+    result = await session.execute(
+        select(PremiumOrder)
+        .where(
+            PremiumOrder.user_id == user_id,
+            PremiumOrder.status == OrderStatus.pending,
+        )
+        .order_by(PremiumOrder.created_at.desc())
+        .limit(1)
+    )
+    existing = result.scalar_one_or_none()
+    if existing is not None:
+        if existing.plan_id != plan_id:
+            existing.plan_id = plan_id
+            await session.commit()
+            await session.refresh(existing)
+        return existing
+
     order = PremiumOrder(user_id=user_id, plan_id=plan_id, status=OrderStatus.pending)
     session.add(order)
     await session.commit()
@@ -67,17 +98,33 @@ async def attach_receipt(
 async def approve_order(
     session: AsyncSession, order_id: int, admin_id: int
 ) -> tuple[PremiumOrder, User] | None:
-    order = await session.get(PremiumOrder, order_id)
+    order_ref = await session.get(PremiumOrder, order_id)
+    if order_ref is None:
+        return None
+    user = (
+        await session.execute(
+            select(User)
+            .where(User.tg_id == order_ref.user_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if user is None:
+        return None
+    order = (
+        await session.execute(
+            select(PremiumOrder)
+            .where(PremiumOrder.id == order_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
     if order is None or order.status != OrderStatus.pending:
         return None
     plan = await session.get(PremiumPlan, order.plan_id)
-    user = await session.get(User, order.user_id)
     if plan is None or user is None:
         return None
     now = datetime.now(UTC)
-    base = user.premium_until if user.premium_until and user.premium_until > now else now
-    if base.tzinfo is None:
-        base = base.replace(tzinfo=UTC)
+    base = premium_extension_base(user, now)
     user.premium_until = base + timedelta(days=plan.days)
     order.status = OrderStatus.approved
     order.processed_at = now
@@ -87,7 +134,13 @@ async def approve_order(
 
 
 async def reject_order(session: AsyncSession, order_id: int, admin_id: int) -> PremiumOrder | None:
-    order = await session.get(PremiumOrder, order_id)
+    order = (
+        await session.execute(
+            select(PremiumOrder)
+            .where(PremiumOrder.id == order_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
     if order is None or order.status != OrderStatus.pending:
         return None
     order.status = OrderStatus.rejected
@@ -98,23 +151,29 @@ async def reject_order(session: AsyncSession, order_id: int, admin_id: int) -> P
 
 
 async def grant_premium_days(session: AsyncSession, user_id: int, days: int) -> User | None:
-    user = await session.get(User, user_id)
+    user = (
+        await session.execute(
+            select(User).where(User.tg_id == user_id).with_for_update()
+        )
+    ).scalar_one_or_none()
     if user is None:
         return None
     now = datetime.now(UTC)
-    base = user.premium_until if user.premium_until and user.premium_until > now else now
-    if base.tzinfo is None:
-        base = base.replace(tzinfo=UTC)
+    base = premium_extension_base(user, now)
     user.premium_until = base + timedelta(days=days)
     await session.commit()
     return user
 
 
 async def revoke_premium(session: AsyncSession, user_id: int) -> User | None:
-    user = await session.get(User, user_id)
+    user = (
+        await session.execute(
+            select(User).where(User.tg_id == user_id).with_for_update()
+        )
+    ).scalar_one_or_none()
     if user is None:
         return None
-    user.premium_until = None
+    user.premium_until = datetime(2004, 1, 1, tzinfo=UTC)
     await session.commit()
     return user
 

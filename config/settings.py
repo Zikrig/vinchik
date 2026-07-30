@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     web_secret_key: str = Field(alias="WEB_SECRET_KEY")
     web_host: str = Field(default="0.0.0.0", alias="WEB_HOST")
     web_port: int = Field(default=8080, alias="WEB_PORT")
+    admin_session_max_age_seconds: int = Field(
+        default=43200, alias="ADMIN_SESSION_MAX_AGE_SECONDS"
+    )
+    web_trusted_proxy_ips: str = Field(
+        default="127.0.0.1,::1", alias="WEB_TRUSTED_PROXY_IPS"
+    )
     # Публичный префикс за nginx, напр. /vinchik (без слэша в конце). Пусто = корень.
     web_root_path: str = Field(default="", alias="WEB_ROOT_PATH")
 

@@ -5,7 +5,6 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
@@ -21,12 +20,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def build_dispatcher() -> Dispatcher:
+async def build_dispatcher() -> Dispatcher:
+    storage = RedisStorage.from_url(settings.redis_url)
     try:
-        storage = RedisStorage.from_url(settings.redis_url)
-    except Exception:
-        logger.warning("Redis unavailable, using MemoryStorage")
-        storage = MemoryStorage()
+        await storage.redis.ping()
+    except Exception as exc:
+        await storage.close()
+        raise RuntimeError("Redis unavailable; FSM storage cannot start safely") from exc
 
     dp = Dispatcher(storage=storage)
     dp.update.middleware(DbSessionMiddleware())
@@ -95,7 +95,7 @@ async def main() -> None:
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    dp = build_dispatcher()
+    dp = await build_dispatcher()
     asyncio.create_task(reengage_loop(bot))
     asyncio.create_task(moderation_loop())
 

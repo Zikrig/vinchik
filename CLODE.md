@@ -15,7 +15,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Карта пользователей (≤50, админ красным) | `/accounts` (Leaflet), `map_markers()` |
 | Гео админа / тестовые юзеры | `services/admin_tools.py`, `services/media.py` |
 | Справочник НП (текст+координаты) | `data/settlements/settlements.csv.gz` (**только TJ+RU**), `services/settlements*.py`, `scripts/build_settlements_dump.py` |
-| Тестовое фото | `data/test.png` |
+| Тестовое фото | `data/test.png` (опционально; без файла тестовые анкеты текстовые) |
 | Роутеры | `handlers/` |
 | Бизнес-логика | `services/` |
 | Модели БД | `database/models.py` |
@@ -29,11 +29,11 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Кнопки пользователя — inline (кроме request_location и **reply-клавиатуры ленты** ❤️💌👎 / ⚠️⭐🚪).
 - Гео в анкете: GPS **или** текст → поиск по `settlements` (**только TJ+RU**). Алиасы (в т.ч. исторические) — только для поиска; в UI везде `display_name` (современное имя). Ранжирование: score → точное имя → population. Дамп `data/settlements/settlements.csv.gz`; после обновления: `docker compose exec bot python scripts/import_settlements.py`. Веб: `GET /settlements/search`.
 - Без нумерации на кнопках.
-- Лимит лайков: default 50, сутки **UTC**; у мужчин без Премиум при исчерпании **нельзя смотреть ленту**.
+- Лимит лайков: default 50, сутки **UTC**; у мужчин без Премиум при исчерпании **нельзя смотреть ленту**. Резерв слота + запись реакции — одна транзакция; реакции одного отправителя сериализуются блокировкой строки `users`.
 - Женщины и Премиум — без лимита.
 - Лента: взаимный looking_for; диагональ км×возраст: волна 0 = 10км±2; волна 1 = 10км±5 и 25км±2; волна 2 = 10км±10 + 25км±5 + 50км±2; … Каждый `next_profile` с нуля по текущим кандидатам. Внутри волны: премиум → |Δвозраст| → ближе км. Цель карточки в FSM `BrowseStates.viewing` (`browse_target`).
 - После ❤️/👎/💌 пара **взаимно** скрывается из ленты на `profile_reshow_days` (default **60**; **0** = навсегда). 🚪 снимает reply-клавиатуру, **не** пишет в `likes`.
-- 💌: одно сообщение — текст **или** голосовое **или** кружок (без вложений); payload в `likes.message_payload` (JSONB).
+- 💌: одно сообщение — текст **или** голосовое **или** кружок (без вложений); payload в `likes.message_payload` (JSONB); при вводе — кнопка «Отмена» (`msg:cancel`).
 - Анкета: **0–3 фото** (`photo_file_ids` JSONB + `photo_file_id` = первое); в ленте album / одно фото / только текст.
 - Реклама Премиум (`premium_benefits`): после регистрации, при лимите лайков (+ кнопка ⭐), в меню «Премиум».
 - После истечения окна анкета может снова попасть в ленту; новая реакция обновляет ту же строку `likes`.
@@ -43,7 +43,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Веб-дашборд: блок «Режимы» (soft-launch / тесты) с зелёно-красными свитчами; каналы — тот же индикатор; добавление по `@ник` или `t.me/…` с проверкой через Bot API. POST форм админки — AJAX без перезагрузки (toast). Карточка аккаунта: в шапке главный сигнал — `tg_id`; пол/ищет — розово-голубые сегменты; флаги — цветные toggle; теги с пиктограммами. Анкета — серый блок; клик по панели целиком снимает серость и открывает все поля; username read-only; язык в анкете.
 - Обязательные каналы: бесплатный юзер перед лентой видит список + кнопки «Я подписался» | «Премиум»; премиум — без проверки; в Настройках — просмотр списка. Бот должен быть админом каналов (`get_chat_member`).
 - Админка веб: карта оплаты, гео, тестовые юзеры, `/bans`, `/accounts` (+ карточка `/accounts/{tg_id}`).
-- Тестовые юзеры: `User.is_test`, негативные `tg_id`, фото `data/test.png`; свич «Тестовые в ленте» = setting `test_users_visible` + массовый `Profile.is_active`.
+- Тестовые юзеры: `User.is_test`, негативные `tg_id`, опциональное фото `data/test.png` (без файла создаются без фото); свич «Тестовые в ленте» = setting `test_users_visible` + массовый `Profile.is_active`.
 - Жалобы: кнопка в ленте; >5 уникальных за 3 мес → `is_blocked`; разбан в админке с фото/анкетой.
 - Подозрительные (тихо): >150 лайков/сутки UTC, >150 сообщений/сутки, >3 раскладки в одном 💌, ≥2 жалобы за 3 мес → `is_suspicious` + `suspicious_reason`; фон `moderation_loop` + хук после лайка/жалобы; страница `/bans`.
 - Запуск только Docker (без локального venv).
@@ -51,7 +51,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - `/start` (`handlers/start.py`): всегда приветствие (бот знакомств в Таджикистане); выбор языка только если `language_chosen=False`; иначе продолжение регистрации / меню. Флаг ставится в `set_language`; у готовых анкет — автозаполнение для старых строк.
 - Вне FSM любое личное сообщение → главное меню (`handlers/fallback.py`).
 - Терминальные ответы (оплата отмечена, премиум включён, пустая лента, soft-launch, список лайков, reengage, лимит) — с `main_menu_kb`.
-- Оплата Премиум: кнопка «Отправить чек» → FSM `PremiumStates.awaiting_receipt` (фото/документ + «Отмена», кнопка снимается после файла); `receipt_file_id`/`receipt_kind` в `premium_orders`; пересылка админам; веб `/orders/{id}/receipt` + превью в `#orders`.
+- Оплата Премиум: кнопка «Отправить чек» → FSM `PremiumStates.awaiting_receipt` (фото/документ + «Отмена», кнопка снимается после файла); `receipt_file_id`/`receipt_kind` в `premium_orders`; одна pending-заявка на пользователя (повтор «Купить» возвращает её); пересылка админам; веб `/orders/{id}/receipt` + превью в `#orders`.
 - Массовых рассылок нет.
 - Сообщения про лимит / like_sent слать через `bot.send_message(user_id)`, не через `callback.message.answer` (фото / InaccessibleMessage).
 
@@ -69,3 +69,4 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - БД: в `.env` только `POSTGRES_*`; URL собирает `config/settings.py`.
 - В `.env` без `$` — Compose портит пароль при подстановке.
 - Webhook без публичного HTTPS не работает.
+- Rate-limit входа в веб берёт `X-Real-IP` только от сетей `WEB_TRUSTED_PROXY_IPS`; для nginx на Docker-host добавь его bridge CIDR (обычно `172.16.0.0/12`).
