@@ -261,9 +261,14 @@ async def _root_view(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
         "Админка Dilino\n\n"
         f"{_gender_stats_block(stats)}\n"
         f"Soft-launch: {soft}\n"
-        f"Заявок на оплату: {len(pending)}\n\n"
-        "Баны и аккаунты — в веб-админке."
+        f"Заявок на оплату: {len(pending)}"
     )
+    link = (settings.adm_link or "").strip()
+    if link:
+        safe = html.escape(link)
+        text += f"\n\n🌐 Веб-админка:\n<a href=\"{safe}\">{safe}</a>"
+    else:
+        text += "\n\nБаны и аккаунты — в веб-админке."
     return text, _root_kb(reg_only, len(pending))
 
 

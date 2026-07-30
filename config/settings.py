@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     payment_card: str = Field(default="", alias="PAYMENT_CARD")
     payment_check_time: str = Field(default="в течение 24 часов", alias="PAYMENT_CHECK_TIME")
     bot_username: str = Field(default="", alias="BOT_USERNAME")
+    # Публичный URL веб-админки — в тексте /admin.
+    adm_link: str = Field(default="", alias="ADM_LINK")
     web_secret_key: str = Field(alias="WEB_SECRET_KEY")
     web_host: str = Field(default="0.0.0.0", alias="WEB_HOST")
     web_port: int = Field(default=8080, alias="WEB_PORT")
