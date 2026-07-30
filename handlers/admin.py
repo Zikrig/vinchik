@@ -236,16 +236,17 @@ def _order_kb(order_id: int, index: int, total: int) -> InlineKeyboardMarkup:
 
 
 def _gender_stats_block(stats: dict[str, int]) -> str:
-    """Left-aligned column; numbers padded for visual column."""
+    """Column with numbers right-aligned."""
     m = stats["male"]
     f = stats["female"]
     z = stats["total"]
     width = max(len(str(m)), len(str(f)), len(str(z)), 1)
+    lw = max(len("Парней:"), len("Девушек:"), len("Всего:"))
     return (
         f"<pre>"
-        f"Парней:   {m:>{width}}\n"
-        f"Девушек:  {f:>{width}}\n"
-        f"Всего:    {z:>{width}}"
+        f"{'Парней:':<{lw}} {m:>{width}}\n"
+        f"{'Девушек:':<{lw}} {f:>{width}}\n"
+        f"{'Всего:':<{lw}} {z:>{width}}"
         f"</pre>"
     )
 

@@ -155,14 +155,10 @@ async def count_test_users(session: AsyncSession) -> int:
 
 
 async def count_profiles_by_gender(session: AsyncSession) -> dict[str, int]:
-    """Real (non-test) profiles with gender set. total = male + female."""
+    """All profiles with gender set (including test). total = male + female."""
     result = await session.execute(
         select(Profile.gender, func.count())
-        .join(User, User.tg_id == Profile.user_id)
-        .where(
-            User.is_test.is_(False),
-            Profile.gender.is_not(None),
-        )
+        .where(Profile.gender.is_not(None))
         .group_by(Profile.gender)
     )
     males = 0

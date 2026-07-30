@@ -3,11 +3,20 @@
 {% block body %}
 <div class="wrap">
   <div class="topbar">
-    <div class="brand">Vinchik <span>Admin</span></div>
-    <div class="nav">
-      <a href="{{ url('/accounts') }}">👥 Все аккаунты</a>
-      <a href="{{ url('/bans') }}">🚫 Баны</a>
-      <a href="{{ url('/logout') }}">Выйти</a>
+    <div class="gender-stats" aria-label="Статистика по полу">
+      <div class="gender-stats-lines">
+        <div class="gender-stats-line male">Парней: <strong>{{ gender_stats.male }}</strong></div>
+        <div class="gender-stats-line female">Девушек: <strong>{{ gender_stats.female }}</strong></div>
+        <div class="gender-stats-line total">Всего: <strong>{{ gender_stats.total }}</strong></div>
+      </div>
+    </div>
+    <div class="topbar-end">
+      <div class="brand">Vinchik <span>Admin</span></div>
+      <div class="nav">
+        <a href="{{ url('/accounts') }}">👥 Все аккаунты</a>
+        <a href="{{ url('/bans') }}">🚫 Баны</a>
+        <a href="{{ url('/logout') }}">Выйти</a>
+      </div>
     </div>
   </div>
 
@@ -19,14 +28,6 @@
   {% if flash and flash.startswith("test_hidden_") %}<p class="flash-ok">Тестовые скрыты из ленты: {{ flash.split('_')[-1] }}.</p>{% endif %}
   {% if flash == "soft_on" %}<p class="flash-ok">Soft-launch включён.</p>{% endif %}
   {% if flash == "soft_off" %}<p class="flash-ok">Soft-launch выключен — лента открыта.</p>{% endif %}
-
-  <section class="panel gender-stats" aria-label="Статистика по полу">
-    <div class="gender-stats-lines">
-      <div class="gender-stats-line male">Парней: <strong>{{ gender_stats.male }}</strong></div>
-      <div class="gender-stats-line female">Девушек: <strong>{{ gender_stats.female }}</strong></div>
-      <div class="gender-stats-line total">Всего: <strong>{{ gender_stats.total }}</strong></div>
-    </div>
-  </section>
 
   <nav class="jump">
     <a href="#status">⚙️ Режимы</a>
