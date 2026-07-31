@@ -376,10 +376,29 @@ async def _start_message_flow(
     # ReplyKeyboardRemove and InlineKeyboard can't share one message — drop
     # the browse kb via a disposable message, then one visible prompt + Cancel.
     await drop_reply_keyboard(message)
-    await message.answer(
+    prompt = await message.answer(
         t("ask_message", lang),
         reply_markup=message_compose_kb(lang),
     )
+    await state.update_data(msg_prompt_message_id=prompt.message_id)
+
+
+async def _clear_message_prompt(
+    bot: Bot, chat_id: int, state: FSMContext
+) -> None:
+    """Remove «Отмена» from the compose prompt after send or cancel."""
+    data = await state.get_data()
+    prompt_id = data.get("msg_prompt_message_id")
+    if not prompt_id:
+        return
+    try:
+        await bot.edit_message_reply_markup(
+            chat_id=chat_id,
+            message_id=int(prompt_id),
+            reply_markup=None,
+        )
+    except TelegramBadRequest:
+        pass
 
 
 async def _report_from_message(
@@ -442,11 +461,13 @@ async def _finalize_message(
     data = await state.get_data()
     target_id_raw = data.get("msg_target")
     if target_id_raw is None:
+        await _clear_message_prompt(bot, message.chat.id, state)
         await state.clear()
         await message.answer(t("msg_cancelled", lang), reply_markup=main_menu_kb(lang))
         return
     target_id = int(target_id_raw)
     if not await _guard_feed_user(message, session, user, state, lang):
+        await _clear_message_prompt(bot, message.chat.id, state)
         return
     try:
         like = await record_action(
@@ -458,6 +479,7 @@ async def _finalize_message(
             message_payload=payload,
         )
     except PermissionError as exc:
+        await _clear_message_prompt(bot, message.chat.id, state)
         await state.clear()
         if exc.args and exc.args[0] == "blocked":
             await message.answer(
@@ -466,6 +488,7 @@ async def _finalize_message(
         else:
             await _say_limit(message, lang)
         return
+    await _clear_message_prompt(bot, message.chat.id, state)
     await state.clear()
     if like:
         schedule_like_notification(bot, target_id)
