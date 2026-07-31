@@ -35,6 +35,8 @@
   }
   .map-legend .user::before { background: #1f6b4f; }
   .map-legend .admin::before { background: #b42318; }
+  .map-legend .spawn::before { background: #2563eb; }
+  .spawn-hint code { font-size: .85em; }
   tr.clickable { cursor: pointer; }
   tr.clickable:hover td { background: #f0f7f3; }
   tr.clickable a.row-link { color: inherit; text-decoration: none; font-weight: 600; }
@@ -64,8 +66,14 @@
         {% include "_switch_compact.html" %}
       {% endwith %}
     </div>
-    <p class="hint">Сейчас: <strong data-test-count>{{ test_users_count }}</strong>. Спаун у гео админа / Душанбе.</p>
+    <p class="hint spawn-hint">
+      Сейчас: <strong data-test-count>{{ test_users_count }}</strong>.
+      Центр спавна: <code id="spawn-coords">{{ '%.5f'|format(spawn_lat) }}, {{ '%.5f'|format(spawn_lon) }}</code>
+      — клик по карте задаёт точку, вокруг которой появятся новые тестовые.
+    </p>
     <form method="post" action="{{ url('/test-users/create') }}" class="row js-ajax" data-ajax="test-create">
+      <input type="hidden" name="center_lat" id="spawn-lat" value="{{ spawn_lat }}">
+      <input type="hidden" name="center_lon" id="spawn-lon" value="{{ spawn_lon }}">
       {% with name='count', value=10, min=1, max=1000, label='Сколько', required=true, curve='ease' %}
         {% include "_field_slider.html" %}
       {% endwith %}
@@ -82,12 +90,13 @@
 
   <section class="panel">
     <h2>Карта</h2>
-    <p>До {{ map_limit }} точек с координатами. Админы — красным (всегда в приоритете).</p>
+    <p>До {{ map_limit }} точек с координатами. Админы — красным (всегда в приоритете). Клик — центр спавна тестовых.</p>
     <div id="users-map"></div>
     <div class="map-legend">
-      <span class="user">пользователи ({{ markers|selectattr('is_admin', 'equalto', false)|list|length }})</span>
-      <span class="admin">админы ({{ markers|selectattr('is_admin')|list|length }})</span>
-      <span>на карте: {{ markers|length }} / {{ map_limit }}</span>
+      <span class="user">пользователи</span>
+      <span class="admin">админы</span>
+      <span class="spawn">центр спавна</span>
+      <span id="map-count">на карте: {{ markers|length }} / {{ map_limit }}</span>
     </div>
   </section>
 
@@ -239,57 +248,150 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
   (function () {
-    const markers = {{ markers | tojson }};
-    const map = L.map("users-map").setView([{{ dushanbe_lat }}, {{ dushanbe_lon }}], 6);
+    const markersUrl = {{ map_markers_url | tojson }};
+    const detailBase = {{ url('/accounts/') | tojson }};
+    const mapLimit = {{ map_limit | tojson }};
+    let markers = {{ markers | tojson }};
+    const map = L.map("users-map").setView([{{ spawn_lat }}, {{ spawn_lon }}], 6);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
       attribution: "&copy; OpenStreetMap",
     }).addTo(map);
 
-    function circleIcon(color) {
+    function circleIcon(color, size) {
+      const s = size || 14;
       return L.divIcon({
         className: "",
-        html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>`,
-        iconSize: [14, 14],
-        iconAnchor: [7, 7],
+        html: `<div style="width:${s}px;height:${s}px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>`,
+        iconSize: [s, s],
+        iconAnchor: [s / 2, s / 2],
       });
     }
     const userIcon = circleIcon("#1f6b4f");
     const adminIcon = circleIcon("#b42318");
-    const bounds = [];
+    const spawnIcon = circleIcon("#2563eb", 18);
+    const markersLayer = L.layerGroup().addTo(map);
+    let spawnMarker = null;
+    let radiusCircle = null;
 
-    markers.forEach(function (m) {
-      function esc(s) {
-        return String(s == null ? "" : s)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;");
+    function esc(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function spawnLatLon() {
+      const latEl = document.getElementById("spawn-lat");
+      const lonEl = document.getElementById("spawn-lon");
+      return {
+        lat: parseFloat(latEl && latEl.value),
+        lon: parseFloat(lonEl && lonEl.value),
+      };
+    }
+
+    function radiusKm() {
+      const input = document.querySelector('form[data-ajax="test-create"] [name="radius_km"]');
+      const v = parseFloat(input && input.value);
+      return Number.isFinite(v) ? Math.max(1, Math.min(500, v)) : 60;
+    }
+
+    function setSpawn(lat, lon, fit) {
+      const latEl = document.getElementById("spawn-lat");
+      const lonEl = document.getElementById("spawn-lon");
+      const label = document.getElementById("spawn-coords");
+      if (latEl) latEl.value = String(lat);
+      if (lonEl) lonEl.value = String(lon);
+      if (label) label.textContent = lat.toFixed(5) + ", " + lon.toFixed(5);
+      if (spawnMarker) map.removeLayer(spawnMarker);
+      spawnMarker = L.marker([lat, lon], {
+        icon: spawnIcon,
+        zIndexOffset: 2000,
+        title: "Центр спавна тестовых",
+      }).addTo(map).bindPopup("Центр спавна тестовых");
+      if (radiusCircle) map.removeLayer(radiusCircle);
+      radiusCircle = L.circle([lat, lon], {
+        radius: radiusKm() * 1000,
+        color: "#2563eb",
+        weight: 1,
+        fillColor: "#2563eb",
+        fillOpacity: 0.08,
+        interactive: false,
+      }).addTo(map);
+      if (fit) {
+        map.fitBounds(radiusCircle.getBounds(), { padding: [28, 28], maxZoom: 12 });
       }
-      const title = [
-        m.is_admin ? "ADMIN" : null,
-        m.is_test ? "test" : null,
-        m.name || "—",
-        m.age || "",
-        m.city || "",
-      ].filter(Boolean).join(" · ");
-      const detailUrl = {{ url('/accounts/') | tojson }} + encodeURIComponent(m.tg_id);
-      const popup = [
-        `<strong>${esc(title)}</strong>`,
-        `<div>id: <a href="${detailUrl}">${esc(m.tg_id)}</a>${m.username ? " @" + esc(m.username) : ""}</div>`,
-        `<div>${esc(m.lat)}, ${esc(m.lon)}</div>`,
-        `<div><a href="${detailUrl}">Открыть аккаунт</a></div>`,
-      ].join("");
-      L.marker([m.lat, m.lon], {
-        icon: m.is_admin ? adminIcon : userIcon,
-        zIndexOffset: m.is_admin ? 1000 : 0,
-      }).addTo(map).bindPopup(popup);
-      bounds.push([m.lat, m.lon]);
+    }
+
+    function renderMarkers(list) {
+      markersLayer.clearLayers();
+      const bounds = [];
+      list.forEach(function (m) {
+        const title = [
+          m.is_admin ? "ADMIN" : null,
+          m.is_test ? "test" : null,
+          m.name || "—",
+          m.age || "",
+          m.city || "",
+        ].filter(Boolean).join(" · ");
+        const detailUrl = detailBase + encodeURIComponent(m.tg_id);
+        const popup = [
+          `<strong>${esc(title)}</strong>`,
+          `<div>id: <a href="${detailUrl}">${esc(m.tg_id)}</a>${m.username ? " @" + esc(m.username) : ""}</div>`,
+          `<div>${esc(m.lat)}, ${esc(m.lon)}</div>`,
+          `<div><a href="${detailUrl}">Открыть аккаунт</a></div>`,
+        ].join("");
+        L.marker([m.lat, m.lon], {
+          icon: m.is_admin ? adminIcon : userIcon,
+          zIndexOffset: m.is_admin ? 1000 : 0,
+        }).addTo(markersLayer).bindPopup(popup);
+        bounds.push([m.lat, m.lon]);
+      });
+      const countEl = document.getElementById("map-count");
+      if (countEl) countEl.textContent = "на карте: " + list.length + " / " + mapLimit;
+      return bounds;
+    }
+
+    const initialBounds = renderMarkers(markers);
+    const spawn = spawnLatLon();
+    if (Number.isFinite(spawn.lat) && Number.isFinite(spawn.lon)) {
+      setSpawn(spawn.lat, spawn.lon, false);
+    }
+    if (initialBounds.length) {
+      map.fitBounds(initialBounds, { padding: [28, 28], maxZoom: 12 });
+    } else if (radiusCircle) {
+      map.fitBounds(radiusCircle.getBounds(), { padding: [28, 28], maxZoom: 12 });
+    }
+
+    map.on("click", function (e) {
+      setSpawn(e.latlng.lat, e.latlng.lng, false);
     });
 
-    if (bounds.length) {
-      map.fitBounds(bounds, { padding: [28, 28], maxZoom: 12 });
+    const radiusInput = document.querySelector('form[data-ajax="test-create"] [name="radius_km"]');
+    if (radiusInput) {
+      radiusInput.addEventListener("input", function () {
+        const s = spawnLatLon();
+        if (Number.isFinite(s.lat) && Number.isFinite(s.lon)) setSpawn(s.lat, s.lon, false);
+      });
     }
+
+    window.reloadUsersMap = async function () {
+      const res = await fetch(markersUrl, {
+        headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
+        credentials: "same-origin",
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data || !data.ok || !Array.isArray(data.markers)) return;
+      markers = data.markers;
+      const bounds = renderMarkers(markers);
+      const s = spawnLatLon();
+      if (Number.isFinite(s.lat) && Number.isFinite(s.lon)) setSpawn(s.lat, s.lon, false);
+      if (bounds.length) {
+        map.fitBounds(bounds, { padding: [28, 28], maxZoom: 12 });
+      }
+    };
 
     document.querySelectorAll("tr.clickable[data-href]").forEach(function (tr) {
       tr.addEventListener("click", function (e) {

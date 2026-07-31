@@ -12,8 +12,8 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Карточка аккаунта (блоки: премиум / лайки / аккаунт / анкета) | `/accounts/{tg_id}`; премиум активен только если `premium_until > now` (`is_premium`); снять → `2004-01-01` |
 | Баны / подозрительные | `/bans`; `is_blocked` + `is_suspicious` + `suspicious_reason`; сообщения 💌 |
 | Обязательные каналы | `services/channels.py`; веб `/channels`; бот `/admin` → 📢 Каналы (@ник / t.me / forward); юзер: Настройки → Каналы |
-| Карта пользователей (≤50, админ красным) | `/accounts` (Leaflet), `map_markers()` |
-| Гео админа / тестовые юзеры | `services/admin_tools.py`, `services/media.py`; веб: тесты на `/accounts`, свитч видимости также в настройках дашборда |
+| Карта пользователей (≤50, админ красным; клик = центр спавна тестов; reload после create/clear) | `/accounts` (Leaflet), `GET /accounts/map-markers`, `map_markers()` |
+| Гео админа / тестовые юзеры | `services/admin_tools.py` (`create_test_users` + optional center_lat/lon), `services/media.py`; веб: тесты на `/accounts`, свитч видимости также в настройках дашборда |
 | Трекинг-ссылки (deep-link + клики) | `services/tracking_links.py`, `handlers/admin_links.py`, веб `/links`; код `?start=` — явный или латиница из названия (не random); модели `TrackingLink` / `TrackingClick` |
 | Справочник НП (текст+координаты) | `data/settlements/settlements.csv.gz` (**только TJ+RU**), `services/settlements*.py`, `scripts/build_settlements_dump.py` |
 | Тестовое фото | `data/photos/men/`, `data/photos/women/` (по полу); fallback `data/test.png` |

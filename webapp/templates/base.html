@@ -1215,6 +1215,9 @@
           if (typeof data.count === "number") updateTestCount(data.count);
         } else if (kind === "test-create" || kind === "test-clear") {
           if (typeof data.count === "number") updateTestCount(data.count);
+          if (typeof window.reloadUsersMap === "function") {
+            try { await window.reloadUsersMap(); } catch (_) {}
+          }
         } else if (kind === "channel-toggle") {
           const active = !!data.active;
           const pill = form.querySelector(".status-pill");

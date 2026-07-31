@@ -179,7 +179,7 @@ async def _existing_test_photo_placements(
     return out
 
 
-async def _test_spawn_center(session: AsyncSession) -> tuple[float, float, str]:
+async def test_spawn_center(session: AsyncSession) -> tuple[float, float, str]:
     """Prefer first admin with saved geo, else Dushanbe."""
     for aid in sorted(settings.admin_id_set):
         geo = await get_user_geo(session, aid)
@@ -207,6 +207,9 @@ async def create_test_users(
     session: AsyncSession,
     count: int,
     radius_km: float | None = None,
+    center_lat: float | None = None,
+    center_lon: float | None = None,
+    city_name: str | None = None,
 ) -> int:
     count = max(0, min(int(count), 1000))
     spawn_r = (
@@ -217,7 +220,13 @@ async def create_test_users(
     from services.settings_service import are_test_users_visible_setting
 
     visible = await are_test_users_visible_setting(session)
-    center_lat, center_lon, city = await _test_spawn_center(session)
+    if center_lat is not None and center_lon is not None:
+        lat0 = max(-90.0, min(90.0, float(center_lat)))
+        lon0 = max(-180.0, min(180.0, float(center_lon)))
+        city = (city_name or "").strip() or "Карта"
+        center_lat, center_lon, city = lat0, lon0, city
+    else:
+        center_lat, center_lon, city = await test_spawn_center(session)
     placements = await _existing_test_photo_placements(session)
     created = 0
     for _ in range(count):

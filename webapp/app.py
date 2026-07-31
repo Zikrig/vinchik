@@ -33,6 +33,7 @@ from services.admin_tools import (
     get_user_geo,
     set_test_users_visible,
     set_user_geo,
+    test_spawn_center,
 )
 from services.accounts import (
     account_like_stats,
@@ -499,6 +500,7 @@ def create_app() -> FastAPI:
         filters = filters_from_query(raw)
         rows = await search_accounts(session, **filters, limit=500)
         markers = await map_markers(session, admin_ids=settings.admin_id_set, limit=50)
+        spawn_lat, spawn_lon, _spawn_city = await test_spawn_center(session)
         return await render_admin(
             request,
             session,
@@ -511,11 +513,23 @@ def create_app() -> FastAPI:
                 "map_limit": 50,
                 "dushanbe_lat": DUSHANBE_LAT,
                 "dushanbe_lon": DUSHANBE_LON,
+                "spawn_lat": spawn_lat,
+                "spawn_lon": spawn_lon,
+                "map_markers_url": settings.abs_path("/accounts/map-markers"),
                 "test_users_count": await count_test_users(session),
                 "test_users_visible": await are_test_users_visible(session),
                 "flash": request.query_params.get("flash"),
             },
         )
+
+    @app.get("/accounts/map-markers")
+    async def accounts_map_markers(
+        request: Request, session: AsyncSession = Depends(get_db)
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        markers = await map_markers(session, admin_ids=settings.admin_id_set, limit=50)
+        return JSONResponse({"ok": True, "markers": markers, "limit": 50})
 
     @app.get("/accounts/{user_id}", response_class=HTMLResponse)
     async def account_detail(
@@ -1297,11 +1311,32 @@ def create_app() -> FastAPI:
         request: Request,
         count: int = Form(10),
         radius_km: float = Form(60),
+        center_lat: str = Form(""),
+        center_lon: str = Form(""),
         session: AsyncSession = Depends(get_db),
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        n = await create_test_users(session, count, radius_km=radius_km)
+        lat: float | None = None
+        lon: float | None = None
+        if (center_lat or "").strip() and (center_lon or "").strip():
+            try:
+                lat = float(center_lat)
+                lon = float(center_lon)
+            except ValueError:
+                return err_response(
+                    request,
+                    settings.abs_path("/accounts?flash=bad_spawn"),
+                    error="Некорректные координаты центра спавна.",
+                )
+        n = await create_test_users(
+            session,
+            count,
+            radius_km=radius_km,
+            center_lat=lat,
+            center_lon=lon,
+            city_name="Карта" if lat is not None else None,
+        )
         total = await count_test_users(session)
         return ok_response(
             request,
