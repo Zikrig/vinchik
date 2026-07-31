@@ -10,7 +10,7 @@ docker compose -p vinchik-loadtest `
   --abort-on-container-exit --exit-code-from loadgen loadgen
 ```
 
-По умолчанию: webhook, ступени **5 / 10 / 15 / 25** RPS, режим `capacity`.
+По умолчанию: webhook, ступени **5 / 10 / 25 / 40** RPS, режим `capacity`.
 
 ## Polling
 

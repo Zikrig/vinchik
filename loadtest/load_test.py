@@ -48,7 +48,7 @@ RESULTS_DIR = Path(os.getenv("LOADTEST_RESULTS_DIR", "/results"))
 RUN_MODE = os.getenv("LOADTEST_RUN_MODE", "capacity").strip().lower()
 RPS_LEVELS = tuple(
     float(item.strip())
-    for item in os.getenv("LOADTEST_RPS_LEVELS", "5,10,15,25").split(",")
+    for item in os.getenv("LOADTEST_RPS_LEVELS", "5,10,25,40").split(",")
     if item.strip()
 )
 LEVEL_SECONDS = float(os.getenv("LOADTEST_LEVEL_SECONDS", "20"))
