@@ -12,7 +12,7 @@ from database.models import DailyLikeStat, Gender, Like, LookingFor, Profile, Us
 from services.media import set_profile_photos
 from services.users import load_user_with_profile
 
-MAP_MARKERS_LIMIT = 50
+MAP_MARKERS_LIMIT = 200
 
 # Admin "снять премиум" — дата в прошлом: is_premium() = false, поле не пустое.
 PREMIUM_REVOKED_UNTIL = datetime(2004, 1, 1, 0, 0, tzinfo=UTC)
@@ -140,53 +140,42 @@ async def map_markers(
     admin_ids: set[int],
     limit: int = MAP_MARKERS_LIMIT,
 ) -> list[dict]:
-    """Up to `limit` profiles with coordinates. Admins always preferred, marked is_admin."""
-    stmt = (
-        select(User)
-        .join(Profile, Profile.user_id == User.tg_id)
-        .where(Profile.lat.is_not(None), Profile.lon.is_not(None))
-        .options(selectinload(User.profile))
-        .order_by(User.created_at.desc())
-        .limit(max(limit * 4, 200))
-    )
-    result = await session.execute(stmt)
-    users = list(result.scalars().unique().all())
+    """Up to `limit` profiles with coordinates.
+
+    Admins with geo are always included first; the rest are a random sample
+    (not “latest N”), so the map is not biased to recent registrations.
+    """
+    limit = max(1, int(limit))
+    geo = and_(Profile.lat.is_not(None), Profile.lon.is_not(None))
 
     admins: list[User] = []
-    others: list[User] = []
-    for u in users:
-        if u.tg_id in admin_ids:
-            admins.append(u)
-        else:
-            others.append(u)
-
-    missing_admin_ids = [aid for aid in admin_ids if aid not in {u.tg_id for u in admins}]
-    if missing_admin_ids:
-        extra = await session.execute(
+    if admin_ids:
+        admin_result = await session.execute(
             select(User)
             .join(Profile, Profile.user_id == User.tg_id)
-            .where(
-                User.tg_id.in_(missing_admin_ids),
-                Profile.lat.is_not(None),
-                Profile.lon.is_not(None),
-            )
+            .where(User.tg_id.in_(admin_ids), geo)
             .options(selectinload(User.profile))
         )
-        for u in extra.scalars().unique().all():
-            admins.append(u)
+        admins = list(admin_result.scalars().unique().all())
 
-    picked: list[User] = []
-    for u in admins:
-        if len(picked) >= limit:
-            break
-        picked.append(u)
-    for u in others:
-        if len(picked) >= limit:
-            break
-        picked.append(u)
+    remaining = max(0, limit - len(admins))
+    others: list[User] = []
+    if remaining:
+        others_stmt = (
+            select(User)
+            .join(Profile, Profile.user_id == User.tg_id)
+            .where(geo)
+            .options(selectinload(User.profile))
+            .order_by(func.random())
+            .limit(remaining)
+        )
+        if admin_ids:
+            others_stmt = others_stmt.where(User.tg_id.notin_(admin_ids))
+        others_result = await session.execute(others_stmt)
+        others = list(others_result.scalars().unique().all())
 
     markers: list[dict] = []
-    for u in picked:
+    for u in admins + others:
         p = u.profile
         if not p or p.lat is None or p.lon is None:
             continue

@@ -36,6 +36,7 @@ from services.admin_tools import (
     test_spawn_center,
 )
 from services.accounts import (
+    MAP_MARKERS_LIMIT,
     account_like_stats,
     clear_user_likes,
     filters_from_query,
@@ -499,7 +500,9 @@ def create_app() -> FastAPI:
         }
         filters = filters_from_query(raw)
         rows = await search_accounts(session, **filters, limit=500)
-        markers = await map_markers(session, admin_ids=settings.admin_id_set, limit=50)
+        markers = await map_markers(
+            session, admin_ids=settings.admin_id_set, limit=MAP_MARKERS_LIMIT
+        )
         spawn_lat, spawn_lon, _spawn_city = await test_spawn_center(session)
         return await render_admin(
             request,
@@ -510,7 +513,7 @@ def create_app() -> FastAPI:
                 "f": raw,
                 "count": len(rows),
                 "markers": markers,
-                "map_limit": 50,
+                "map_limit": MAP_MARKERS_LIMIT,
                 "dushanbe_lat": DUSHANBE_LAT,
                 "dushanbe_lon": DUSHANBE_LON,
                 "spawn_lat": spawn_lat,
@@ -528,8 +531,12 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        markers = await map_markers(session, admin_ids=settings.admin_id_set, limit=50)
-        return JSONResponse({"ok": True, "markers": markers, "limit": 50})
+        markers = await map_markers(
+            session, admin_ids=settings.admin_id_set, limit=MAP_MARKERS_LIMIT
+        )
+        return JSONResponse(
+            {"ok": True, "markers": markers, "limit": MAP_MARKERS_LIMIT}
+        )
 
     @app.get("/accounts/{user_id}", response_class=HTMLResponse)
     async def account_detail(
