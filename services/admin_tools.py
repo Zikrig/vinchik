@@ -238,7 +238,7 @@ async def create_test_users(session: AsyncSession, count: int) -> int:
             lat=lat,
             lon=lon,
             city_name=city,
-            description="Тестовая анкета",
+            description="",
             photo_file_id=test_photo,
             photo_file_ids=[test_photo] if test_photo else None,
             is_active=visible,
