@@ -216,10 +216,8 @@ async def create_test_users(session: AsyncSession, count: int) -> int:
             gender, center_lat, center_lon, placements
         )
         if gender == Gender.male:
-            looking = random.choice((LookingFor.female, LookingFor.any))
             name = random.choice(_TEST_NAMES_MALE)
         else:
-            looking = random.choice((LookingFor.male, LookingFor.any))
             name = random.choice(_TEST_NAMES_FEMALE)
         age = random.randint(18, 35)
         user = User(
@@ -234,7 +232,7 @@ async def create_test_users(session: AsyncSession, count: int) -> int:
             name=name,
             age=age,
             gender=gender,
-            looking_for=looking,
+            looking_for=LookingFor.any,
             lat=lat,
             lon=lon,
             city_name=city,
