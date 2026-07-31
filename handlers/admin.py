@@ -30,6 +30,7 @@ from services.premium import (
     reject_order,
 )
 from services.settings_service import (
+    MAX_DISTANCE_KM,
     get_daily_like_limit,
     get_max_distance_km,
     get_payment_info,
@@ -49,7 +50,7 @@ _PREMIUMS_PER_PAGE = 8
 
 _EDIT_PROMPTS = {
     AdminStates.edit_limit.state: "Новый лимит лайков / сутки UTC (целое ≥ 1):",
-    AdminStates.edit_dist.state: "Новый радиус км (1–20000):",
+    AdminStates.edit_dist.state: "Новый радиус км (1–500):",
     AdminStates.edit_reshow.state: "Повтор анкеты в днях (0 = никогда; пауза в обе стороны после ❤️/👎/💌):",
     AdminStates.edit_card.state: "Новая карта для приёма платежей:",
     AdminStates.edit_check_time.state: "Новое время проверки оплаты:",
@@ -495,7 +496,9 @@ async def adm_edit_value(
             value = max(1, int(raw))
             await set_setting(session, "daily_like_limit", str(value))
         elif current == AdminStates.edit_dist.state:
-            value = min(max(float(raw.replace(",", ".")), 1.0), 20000.0)
+            value = min(
+                max(float(raw.replace(",", ".")), 1.0), MAX_DISTANCE_KM
+            )
             await set_setting(session, "max_distance_km", str(value))
         elif current == AdminStates.edit_reshow.state:
             value = max(0, int(raw))

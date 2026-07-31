@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     db_max_overflow: int = Field(default=5, alias="DB_MAX_OVERFLOW")
     db_pool_timeout_seconds: int = Field(default=15, alias="DB_POOL_TIMEOUT_SECONDS")
     db_pool_recycle_seconds: int = Field(default=1800, alias="DB_POOL_RECYCLE_SECONDS")
+    update_concurrency_limit: int = Field(default=24, alias="UPDATE_CONCURRENCY_LIMIT")
+    channel_membership_cache_seconds: int = Field(
+        default=300, alias="CHANNEL_MEMBERSHIP_CACHE_SECONDS"
+    )
+    active_channels_cache_seconds: int = Field(
+        default=30, alias="ACTIVE_CHANNELS_CACHE_SECONDS"
+    )
     redis_url: str = Field(alias="REDIS_URL")
     admin_ids: str = Field(alias="ADMIN_IDS")
     admin_web_password: str = Field(alias="ADMIN_WEB_PASSWORD")
@@ -51,9 +58,18 @@ class Settings(BaseSettings):
     webhook_host: str = Field(default="0.0.0.0", alias="WEBHOOK_HOST")
     # Порт ВНУТРИ контейнера (compose: 8181:8081). Не ставь сюда 8180/8181.
     webhook_port: int = Field(default=8081, alias="WEBHOOK_PORT")
+    webhook_handle_in_background: bool = Field(
+        default=True, alias="WEBHOOK_HANDLE_IN_BACKGROUND"
+    )
+
+    # Empty = official api.telegram.org. Used by the isolated load-test contour.
+    telegram_api_base_url: str = Field(default="", alias="TELEGRAM_API_BASE_URL")
+    performance_metrics_enabled: bool = Field(
+        default=False, alias="PERFORMANCE_METRICS_ENABLED"
+    )
 
     default_daily_like_limit: int = 50
-    default_max_distance_km: float = 20000.0
+    default_max_distance_km: float = 500.0
     # Days before a previously rated profile can appear in feed again (0 = never).
     default_profile_reshow_days: int = 60
     like_notify_interval_minutes: int = 30

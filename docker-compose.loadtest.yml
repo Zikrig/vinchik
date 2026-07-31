@@ -1,0 +1,128 @@
+services:
+  db:
+    volumes:
+      - loadtest_pgdata:/var/lib/postgresql/data
+    networks: [loadtest_internal]
+
+  redis:
+    networks: [loadtest_internal]
+
+  telegram-mock:
+    build: .
+    command:
+      - python
+      - -m
+      - uvicorn
+      - loadtest.telegram_mock:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8082"
+      - --log-level
+      - warning
+    environment:
+      MOCK_ENFORCE_LIMITS: "true"
+      MOCK_BASE_LATENCY_MS: "80"
+      MOCK_JITTER_MS: "40"
+      MOCK_GLOBAL_MESSAGES_PER_SECOND: "30"
+      MOCK_GLOBAL_BURST: "30"
+      MOCK_PRIVATE_MESSAGES_PER_SECOND: "1"
+      MOCK_PRIVATE_BURST: "3"
+      MOCK_GROUP_MESSAGES_PER_MINUTE: "20"
+      MOCK_GROUP_BURST: "20"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8082/__mock__/health',
+          timeout=2)
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+    networks: [loadtest_internal]
+
+  bot:
+    command: ["python", "bot.py"]
+    environment:
+      BOT_TOKEN: "999999:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/15
+      USE_WEBHOOK: "${LOADTEST_USE_WEBHOOK:-true}"
+      WEBHOOK_BASE_URL: http://bot:8081
+      WEBHOOK_PATH: /webhook/bot
+      WEBHOOK_SECRET: loadtest-secret
+      WEBHOOK_HOST: 0.0.0.0
+      WEBHOOK_PORT: "8081"
+      TELEGRAM_API_BASE_URL: http://telegram-mock:8082
+      WEBHOOK_HANDLE_IN_BACKGROUND: "false"
+      PERFORMANCE_METRICS_ENABLED: "true"
+      # Loadtest profile: force a getChatMember round-trip on every next card.
+      CHANNEL_MEMBERSHIP_CACHE_SECONDS: "0"
+    depends_on:
+      telegram-mock:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports: !reset []
+    networks: [loadtest_internal]
+
+  loadgen:
+    build: .
+    command:
+      - sh
+      - -c
+      - python -m loadtest.prepare && python -m loadtest.load_test
+    profiles: [loadtest]
+    env_file: .env
+    environment:
+      BOT_TOKEN: "999999:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/15
+      WEBHOOK_SECRET: loadtest-secret
+      VINCHIK_LOADTEST: isolated
+      LOADTEST_WEBHOOK_URL: http://bot:8081/webhook/bot
+      LOADTEST_BOT_HEALTH_URL: http://bot:8081/__performance__/health
+      LOADTEST_BOT_STATS_URL: http://bot:8081/__performance__/stats
+      LOADTEST_BOT_RESET_URL: http://bot:8081/__performance__/reset
+      LOADTEST_MOCK_URL: http://telegram-mock:8082
+      LOADTEST_RESULTS_DIR: /results
+      LOADTEST_VIEWERS: "${LOADTEST_VIEWERS:-300}"
+      LOADTEST_CANDIDATES: "${LOADTEST_CANDIDATES:-5000}"
+      LOADTEST_CANDIDATE_BASE: "${LOADTEST_CANDIDATE_BASE:-9100000000}"
+      LOADTEST_REQUIRED_CHANNELS: "${LOADTEST_REQUIRED_CHANNELS:-3}"
+      LOADTEST_DELIVERY: "${LOADTEST_DELIVERY:-webhook}"
+      LOADTEST_RPS_LEVELS: "${LOADTEST_RPS_LEVELS:-5,10,15,25}"
+      LOADTEST_LEVEL_SECONDS: "${LOADTEST_LEVEL_SECONDS:-20}"
+      LOADTEST_REQUEST_TIMEOUT_SECONDS: "${LOADTEST_REQUEST_TIMEOUT_SECONDS:-30}"
+      LOADTEST_IDLE_TIMEOUT_SECONDS: "${LOADTEST_IDLE_TIMEOUT_SECONDS:-45}"
+      LOADTEST_BOT_DB_POOL_SIZE: "${DB_POOL_SIZE:-5}"
+      LOADTEST_BOT_DB_MAX_OVERFLOW: "${DB_MAX_OVERFLOW:-5}"
+      LOADTEST_BOT_UPDATE_CONCURRENCY_LIMIT: "${UPDATE_CONCURRENCY_LIMIT:-24}"
+      LOADTEST_LIKE_PERCENT: "${LOADTEST_LIKE_PERCENT:-20}"
+      LOADTEST_RUN_MODE: "${LOADTEST_RUN_MODE:-capacity}"
+      CHANNEL_MEMBERSHIP_CACHE_SECONDS: "0"
+    volumes:
+      - ./ignored/loadtest/results:/results
+    depends_on:
+      bot:
+        condition: service_started
+      telegram-mock:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [loadtest_internal]
+
+volumes:
+  loadtest_pgdata:
+
+networks:
+  loadtest_internal:
+    internal: true

@@ -30,6 +30,7 @@ DEFAULTS = {
 
 WELCOME_CAPTION_MAX = 1024
 WELCOME_LOCAL_REL = "data/welcome_post.jpg"
+MAX_DISTANCE_KM = 500.0
 
 _CACHE_TTL_SECONDS = 30.0
 _setting_cache: dict[str, tuple[float, str]] = {}
@@ -91,7 +92,13 @@ async def get_daily_like_limit(session: AsyncSession) -> int:
 
 
 async def get_max_distance_km(session: AsyncSession) -> float:
-    return float(await get_setting(session, "max_distance_km", "20000"))
+    raw = await get_setting(
+        session, "max_distance_km", str(settings.default_max_distance_km)
+    )
+    try:
+        return min(max(float(raw), 1.0), MAX_DISTANCE_KM)
+    except ValueError:
+        return settings.default_max_distance_km
 
 
 async def get_profile_reshow_days(session: AsyncSession) -> int:

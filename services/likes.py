@@ -1,24 +1,31 @@
 from __future__ import annotations
 
+import asyncio
 import html
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database.models import Like, LikeAction, Profile, User
+from database.session import async_session_maker
 from locales import t
+from services.activity import mark_activity_if_stale
 from services.limits import consume_like_slot
+from services.performance import timed
 
 MAX_MESSAGE_ATTACHMENTS = 3  # unused; kept for imports safety
 MAX_MESSAGE_ATTACH_BYTES = 10 * 1024 * 1024
+logger = logging.getLogger(__name__)
+_notification_tasks: set[asyncio.Task[None]] = set()
 
 
 def empty_message_payload() -> dict[str, Any]:
@@ -77,6 +84,7 @@ async def mark_likes_seen(session: AsyncSession, user_id: int) -> None:
     await session.commit()
 
 
+@timed("likes.record_action")
 async def record_action(
     session: AsyncSession,
     from_user: User,
@@ -115,26 +123,34 @@ async def record_action(
     if from_user.is_blocked:
         raise PermissionError("blocked")
 
-    target = await session.get(User, to_user_id)
-    if target is None:
-        return None
-
-    existing = (
+    target_row = (
         await session.execute(
-            select(Like).where(
-                Like.from_user_id == from_user.tg_id, Like.to_user_id == to_user_id
+            select(User, Like)
+            .outerjoin(
+                Like,
+                and_(
+                    Like.from_user_id == from_user.tg_id,
+                    Like.to_user_id == to_user_id,
+                ),
             )
+            .where(User.tg_id == to_user_id)
         )
-    ).scalar_one_or_none()
+    ).one_or_none()
+    if target_row is None:
+        await session.rollback()
+        return None
+    _target, existing = target_row
 
     if existing is not None:
         reshow_days = await get_profile_reshow_days(session)
         if reshow_days <= 0:
+            await session.rollback()
             return None
         created = existing.created_at
         if created.tzinfo is None:
             created = created.replace(tzinfo=UTC)
         if datetime.now(UTC) - created < timedelta(days=reshow_days):
+            await session.rollback()
             return None
 
     if action in (LikeAction.like, LikeAction.message):
@@ -147,6 +163,7 @@ async def record_action(
         text = payload_text(payload) or text
 
     now = datetime.now(UTC)
+    mark_activity_if_stale(from_user, now)
     if existing is not None:
         existing.action = action
         existing.message_text = text
@@ -184,10 +201,12 @@ async def record_action(
 async def notify_like_batch(bot: Bot, session: AsyncSession, to_user_id: int) -> None:
     target = await session.get(User, to_user_id)
     if target is None or target.is_test or to_user_id <= 0:
+        await session.commit()
         return
 
     n = await unseen_likes_count(session, to_user_id)
     if n <= 0:
+        await session.commit()
         return
 
     now = datetime.now(UTC)
@@ -205,6 +224,8 @@ async def notify_like_batch(bot: Bot, session: AsyncSession, to_user_id: int) ->
             [InlineKeyboardButton(text=t("btn_view_likes", lang), callback_data="likes:view")]
         ]
     )
+    # Do not hold a DB connection while Telegram sends/edits the notification.
+    await session.commit()
 
     # Within the batch window: refresh the same notification instead of staying silent.
     if within_window and target.likes_notify_message_id:
@@ -238,6 +259,26 @@ async def notify_like_batch(bot: Bot, session: AsyncSession, to_user_id: int) ->
     target.likes_notify_message_id = msg.message_id
     target.last_like_notify_at = now
     await session.commit()
+
+
+def schedule_like_notification(bot: Bot, to_user_id: int) -> None:
+    """Notify recipient out of sender's latency-critical swipe path."""
+
+    async def run() -> None:
+        async with async_session_maker() as session:
+            await notify_like_batch(bot, session, to_user_id)
+
+    task = asyncio.create_task(run(), name=f"like-notify-{to_user_id}")
+    _notification_tasks.add(task)
+    task.add_done_callback(_notification_tasks.discard)
+
+    def log_failure(done: asyncio.Task[None]) -> None:
+        if done.cancelled():
+            return
+        if exc := done.exception():
+            logger.warning("like notification failed for %s: %r", to_user_id, exc)
+
+    task.add_done_callback(log_failure)
 
 
 def _like_payload(like: Like) -> dict:

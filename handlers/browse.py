@@ -35,8 +35,8 @@ from services.likes import (
     format_likes_list,
     list_unseen_likers,
     mark_likes_seen,
-    notify_like_batch,
     record_action,
+    schedule_like_notification,
 )
 from services.limits import can_browse
 from services.reports import file_report
@@ -122,13 +122,16 @@ async def start_browse(
     user: User,
     bot: Bot | None = None,
     state: FSMContext | None = None,
+    *,
+    prepared_after_action: bool = False,
 ) -> None:
     # After record_action / notify commits the caller's User may be expired —
     # never touch user.profile via lazy load (MissingGreenlet).
-    fresh = await load_user(session, user.tg_id)
-    if fresh is None:
-        return
-    user = fresh
+    if not prepared_after_action:
+        fresh = await load_user(session, user.tg_id)
+        if fresh is None:
+            return
+        user = fresh
     lang = user.language or "ru"
     dest = bot or message.bot
     chat_id = user.tg_id
@@ -157,7 +160,10 @@ async def start_browse(
         await drop_reply_keyboard(message)
         await say(body, reply_markup=channels_kb(lang, channels))
         return
-    if not await can_browse(session, user, user.profile):
+    if (
+        not prepared_after_action
+        and not await can_browse(session, user, user.profile)
+    ):
         if state:
             await state.clear()
         await _say_limit(message, lang)
@@ -178,9 +184,13 @@ async def start_browse(
         await say(t("profile_hidden", lang), reply_markup=profile_enable_kb(lang))
         return
 
-    await touch_activity(session, user)
+    if not prepared_after_action:
+        await touch_activity(session, user)
 
     profile = await next_profile(session, user, user.profile)
+    # next_profile opens a read transaction. Release its connection before
+    # waiting on Telegram while sending the card/empty-feed response.
+    await session.commit()
     if profile is None:
         if state:
             await state.clear()
@@ -261,7 +271,9 @@ async def _rate_from_message(
     if not await _guard_feed_user(message, session, user, state, lang):
         return
 
-    if not await can_browse(session, user, user.profile):
+    if action == LikeAction.dislike and not await can_browse(
+        session, user, user.profile
+    ):
         await state.clear()
         await _say_limit(message, lang)
         return
@@ -279,43 +291,47 @@ async def _rate_from_message(
         return
 
     if like and action in (LikeAction.like, LikeAction.message):
-        await notify_like_batch(bot, session, int(target_id))
-
-    fresh = await load_user(session, user.tg_id)
-    if fresh is None:
-        return
-    user = fresh
+        schedule_like_notification(bot, int(target_id))
 
     # Last like of the day: one message (confirm + limit), no junk ".".
-    if like and action == LikeAction.like and not await can_browse(
-        session, user, user.profile
-    ):
-        await state.clear()
-        await _say_limit(message, lang, preface=t("like_sent", lang))
-        return
+    if like and action == LikeAction.like:
+        may_continue = await can_browse(session, user, user.profile)
+        # can_browse opens a read transaction; release it before Bot API calls.
+        await session.commit()
+        if not may_continue:
+            await state.clear()
+            await _say_limit(message, lang, preface=t("like_sent", lang))
+            return
 
     if like and action == LikeAction.like:
         await bot.send_message(user.tg_id, t("like_sent", lang))
 
-    await start_browse(message, session, user, bot, state)
+    await start_browse(
+        message,
+        session,
+        user,
+        bot,
+        state,
+        prepared_after_action=like is not None,
+    )
 
 
 @router.message(BrowseStates.viewing, F.text)
 async def browse_reply_action(
     message: Message, session: AsyncSession, bot: Bot, state: FSMContext
 ) -> None:
+    text = message.text or ""
+
+    if _is_btn(text, "btn_like", "ru"):
+        await _rate_from_message(message, session, bot, state, LikeAction.like)
+        return
+    if _is_btn(text, "btn_dislike", "ru"):
+        await _rate_from_message(message, session, bot, state, LikeAction.dislike)
+        return
     user = await message_user(message, session)
     if user is None:
         return
     lang = user.language or "ru"
-    text = message.text or ""
-
-    if _is_btn(text, "btn_like", lang):
-        await _rate_from_message(message, session, bot, state, LikeAction.like)
-        return
-    if _is_btn(text, "btn_dislike", lang):
-        await _rate_from_message(message, session, bot, state, LikeAction.dislike)
-        return
     if _is_btn(text, "btn_message", lang):
         await _start_message_flow(message, session, state, user)
         return
@@ -452,7 +468,7 @@ async def _finalize_message(
         return
     await state.clear()
     if like:
-        await notify_like_batch(bot, session, target_id)
+        schedule_like_notification(bot, target_id)
         fresh = await load_user(session, user.tg_id)
         if fresh is None:
             return

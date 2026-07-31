@@ -88,6 +88,12 @@ async def init_db() -> None:
         )
         await conn.execute(
             text(
+                "CREATE INDEX IF NOT EXISTS ix_likes_to_from_created "
+                "ON likes (to_user_id, from_user_id, created_at)"
+            )
+        )
+        await conn.execute(
+            text(
                 "CREATE INDEX IF NOT EXISTS ix_reports_to_created "
                 "ON reports (to_user_id, created_at)"
             )

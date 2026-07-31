@@ -71,6 +71,7 @@ from services.channels import (
     toggle_channel as flip_required_channel,
 )
 from services.settings_service import (
+    MAX_DISTANCE_KM,
     WELCOME_CAPTION_MAX,
     ensure_defaults,
     get_daily_like_limit,
@@ -883,7 +884,7 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         await set_setting(session, "daily_like_limit", str(daily_like_limit))
-        capped = min(max(float(max_distance_km), 1.0), 20000.0)
+        capped = min(max(float(max_distance_km), 1.0), MAX_DISTANCE_KM)
         await set_setting(session, "max_distance_km", str(capped))
         await set_setting(
             session, "profile_reshow_days", str(max(0, int(profile_reshow_days)))

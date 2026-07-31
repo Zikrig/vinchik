@@ -23,6 +23,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Тексты UI | `locales/ru.py`, `locales/tg.py` (кнопка tg первой) |
 | Клавиатуры | `keyboards/inline.py` |
 | Конфиг | `config/settings.py`, `.env` (`ADM_LINK` — URL веб-админки в тексте `/admin`) |
+| Нагрузочный тест / временные probes | `loadtest/`, `docker-compose.loadtest.yml`, `services/bot_factory.py`, `services/performance.py`, `middlewares/performance.py`; результаты/заметки — `ignored/loadtest/` |
 | ТЗ | `TZ.md` |
 
 ## Инварианты
@@ -33,6 +34,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Лимит лайков: default 50, сутки **UTC**; у мужчин без Премиум при исчерпании **нельзя смотреть ленту**. Резерв слота + запись реакции — одна транзакция; реакции одного отправителя сериализуются блокировкой строки `users`.
 - Женщины и Премиум — без лимита.
 - Лента: взаимный looking_for; диагональ км×возраст: волна 0 = 10км±2; волна 1 = 10км±5 и 25км±2; волна 2 = 10км±10 + 25км±5 + 50км±2; … Каждый `next_profile` с нуля по текущим кандидатам. Внутри волны: премиум → |Δвозраст| → ближе км. Цель карточки в FSM `BrowseStates.viewing` (`browse_target`).
+- Радиус ленты: default и жёсткий максимум **500 км** во всех точках ввода и чтения настройки.
 - После ❤️/👎/💌 пара **взаимно** скрывается из ленты на `profile_reshow_days` (default **60**; **0** = навсегда). 🚪 снимает reply-клавиатуру, **не** пишет в `likes`.
 - 💌: одно сообщение — текст **или** голосовое **или** кружок (без вложений); payload в `likes.message_payload` (JSONB); промпт + «Отмена» (`msg:cancel`) — **одним** сообщением (reply-клавиатура ленты снимается служебным удаляемым сообщением).
 - Анкета: **0–3 фото** (`photo_file_ids` JSONB + `photo_file_id` = первое); в ленте album / одно фото / только текст.
@@ -53,6 +55,26 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Подозрительные (тихо): >150 лайков/сутки UTC, >150 сообщений/сутки, >3 раскладки в одном 💌, ≥2 жалобы за 3 мес → `is_suspicious` + `suspicious_reason`; фон `moderation_loop` + хук после лайка/жалобы; страница `/bans`.
 - Запуск только Docker (без локального venv).
 - По умолчанию polling; webhook — `USE_WEBHOOK=true` + HTTPS; хост-порт webhook **:8181** (внутри контейнера 8081).
+- Нагрузочный контур: `TELEGRAM_API_BASE_URL` переключает aiogram на mock,
+  `WEBHOOK_HANDLE_IN_BACKGROUND=false` измеряет полный handler,
+  `PERFORMANCE_METRICS_ENABLED=true` включает `/__performance__/*`; в production
+  custom URL и probes выключены. Жёсткий профиль сидов: кандидаты
+  `tg_id≥9100000000` / `is_test=False` (notify), 1–3 fake photo file_id,
+  3 канала, у bot `CHANNEL_MEMBERSHIP_CACHE_SECONDS=0`, ступени **5/10/15/25**
+  по 20 с; delivery `LOADTEST_DELIVERY=webhook|polling` (+ `LOADTEST_USE_WEBHOOK`).
+- Защита hot path: одновременно выполняется не больше
+  `UPDATE_CONCURRENCY_LIMIT` handlers (default 24); положительная проверка
+  обязательных каналов кэшируется на `CHANNEL_MEMBERSHIP_CACHE_SECONDS`
+  (default 300), список каналов — на `ACTIVE_CHANNELS_CACHE_SECONDS` (default
+  30). Изменение каналов в bot-процессе сбрасывает оба кэша; изменение через web
+  видно bot-процессу после TTL списка.
+- `last_activity_at` записывается не чаще раза в 5 минут; реакции обновляют его
+  в своей транзакции. Hot path ❤️/👎 не перезагружает пользователя и лимит
+  повторно после успешной реакции.
+- Батч-уведомление получателю лайка запускается после commit в отдельной задаче
+  со своей DB-session и не задерживает выдачу следующей карточки отправителю.
+  Входящий `NOT EXISTS` ленты поддерживает индекс
+  `ix_likes_to_from_created (to_user_id, from_user_id, created_at)`.
 - `/start` (`handlers/start.py`): аргумент deep-link (`?start=code`) пишет клик в `tracking_clicks` если код есть; если задан приветственный пост (фото) — он вместо `welcome` / `welcome_bilingual`; иначе тексты из локалей; выбор языка только если `language_chosen=False`; иначе продолжение регистрации / меню. У готовой анкеты — `main_menu_help` (что делают 6 кнопок) + меню. Флаг ставится в `set_language`; у готовых анкет — автозаполнение для старых строк.
 - Вне FSM любое личное сообщение → главное меню (`handlers/fallback.py`).
 - Хендлеры не используют `assert` для входных данных: юзер берётся через `callback_context` / `message_user` / `ensure_user` (`handlers/common.py`), они же чинят пропавшую строку `users`. Протухшая кнопка (нет тела сообщения) → алерт `stale_button`. В админке экран перерисовывает `_redraw` (правка на месте, иначе новое сообщение).

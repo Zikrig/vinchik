@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 import re
+from time import monotonic
 from dataclasses import dataclass
 
 from aiogram import Bot
@@ -14,7 +16,9 @@ from aiogram.types import Chat, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import settings
 from database.models import RequiredChannel, User
+from services.performance import timed
 from services.users import is_premium
 
 logger = logging.getLogger(__name__)
@@ -36,6 +40,53 @@ class ResolvedChannel:
     channel_id: str
     title: str
     invite_link: str
+
+
+@dataclass(frozen=True)
+class ChannelSnapshot:
+    id: int
+    channel_id: str
+    title: str
+    invite_link: str
+
+
+_channel_cache_lock = asyncio.Lock()
+_active_channel_cache: tuple[ChannelSnapshot, ...] = ()
+_active_channel_cache_expires = 0.0
+_membership_cache: dict[tuple[int, tuple[tuple[int, str], ...]], float] = {}
+
+
+def invalidate_subscription_caches() -> None:
+    global _active_channel_cache_expires
+    _active_channel_cache_expires = 0.0
+    _membership_cache.clear()
+
+
+async def _channels_for_subscription(
+    session: AsyncSession,
+) -> tuple[ChannelSnapshot, ...]:
+    global _active_channel_cache, _active_channel_cache_expires
+    now = monotonic()
+    if _active_channel_cache_expires > now:
+        return _active_channel_cache
+    async with _channel_cache_lock:
+        now = monotonic()
+        if _active_channel_cache_expires > now:
+            return _active_channel_cache
+        rows = await list_active_channels(session)
+        _active_channel_cache = tuple(
+            ChannelSnapshot(
+                id=channel.id,
+                channel_id=channel.channel_id,
+                title=channel.title,
+                invite_link=channel.invite_link,
+            )
+            for channel in rows
+        )
+        _active_channel_cache_expires = (
+            now + max(0, settings.active_channels_cache_seconds)
+        )
+        return _active_channel_cache
 
 
 def parse_channel_ref(raw: str) -> str | None:
@@ -83,7 +134,9 @@ def channel_button_url(ch: RequiredChannel) -> str | None:
     return None
 
 
-def format_channels_lines(channels: list[RequiredChannel]) -> str:
+def format_channels_lines(
+    channels: list[RequiredChannel] | tuple[ChannelSnapshot, ...],
+) -> str:
     lines: list[str] = []
     for ch in channels:
         title = html.escape((ch.title or ch.channel_id or "канал").strip())
@@ -111,11 +164,20 @@ async def list_all_channels(session: AsyncSession) -> list[RequiredChannel]:
 _NOT_A_MEMBER_HINTS = ("user not found", "participant_id_invalid", "member not found")
 
 
+@timed("channels.user_subscribed_all")
 async def user_subscribed_all(bot: Bot, session: AsyncSession, user: User) -> bool:
     if is_premium(user):
         return True
-    channels = await list_active_channels(session)
+    channels = await _channels_for_subscription(session)
+    # A cached channel list may not touch the DB, but loading ``user`` did.
+    # Always release that read transaction before waiting on Telegram.
+    await session.commit()
     if not channels:
+        return True
+    fingerprint = tuple((channel.id, channel.channel_id) for channel in channels)
+    cache_key = (user.tg_id, fingerprint)
+    now = monotonic()
+    if _membership_cache.get(cache_key, 0.0) > now:
         return True
     for ch in channels:
         try:
@@ -132,7 +194,13 @@ async def user_subscribed_all(bot: Bot, session: AsyncSession, user: User) -> bo
             logger.warning("subscription check failed for %s: %s", ch.channel_id, exc)
             continue
         if member.status in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}:
+            _membership_cache.pop(cache_key, None)
             return False
+    if len(_membership_cache) > 100_000:
+        _membership_cache.clear()
+    _membership_cache[cache_key] = (
+        now + max(0, settings.channel_membership_cache_seconds)
+    )
     return True
 
 
@@ -242,6 +310,7 @@ async def add_resolved_channel(
         existing.is_active = True
         await session.commit()
         await session.refresh(existing)
+        invalidate_subscription_caches()
         return existing, False
     ch = RequiredChannel(
         channel_id=resolved.channel_id,
@@ -252,6 +321,7 @@ async def add_resolved_channel(
     session.add(ch)
     await session.commit()
     await session.refresh(ch)
+    invalidate_subscription_caches()
     return ch, True
 
 
@@ -262,6 +332,7 @@ async def toggle_channel(session: AsyncSession, channel_pk: int) -> RequiredChan
     ch.is_active = not ch.is_active
     await session.commit()
     await session.refresh(ch)
+    invalidate_subscription_caches()
     return ch
 
 
@@ -271,4 +342,5 @@ async def delete_channel(session: AsyncSession, channel_pk: int) -> bool:
         return False
     await session.delete(ch)
     await session.commit()
+    invalidate_subscription_caches()
     return True

@@ -6,9 +6,9 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, case, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from database.models import Gender, Like, LookingFor, Profile, User
+from services.performance import timed
 
 # Distance expansion (km), capped by max_distance_km.
 RADIUS_TIERS_KM = (
@@ -18,11 +18,6 @@ RADIUS_TIERS_KM = (
     100,
     250,
     500,
-    1000,
-    2500,
-    5000,
-    10000,
-    20000,
 )
 
 # Age bands paired with radius tiers on a diagonal wave (see next_profile).
@@ -38,6 +33,7 @@ def profile_caption(profile: Profile) -> str:
     return f"{head}\n{desc}" if desc else head
 
 
+@timed("browse.next_profile")
 async def next_profile(
     session: AsyncSession,
     viewer: User,
@@ -159,7 +155,6 @@ async def next_profile(
             gender_filter,
             looking_back,
         )
-        .options(selectinload(Profile.user))
     )
 
     n_r = len(tiers)
