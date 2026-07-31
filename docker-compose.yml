@@ -48,9 +48,10 @@ services:
       WEB_PORT: "8080"
       WEB_HOST: "0.0.0.0"
     command: ["python", "web.py"]
-    # Админка только через nginx (см. deploy/nginx-vinchik.snippet.conf).
+    # Без домена (polling): WEB_PUBLISH=0.0.0.0:8080 → http://IP:8080
+    # За nginx: WEB_PUBLISH=127.0.0.1:8180 (см. deploy/nginx-vinchik.snippet.conf).
     ports:
-      - "127.0.0.1:8180:8080"
+      - "${WEB_PUBLISH:-127.0.0.1:8180}:8080"
     volumes:
       - ./data:/app/data
     depends_on:

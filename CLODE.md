@@ -55,6 +55,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Подозрительные (тихо): >150 лайков/сутки UTC, >150 сообщений/сутки, >3 раскладки в одном 💌, ≥2 жалобы за 3 мес → `is_suspicious` + `suspicious_reason`; фон `moderation_loop` + хук после лайка/жалобы; страница `/bans`.
 - Запуск только Docker (без локального venv).
 - По умолчанию polling; webhook — `USE_WEBHOOK=true` + HTTPS; хост-порт webhook **:8181** (внутри контейнера 8081).
+- Без домена (типичный polling): веб-админка по IP — `WEB_PUBLISH=0.0.0.0:8080`, `WEB_ROOT_PATH=` (пусто), `ADM_LINK=http://IP:8080`. С доменом/nginx: `WEB_PUBLISH=127.0.0.1:8180`, `WEB_ROOT_PATH=/vinchik`, `ADM_LINK=https://domain/vinchik`.
 - Нагрузочный контур: `TELEGRAM_API_BASE_URL` переключает aiogram на mock,
   `WEBHOOK_HANDLE_IN_BACKGROUND=false` измеряет полный handler,
   `PERFORMANCE_METRICS_ENABLED=true` включает `/__performance__/*`; в production
@@ -100,7 +101,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - В `.env` без `$` — Compose портит пароль при подстановке.
 - Webhook без публичного HTTPS не работает.
 - Rate-limit входа в веб берёт `X-Real-IP` только от сетей `WEB_TRUSTED_PROXY_IPS`; для nginx на Docker-host добавь его bridge CIDR (обычно `172.16.0.0/12`).
-- Порты 8180/8181 публикуются только на `127.0.0.1` — снаружи всё идёт через nginx.
+- Порт web задаётся `WEB_PUBLISH` (default `127.0.0.1:8180` под nginx). Webhook-listener бота по-прежнему `127.0.0.1:8181:8081`.
 - Альбом фото приходит несколькими апдейтами параллельно: правки `draft_photos` в FSM только под `_photo_draft_lock` (`handlers/profile.py`).
 - `callback.message.from_user` — это **бот**, а не пользователь; ник берём из `callback.from_user`.
 - `callback.message` у кнопки старше 48 ч — это `InaccessibleMessage` (нет ни `.text`, ни `.from_user`), поэтому проверка идёт через `isinstance(..., Message)`, а не `if callback.message`.
