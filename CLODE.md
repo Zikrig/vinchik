@@ -55,7 +55,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Подозрительные (тихо): >150 лайков/сутки UTC, >150 сообщений/сутки, >3 раскладки в одном 💌, ≥2 жалобы за 3 мес → `is_suspicious` + `suspicious_reason`; фон `moderation_loop` + хук после лайка/жалобы; страница `/bans`.
 - Запуск только Docker (без локального venv).
 - По умолчанию polling; webhook — `USE_WEBHOOK=true` + HTTPS; хост-порт webhook **:8181** (внутри контейнера 8081).
-- Без домена (типичный polling): веб-админка по IP — `WEB_PUBLISH=0.0.0.0:8080`, `WEB_ROOT_PATH=` (пусто), `ADM_LINK=http://IP:8080`. С доменом/nginx (+ Let's Encrypt): `WEB_PUBLISH=127.0.0.1:8180`, `WEB_ROOT_PATH=/vinchik`, `ADM_LINK=https://ДОМЕН/vinchik`; сниппет — `deploy/nginx-vinchik.snippet.conf`.
+- Без домена (типичный polling): веб-админка по IP — `WEB_PUBLISH=0.0.0.0:8080`, `WEB_ROOT_PATH=` (пусто), `ADM_LINK=http://IP:8080`. С доменом/nginx (+ Let's Encrypt): `WEB_PUBLISH=127.0.0.1:8180`, `WEB_ROOT_PATH=/vinchik`, `ADM_LINK=https://krigz.com/vinchik`; сниппет — `deploy/nginx-vinchik.snippet.conf`.
 - Нагрузочный контур: `TELEGRAM_API_BASE_URL` переключает aiogram на mock,
   `WEBHOOK_HANDLE_IN_BACKGROUND=false` измеряет полный handler,
   `PERFORMANCE_METRICS_ENABLED=true` включает `/__performance__/*`; в production
