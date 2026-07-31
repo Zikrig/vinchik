@@ -1,0 +1,27 @@
+{# Number field + progressive horizontal slider to the right.
+   Expects: name, value, min, max; optional: step, required, label, unit, hint #}
+<label class="field-slider{% if required %} is-required{% endif %}">
+  {% if label %}<span class="field-slider-label">{{ label }}{% if unit %} <span class="field-slider-unit">({{ unit }})</span>{% endif %}</span>{% endif %}
+  <div class="field-slider-row">
+    <input type="number"
+           name="{{ name }}"
+           value="{{ value }}"
+           min="{{ min }}"
+           max="{{ max }}"
+           step="{{ step|default(1) }}"
+           {% if required %}required{% endif %}
+           {% if readonly %}readonly{% endif %}
+           {% if input_id %}id="{{ input_id }}"{% endif %}
+           class="js-num-slider-input"
+           data-curve="{{ curve|default('auto') }}">
+    <input type="range"
+           class="js-num-slider-range"
+           min="0"
+           max="1000"
+           step="1"
+           tabindex="-1"
+           aria-hidden="true"
+           {% if readonly %}disabled{% endif %}>
+  </div>
+  {% if hint %}<span class="hint field-slider-hint">{{ hint }}</span>{% endif %}
+</label>

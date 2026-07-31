@@ -44,15 +44,15 @@
 
     <form method="post" action="{{ url('/settings') }}" class="js-ajax" data-ajax="settings">
       <div class="row">
-        <label>Лимит лайков / сутки UTC
-          <input type="number" name="daily_like_limit" value="{{ limit }}" min="1" required>
-        </label>
-        <label>Радиус км (макс. 500)
-          <input type="number" step="1" name="max_distance_km" value="{{ distance }}" min="1" max="500" required>
-        </label>
-        <label>Повтор анкеты (дней)
-          <input type="number" name="profile_reshow_days" value="{{ reshow_days }}" min="0" required>
-        </label>
+        {% with name='daily_like_limit', value=limit, min=1, max=500, label='Лимит лайков / сутки UTC', required=true, curve='ease' %}
+          {% include "_field_slider.html" %}
+        {% endwith %}
+        {% with name='max_distance_km', value=distance, min=1, max=500, label='Радиус ленты', unit='км, макс. 500', required=true, curve='ease' %}
+          {% include "_field_slider.html" %}
+        {% endwith %}
+        {% with name='profile_reshow_days', value=reshow_days, min=0, max=365, label='Повтор анкеты', unit='дней', required=true, curve='ease' %}
+          {% include "_field_slider.html" %}
+        {% endwith %}
       </div>
       <p class="hint">Повтор анкеты: после ❤️/👎/💌 пара скрывается друг от друга в ленте на N дней (0 = навсегда). 🚪 в likes не пишет.</p>
       <h3>Оплата Премиум</h3>
@@ -126,10 +126,10 @@
           </select>
         </label>
         <label>Широта (lat)
-          <input type="number" step="any" name="lat" id="admin-geo-lat" required>
+          <input type="number" step="any" name="lat" id="admin-geo-lat" required data-no-slider>
         </label>
         <label>Долгота (lon)
-          <input type="number" step="any" name="lon" id="admin-geo-lon" required>
+          <input type="number" step="any" name="lon" id="admin-geo-lon" required data-no-slider>
         </label>
         <button type="submit">Сохранить</button>
       </div>

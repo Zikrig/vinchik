@@ -66,9 +66,12 @@
     </div>
     <p class="hint">Сейчас: <strong data-test-count>{{ test_users_count }}</strong>. Спаун у гео админа / Душанбе.</p>
     <form method="post" action="{{ url('/test-users/create') }}" class="row js-ajax" data-ajax="test-create">
-      <label>Сколько
-        <input type="number" name="count" value="10" min="1" max="100" required>
-      </label>
+      {% with name='count', value=10, min=1, max=1000, label='Сколько', required=true, curve='ease' %}
+        {% include "_field_slider.html" %}
+      {% endwith %}
+      {% with name='radius_km', value=60, min=1, max=500, label='Макс. радиус', unit='км', required=true, curve='ease' %}
+        {% include "_field_slider.html" %}
+      {% endwith %}
       <button type="submit">Добавить</button>
     </form>
     <form method="post" action="{{ url('/test-users/clear') }}" class="js-ajax" data-ajax="test-clear"

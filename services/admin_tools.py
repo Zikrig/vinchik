@@ -69,6 +69,7 @@ def _random_near(
     lat: float, lon: float, radius_km: float = TEST_SPAWN_RADIUS_KM
 ) -> tuple[float, float]:
     """Uniform random point in a circle around (lat, lon)."""
+    radius_km = max(0.1, float(radius_km))
     r = radius_km * math.sqrt(random.random())
     theta = random.uniform(0, 2 * math.pi)
     dlat = (r * math.cos(theta)) / 111.0
@@ -129,6 +130,7 @@ def _place_test_profile(
     center_lat: float,
     center_lon: float,
     placements: dict[str, list[tuple[float, float]]],
+    radius_km: float = TEST_SPAWN_RADIUS_KM,
 ) -> tuple[float, float, str | None]:
     """Random geo + photo; retry so same photo stays farther apart when possible."""
     markers = list_test_photo_markers(gender)
@@ -138,12 +140,12 @@ def _place_test_profile(
         else None
     )
     if not markers and fallback is None:
-        lat, lon = _random_near(center_lat, center_lon)
+        lat, lon = _random_near(center_lat, center_lon, radius_km)
         return lat, lon, None
 
     best: tuple[float, float, str | None, float] | None = None
     for _ in range(_TEST_PHOTO_PLACE_ATTEMPTS):
-        lat, lon = _random_near(center_lat, center_lon)
+        lat, lon = _random_near(center_lat, center_lon, radius_km)
         photo = _pick_test_photo(gender, lat, lon, placements)
         if photo is None:
             return lat, lon, None
@@ -201,8 +203,17 @@ async def _next_test_tg_id(session: AsyncSession) -> int:
     return int(current_min) - 1
 
 
-async def create_test_users(session: AsyncSession, count: int) -> int:
-    count = max(0, min(int(count), 100))
+async def create_test_users(
+    session: AsyncSession,
+    count: int,
+    radius_km: float | None = None,
+) -> int:
+    count = max(0, min(int(count), 1000))
+    spawn_r = (
+        TEST_SPAWN_RADIUS_KM
+        if radius_km is None
+        else max(1.0, min(float(radius_km), 500.0))
+    )
     from services.settings_service import are_test_users_visible_setting
 
     visible = await are_test_users_visible_setting(session)
@@ -213,7 +224,7 @@ async def create_test_users(session: AsyncSession, count: int) -> int:
         tg_id = await _next_test_tg_id(session)
         gender = random.choice((Gender.male, Gender.female))
         lat, lon, test_photo = _place_test_profile(
-            gender, center_lat, center_lon, placements
+            gender, center_lat, center_lon, placements, spawn_r
         )
         if gender == Gender.male:
             name = random.choice(_TEST_NAMES_MALE)

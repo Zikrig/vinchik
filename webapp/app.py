@@ -1296,11 +1296,12 @@ def create_app() -> FastAPI:
     async def test_users_create(
         request: Request,
         count: int = Form(10),
+        radius_km: float = Form(60),
         session: AsyncSession = Depends(get_db),
     ):
         if (redir := require_auth(request)) is not None:
             return redir
-        n = await create_test_users(session, count)
+        n = await create_test_users(session, count, radius_km=radius_km)
         total = await count_test_users(session)
         return ok_response(
             request,
