@@ -9,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database.models import Gender, LookingFor, Profile, User
-from services.media import TEST_PHOTO_MARKER, local_photo_path
+from services.media import (
+    TEST_PHOTO_MARKER,
+    list_test_photo_markers,
+    local_photo_path,
+)
 from services.users import get_or_create_user
 
 # Dushanbe, capital of Tajikistan
@@ -19,6 +23,9 @@ DUSHANBE_CITY = "Душанбе"
 
 # Spawn test profiles near center (not across whole TJ).
 TEST_SPAWN_RADIUS_KM = 60.0
+# Prefer not placing two profiles with the same photo closer than this.
+TEST_SAME_PHOTO_MIN_KM = 8.0
+_TEST_PHOTO_PLACE_ATTEMPTS = 24
 
 _TEST_NAMES_MALE = (
     "Али",
@@ -70,6 +77,106 @@ def _random_near(
     return round(lat + dlat, 6), round(lon + dlon, 6)
 
 
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlmb = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dphi / 2) ** 2
+        + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+    )
+    return 2 * r * math.asin(min(1.0, math.sqrt(a)))
+
+
+def _min_distance_km(
+    lat: float, lon: float, points: list[tuple[float, float]]
+) -> float:
+    if not points:
+        return float("inf")
+    return min(_haversine_km(lat, lon, plat, plon) for plat, plon in points)
+
+
+def _pick_test_photo(
+    gender: Gender,
+    lat: float,
+    lon: float,
+    placements: dict[str, list[tuple[float, float]]],
+) -> str | None:
+    """Choose a gender photo maximizing distance to others with the same file."""
+    markers = list_test_photo_markers(gender)
+    if not markers:
+        if local_photo_path(TEST_PHOTO_MARKER) is not None:
+            return TEST_PHOTO_MARKER
+        return None
+
+    best_marker = markers[0]
+    best_score = -1.0
+    # Shuffle so ties don't always pick the same file.
+    for marker in random.sample(markers, k=len(markers)):
+        score = _min_distance_km(lat, lon, placements.get(marker, []))
+        # Light preference for less-used photos when distances are similar.
+        usage = len(placements.get(marker, []))
+        score -= usage * 0.05
+        if score > best_score:
+            best_score = score
+            best_marker = marker
+    return best_marker
+
+
+def _place_test_profile(
+    gender: Gender,
+    center_lat: float,
+    center_lon: float,
+    placements: dict[str, list[tuple[float, float]]],
+) -> tuple[float, float, str | None]:
+    """Random geo + photo; retry so same photo stays farther apart when possible."""
+    markers = list_test_photo_markers(gender)
+    fallback = (
+        TEST_PHOTO_MARKER
+        if local_photo_path(TEST_PHOTO_MARKER) is not None
+        else None
+    )
+    if not markers and fallback is None:
+        lat, lon = _random_near(center_lat, center_lon)
+        return lat, lon, None
+
+    best: tuple[float, float, str | None, float] | None = None
+    for _ in range(_TEST_PHOTO_PLACE_ATTEMPTS):
+        lat, lon = _random_near(center_lat, center_lon)
+        photo = _pick_test_photo(gender, lat, lon, placements)
+        if photo is None:
+            return lat, lon, None
+        dist = _min_distance_km(lat, lon, placements.get(photo, []))
+        if best is None or dist > best[3]:
+            best = (lat, lon, photo, dist)
+        if dist >= TEST_SAME_PHOTO_MIN_KM:
+            break
+    assert best is not None
+    return best[0], best[1], best[2]
+
+
+async def _existing_test_photo_placements(
+    session: AsyncSession,
+) -> dict[str, list[tuple[float, float]]]:
+    result = await session.execute(
+        select(Profile.photo_file_id, Profile.lat, Profile.lon)
+        .join(User, User.tg_id == Profile.user_id)
+        .where(
+            User.is_test.is_(True),
+            Profile.photo_file_id.is_not(None),
+            Profile.lat.is_not(None),
+            Profile.lon.is_not(None),
+        )
+    )
+    out: dict[str, list[tuple[float, float]]] = {}
+    for photo_id, lat, lon in result.all():
+        if not photo_id:
+            continue
+        out.setdefault(str(photo_id), []).append((float(lat), float(lon)))
+    return out
+
+
 async def _test_spawn_center(session: AsyncSession) -> tuple[float, float, str]:
     """Prefer first admin with saved geo, else Dushanbe."""
     for aid in sorted(settings.admin_id_set):
@@ -100,16 +207,14 @@ async def create_test_users(session: AsyncSession, count: int) -> int:
 
     visible = await are_test_users_visible_setting(session)
     center_lat, center_lon, city = await _test_spawn_center(session)
-    test_photo = (
-        TEST_PHOTO_MARKER
-        if local_photo_path(TEST_PHOTO_MARKER) is not None
-        else None
-    )
+    placements = await _existing_test_photo_placements(session)
     created = 0
     for _ in range(count):
         tg_id = await _next_test_tg_id(session)
-        lat, lon = _random_near(center_lat, center_lon)
         gender = random.choice((Gender.male, Gender.female))
+        lat, lon, test_photo = _place_test_profile(
+            gender, center_lat, center_lon, placements
+        )
         if gender == Gender.male:
             looking = random.choice((LookingFor.female, LookingFor.any))
             name = random.choice(_TEST_NAMES_MALE)
@@ -142,6 +247,8 @@ async def create_test_users(session: AsyncSession, count: int) -> int:
         session.add(user)
         session.add(profile)
         await session.flush()
+        if test_photo is not None:
+            placements.setdefault(test_photo, []).append((lat, lon))
         created += 1
     await session.commit()
     return created

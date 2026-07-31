@@ -16,7 +16,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Гео админа / тестовые юзеры | `services/admin_tools.py`, `services/media.py`; веб: тесты на `/accounts`, свитч видимости также в настройках дашборда |
 | Трекинг-ссылки (deep-link + клики) | `services/tracking_links.py`, `handlers/admin_links.py`, веб `/links`; код `?start=` — явный или латиница из названия (не random); модели `TrackingLink` / `TrackingClick` |
 | Справочник НП (текст+координаты) | `data/settlements/settlements.csv.gz` (**только TJ+RU**), `services/settlements*.py`, `scripts/build_settlements_dump.py` |
-| Тестовое фото | `data/test.png` (опционально; без файла тестовые анкеты текстовые) |
+| Тестовое фото | `data/photos/men/`, `data/photos/women/` (по полу); fallback `data/test.png` |
 | Роутеры | `handlers/` |
 | Бизнес-логика | `services/` |
 | Модели БД | `database/models.py` |
@@ -48,7 +48,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Веб «Основное» (`/`): в шапке на всех страницах — счётчики по полу; настройки (компактные свитчи soft-launch / тестовые в ленте; лимиты; оплата; welcome; гео). Отдельные страницы: `/accounts` (+ тестовые), `/channels`, `/links` (диаграмма + пресеты/календарь), `/premium` (заявки + активные), `/bans`. POST форм — AJAX (toast). Карточка аккаунта: в шапке главный сигнал — `tg_id`; пол/ищет — розово-голубые сегменты; флаги — цветные toggle; теги с пиктограммами. Анкета — серый блок; клик по панели целиком снимает серость и открывает все поля; username read-only; язык в анкете.
 - Обязательные каналы: бесплатный юзер перед лентой видит список + кнопки «Я подписался» | «Премиум»; премиум — без проверки; в Настройках — просмотр списка. Бот должен быть админом каналов (`get_chat_member`).
 - Админка веб: карта оплаты, гео, тестовые юзеры (`/accounts`), `/bans`, `/accounts/{tg_id}`, `/channels`, `/links`, `/premium`, контакт поддержки (`support_contact`), **приветственный пост** (`welcome_photo_file_id` + `welcome_text`; превью `/settings/welcome/photo`).
-- Тестовые юзеры: `User.is_test`, негативные `tg_id`, опциональное фото `data/test.png` (без файла создаются без фото); свич «Тестовые в ленте» = setting `test_users_visible` + массовый `Profile.is_active`.
+- Тестовые юзеры: `User.is_test`, негативные `tg_id`; фото случайно из `data/photos/men|women` по полу (`local:`), одинаковые файлы стараются не ставить ближе ~8 км; fallback `data/test.png`; свич «Тестовые в ленте» = setting `test_users_visible` + массовый `Profile.is_active`.
 - Жалобы: кнопка в ленте; >5 уникальных за 3 мес → `is_blocked`; в тексте бана — контакт поддержки из настроек; разбан в админке с фото/анкетой.
 - «Поделиться ботом» — `t.me/share/url?url=…&text=…` (диалог шаринга), не прямой чат с ботом.
 - Неполная анкета при `browse:start` → `begin_profile_flow` (FSM возраста), не голый `ask_age` с меню.

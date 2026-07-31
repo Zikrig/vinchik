@@ -4,16 +4,24 @@ from pathlib import Path
 
 from aiogram.types import FSInputFile, InputMediaPhoto
 
-from database.models import Profile
+from database.models import Gender, Profile
 
 LOCAL_PREFIX = "local:"
 TEST_PHOTO_REL = "data/test.png"
 TEST_PHOTO_MARKER = f"{LOCAL_PREFIX}{TEST_PHOTO_REL}"
+TEST_PHOTOS_MEN_DIR = "data/photos/men"
+TEST_PHOTOS_WOMEN_DIR = "data/photos/women"
+_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 MAX_PROFILE_PHOTOS = 3
 
 
 def project_root() -> Path:
     return Path(__file__).resolve().parent.parent
+
+
+def local_marker_for(rel_path: str | Path) -> str:
+    rel = str(rel_path).replace("\\", "/").lstrip("./")
+    return f"{LOCAL_PREFIX}{rel}"
 
 
 def local_photo_path(marker: str) -> Path | None:
@@ -25,6 +33,20 @@ def local_photo_path(marker: str) -> Path | None:
     if not str(path).startswith(str(root)):
         return None
     return path if path.is_file() else None
+
+
+def list_test_photo_markers(gender: Gender | str) -> list[str]:
+    """Local photo markers for test profiles by gender (`data/photos/men|women`)."""
+    key = gender.value if isinstance(gender, Gender) else str(gender)
+    folder = TEST_PHOTOS_MEN_DIR if key == Gender.male.value else TEST_PHOTOS_WOMEN_DIR
+    directory = project_root() / folder
+    if not directory.is_dir():
+        return []
+    markers: list[str] = []
+    for path in sorted(directory.iterdir()):
+        if path.is_file() and path.suffix.lower() in _IMAGE_SUFFIXES:
+            markers.append(local_marker_for(f"{folder}/{path.name}"))
+    return markers
 
 
 def as_photo_input(file_id: str | None) -> FSInputFile | str | None:
