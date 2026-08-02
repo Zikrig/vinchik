@@ -429,6 +429,9 @@ async def _finish_photos(
     if user.profile is None:
         await state.clear()
         return
+    if not photos:
+        await message.answer(t("photo_required", user.language))
+        return
     set_profile_photos(user.profile, photos)
     user.profile.is_complete = True
     user.profile.is_active = True
@@ -527,6 +530,9 @@ async def photo_done(callback: CallbackQuery, session: AsyncSession, state: FSMC
     async with _photo_draft_lock(callback.from_user.id):
         data = await state.get_data()
         draft: list[str] = list(data.get("draft_photos") or [])
+        if not draft:
+            await callback.answer(t("photo_required", user.language), show_alert=True)
+            return
         await callback.answer()
         try:
             await cb_message.edit_reply_markup(reply_markup=None)
@@ -569,6 +575,9 @@ async def _finish_edit_photos(
 ) -> None:
     if user.profile is None:
         await state.clear()
+        return
+    if not draft:
+        await message.answer(t("photo_required", user.language))
         return
     set_profile_photos(user.profile, draft)
     await session.commit()
@@ -619,6 +628,9 @@ async def edit_photo_done(
     async with _photo_draft_lock(callback.from_user.id):
         data = await state.get_data()
         draft: list[str] = list(data.get("draft_photos") or [])
+        if not draft:
+            await callback.answer(t("photo_required", user.language), show_alert=True)
+            return
         await callback.answer()
         await _finish_edit_photos(cb_message, session, state, user, draft)
 

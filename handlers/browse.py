@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
@@ -32,9 +34,9 @@ from services.media import as_photo_input, media_photos_for_profile, profile_pho
 from services.likes import (
     deliver_like_media,
     empty_message_payload,
-    format_likes_list,
-    list_unseen_likers,
-    mark_likes_seen,
+    mark_like_seen,
+    next_unseen_liker,
+    payload_text,
     record_action,
     schedule_like_notification,
 )
@@ -200,11 +202,129 @@ async def start_browse(
 
     if state:
         await state.set_state(BrowseStates.viewing)
-        await state.update_data(browse_target=profile.user_id)
+        await state.update_data(
+            browse_target=profile.user_id,
+            browse_source=None,
+            likes_like_id=None,
+        )
 
     caption = profile_caption(profile)
     kb = browse_reply_kb(lang)
     await _send_profile_card(dest, chat_id, profile, caption, kb, lang)
+
+
+async def start_likes_inbox(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+    bot: Bot | None = None,
+    state: FSMContext | None = None,
+    *,
+    announce: bool = False,
+) -> None:
+    """Show unseen likers one-by-one with the same ❤️/👎 keyboard as the feed."""
+    fresh = await load_user(session, user.tg_id)
+    if fresh is None:
+        return
+    user = fresh
+    lang = user.language or "ru"
+    dest = bot or message.bot
+    chat_id = user.tg_id
+
+    if user.is_blocked:
+        if state:
+            await state.clear()
+        await dest.send_message(
+            chat_id,
+            await blocked_text(session, lang),
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+    if await is_registration_only(session):
+        if state:
+            await state.clear()
+        await drop_reply_keyboard(message)
+        await dest.send_message(
+            chat_id, t("soft_launch", lang), reply_markup=main_menu_kb(lang)
+        )
+        return
+    if not user.profile or not user.profile.is_complete:
+        from handlers.profile import begin_profile_flow
+
+        if state is None:
+            await dest.send_message(
+                chat_id, t("ask_age", lang), reply_markup=main_menu_kb(lang)
+            )
+            return
+        await begin_profile_flow(message, session, state, user, refill=False)
+        return
+
+    row = await next_unseen_liker(session, user.tg_id)
+    await session.commit()
+    if row is None:
+        if state:
+            await state.clear()
+        await drop_reply_keyboard(message)
+        await dest.send_message(
+            chat_id,
+            t("likes_inbox_done", lang),
+            reply_markup=main_menu_kb(lang),
+        )
+        return
+
+    liker, profile, like = row
+    await mark_like_seen(session, like.id)
+
+    if state:
+        await state.set_state(BrowseStates.viewing)
+        await state.update_data(
+            browse_target=liker.tg_id,
+            browse_source="likes",
+            likes_like_id=like.id,
+        )
+
+    if announce:
+        await dest.send_message(chat_id, t("likes_list_title", lang))
+
+    caption = profile_caption(profile)
+    payload = like.message_payload if isinstance(like.message_payload, dict) else {}
+    msg_text = payload_text(payload) or (like.message_text or "").strip()
+    if msg_text:
+        caption = (
+            f"{caption}\n\n"
+            f"{t('likes_list_message', lang, text=html.escape(msg_text.replace(chr(34), chr(39))))}"
+        )
+    if isinstance(payload, dict) and payload.get("voice_file_id"):
+        caption = f"{caption}\n{t('likes_list_voice', lang)}"
+    if isinstance(payload, dict) and payload.get("video_note_file_id"):
+        caption = f"{caption}\n{t('likes_list_video_note', lang)}"
+
+    kb = browse_reply_kb(lang)
+    await _send_profile_card(dest, chat_id, profile, caption, kb, lang)
+    await deliver_like_media(dest, chat_id, like)
+
+
+async def _continue_after_card(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+    bot: Bot,
+    state: FSMContext,
+    *,
+    prepared_after_action: bool = False,
+) -> None:
+    data = await state.get_data()
+    if data.get("browse_source") == "likes":
+        await start_likes_inbox(message, session, user, bot, state)
+        return
+    await start_browse(
+        message,
+        session,
+        user,
+        bot,
+        state,
+        prepared_after_action=prepared_after_action,
+    )
 
 
 @router.callback_query(F.data == "browse:start")
@@ -271,8 +391,12 @@ async def _rate_from_message(
     if not await _guard_feed_user(message, session, user, state, lang):
         return
 
-    if action == LikeAction.dislike and not await can_browse(
-        session, user, user.profile
+    in_likes_inbox = data.get("browse_source") == "likes"
+
+    if (
+        action == LikeAction.dislike
+        and not in_likes_inbox
+        and not await can_browse(session, user, user.profile)
     ):
         await state.clear()
         await _say_limit(message, lang)
@@ -294,7 +418,7 @@ async def _rate_from_message(
         schedule_like_notification(bot, int(target_id))
 
     # Last like of the day: one message (confirm + limit), no junk ".".
-    if like and action == LikeAction.like:
+    if like and action == LikeAction.like and not in_likes_inbox:
         may_continue = await can_browse(session, user, user.profile)
         # can_browse opens a read transaction; release it before Bot API calls.
         await session.commit()
@@ -304,9 +428,40 @@ async def _rate_from_message(
             return
 
     if like and action == LikeAction.like:
-        await bot.send_message(user.tg_id, t("like_sent", lang))
+        if in_likes_inbox:
+            other = await load_user(session, int(target_id))
+            if other is not None:
+                name = html.escape(
+                    (other.profile.name if other.profile else None) or "—"
+                )
+                if other.username:
+                    await bot.send_message(
+                        user.tg_id,
+                        t(
+                            "likes_mutual",
+                            lang,
+                            name=name,
+                            username=other.username,
+                        ),
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
+                else:
+                    await bot.send_message(
+                        user.tg_id,
+                        t("likes_mutual_no_username", lang, name=name),
+                        parse_mode="HTML",
+                    )
+            else:
+                await bot.send_message(user.tg_id, t("like_sent", lang))
+        else:
+            await bot.send_message(user.tg_id, t("like_sent", lang))
 
-    await start_browse(
+    # Keep inbox mode across the next card.
+    if in_likes_inbox and state:
+        await state.update_data(browse_source="likes")
+
+    await _continue_after_card(
         message,
         session,
         user,
@@ -358,11 +513,12 @@ async def _start_message_flow(
     lang = user.language or "ru"
     if not await _guard_feed_user(message, session, user, state, lang):
         return
-    if not await can_browse(session, user, user.profile):
+    data = await state.get_data()
+    in_likes_inbox = data.get("browse_source") == "likes"
+    if not in_likes_inbox and not await can_browse(session, user, user.profile):
         await state.clear()
         await _say_limit(message, lang)
         return
-    data = await state.get_data()
     target_id = data.get("browse_target")
     if not target_id:
         await state.clear()
@@ -412,11 +568,12 @@ async def _report_from_message(
     if user.is_blocked:
         await message.answer(await blocked_text(session, lang))
         return
-    if not await can_browse(session, user, user.profile):
+    data = await state.get_data()
+    in_likes_inbox = data.get("browse_source") == "likes"
+    if not in_likes_inbox and not await can_browse(session, user, user.profile):
         await state.clear()
         await _say_limit(message, lang)
         return
-    data = await state.get_data()
     target_id = data.get("browse_target")
     if not target_id:
         await state.clear()
@@ -443,7 +600,10 @@ async def _report_from_message(
                     pass
     else:
         await message.answer(t("report_dup", lang))
-    await start_browse(message, session, user, bot, state)
+    data = await state.get_data()
+    if data.get("browse_source") == "likes":
+        await state.update_data(browse_source="likes")
+    await _continue_after_card(message, session, user, bot, state)
 
 
 async def _finalize_message(
@@ -489,18 +649,22 @@ async def _finalize_message(
             await _say_limit(message, lang)
         return
     await _clear_message_prompt(bot, message.chat.id, state)
+    in_likes_inbox = data.get("browse_source") == "likes"
     await state.clear()
+    if in_likes_inbox:
+        await state.set_state(BrowseStates.viewing)
+        await state.update_data(browse_source="likes")
     if like:
         schedule_like_notification(bot, target_id)
         fresh = await load_user(session, user.tg_id)
         if fresh is None:
             return
         user = fresh
-        if not await can_browse(session, user, user.profile):
+        if not in_likes_inbox and not await can_browse(session, user, user.profile):
             await _say_limit(message, lang, preface=t("message_sent", lang))
             return
         await message.answer(t("message_sent", lang))
-    await start_browse(message, session, user, bot, state)
+    await _continue_after_card(message, session, user, bot, state)
 
 
 @router.callback_query(MessageStates.content, F.data == "msg:cancel")
@@ -514,10 +678,16 @@ async def msg_content_cancel(
     lang = user.language or "ru"
     data = await state.get_data()
     browse_target = data.get("browse_target")
+    browse_source = data.get("browse_source")
     await state.clear()
     await state.set_state(BrowseStates.viewing)
+    restore: dict = {}
     if browse_target is not None:
-        await state.update_data(browse_target=browse_target)
+        restore["browse_target"] = browse_target
+    if browse_source is not None:
+        restore["browse_source"] = browse_source
+    if restore:
+        await state.update_data(**restore)
     await callback.answer()
     try:
         await cb_message.edit_reply_markup(reply_markup=None)
@@ -578,26 +748,17 @@ async def msg_content_other(message: Message, session: AsyncSession) -> None:
 
 @router.callback_query(F.data == "likes:view")
 async def cb_view_likes(
-    callback: CallbackQuery, session: AsyncSession, bot: Bot
+    callback: CallbackQuery, session: AsyncSession, bot: Bot, state: FSMContext
 ) -> None:
     ctx = await callback_context(callback, session)
     if ctx is None:
         return
     user, message = ctx
-    rows = await list_unseen_likers(session, user.tg_id)
-    text = format_likes_list(rows, user.language)
-    likes = [like for _, _, like in rows]
     await callback.answer()
     try:
         await message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await message.answer(
-        text,
-        parse_mode="HTML",
-        disable_web_page_preview=True,
-        reply_markup=main_menu_kb(user.language),
+    await start_likes_inbox(
+        message, session, user, bot, state, announce=True
     )
-    for like in likes:
-        await deliver_like_media(bot, user.tg_id, like)
-    await mark_likes_seen(session, user.tg_id)

@@ -71,6 +71,37 @@ async def list_unseen_likers(session: AsyncSession, user_id: int) -> list[tuple[
     return [(u, p, like) for like, u, p in result.all()]
 
 
+async def next_unseen_liker(
+    session: AsyncSession, user_id: int
+) -> tuple[User, Profile, Like] | None:
+    """Oldest unseen incoming like with a profile (inbox card queue)."""
+    result = await session.execute(
+        select(Like, User, Profile)
+        .join(User, User.tg_id == Like.from_user_id)
+        .join(Profile, Profile.user_id == Like.from_user_id)
+        .where(
+            Like.to_user_id == user_id,
+            Like.action.in_([LikeAction.like, LikeAction.message]),
+            Like.is_seen.is_(False),
+            User.is_blocked.is_(False),
+        )
+        .order_by(Like.created_at.asc())
+        .limit(1)
+    )
+    row = result.one_or_none()
+    if row is None:
+        return None
+    like, user, profile = row
+    return user, profile, like
+
+
+async def mark_like_seen(session: AsyncSession, like_id: int) -> None:
+    await session.execute(
+        update(Like).where(Like.id == like_id).values(is_seen=True)
+    )
+    await session.commit()
+
+
 async def mark_likes_seen(session: AsyncSession, user_id: int) -> None:
     await session.execute(
         update(Like)
