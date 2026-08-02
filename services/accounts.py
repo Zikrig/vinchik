@@ -139,11 +139,13 @@ async def map_markers(
     *,
     admin_ids: set[int],
     limit: int = MAP_MARKERS_LIMIT,
+    include_test: bool = False,
 ) -> list[dict]:
     """Up to `limit` profiles with coordinates.
 
     Admins with geo are always included first; the rest are a random sample
     (not “latest N”), so the map is not biased to recent registrations.
+    Test users are omitted unless ``include_test``.
     """
     limit = max(1, int(limit))
     geo = and_(Profile.lat.is_not(None), Profile.lon.is_not(None))
@@ -161,10 +163,13 @@ async def map_markers(
     remaining = max(0, limit - len(admins))
     others: list[User] = []
     if remaining:
+        others_where = [geo]
+        if not include_test:
+            others_where.append(User.is_test.is_(False))
         others_stmt = (
             select(User)
             .join(Profile, Profile.user_id == User.tg_id)
-            .where(geo)
+            .where(*others_where)
             .options(selectinload(User.profile))
             .order_by(func.random())
             .limit(remaining)

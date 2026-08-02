@@ -58,6 +58,13 @@
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: .75rem;
   }
+  .duo-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    align-items: start;
+  }
+  .duo-row > .panel { margin: 0; }
   .actions { margin-top: 1rem; display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
   .panel.danger-zone {
     border-color: #f3c4bf;
@@ -231,8 +238,8 @@
   {% endif %}
 
   <nav class="jump">
-    <a href="#premium">⭐ Премиум</a>
     <a href="#likes">❤️ Лайки</a>
+    <a href="#premium">⭐ Премиум</a>
     <a href="#user">👤 Аккаунт</a>
     <a href="#profile">📋 Анкета</a>
   </nav>
@@ -270,80 +277,93 @@
     </div>
   </section>
 
-  <section class="panel premium-zone" id="premium">
-    <h2 class="panel-title">⭐ Премиум</h2>
-    <p>
-      Статус:
-      <span data-premium-status>
-      {% if premium_active and u.premium_until %}
-      <strong class="flash-ok">работает до {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC</strong>
-      {% elif u.premium_until %}
-      <span class="meta">не активен (дата {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC уже прошла)</span>
-      {% else %}
-      <span class="meta">нет</span>
-      {% endif %}
-      </span>
-    </p>
-
-    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
-          class="js-ajax js-confirm-changes" data-ajax="premium-save"
-          data-confirm-labels='{"premium_until":"премиум работает до"}'>
-      <input type="hidden" name="premium_action" value="set">
-      <label>Премиум работает до (UTC). Активен только пока дата в будущем.
-        <input type="datetime-local" name="premium_until"
-               value="{% if u.premium_until %}{{ u.premium_until.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
-      </label>
-      <p class="hint">Пустое поле или «Снять» ставит 2004-01-01 — премиум выключен.</p>
-      <div class="actions">
-        <button type="submit">Сохранить дату</button>
+  <div class="duo-row">
+    <section class="panel danger-zone" id="likes">
+      <h2 class="panel-title">❤️ Лайки</h2>
+      <div class="stat-row">
+        <span>Отправлено (все): <strong data-likes-sent>{{ likes.sent }}</strong></span>
+        <span>Получено: <strong data-likes-received>{{ likes.received }}</strong></span>
+        <span>из них лайков: <strong data-likes-daily>{{ likes.daily_used }}</strong></span>
       </div>
-    </form>
+      <p class="hint">Лимит считает только ❤️/💌 за сегодня (UTC), мужчины без премиум. «Отправлено» включает 👎. Удаление лайков снова покажет людей в ленте.</p>
+      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}" class="js-ajax"
+            data-ajax="likes-clear" data-confirm="Удалить выбранные записи о лайках?">
+        <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: .75rem;">
+          <label class="check" style="display: flex; align-items: center; gap: 0.4em;">
+            <input type="checkbox" name="clear_sent" checked>
+            <span>исходящие (likes from)</span>
+          </label>
+          <label class="check" style="display: flex; align-items: center; gap: 0.4em;">
+            <input type="checkbox" name="clear_received" checked>
+            <span>входящие (likes to)</span>
+          </label>
+          <label class="check" style="display: flex; align-items: center; gap: 0.4em;">
+            <input type="checkbox" name="clear_daily" checked>
+            <span>дневные лимиты (daily_like_stats)</span>
+          </label>
+        </div>
+        <div class="actions">
+          <button type="submit" class="danger">Удалить лайки</button>
+        </div>
+      </form>
+    </section>
 
-    <div class="actions" style="margin-top:.5rem">
-      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
-            data-confirm="Продлить премиум на +2 дня от сейчас (или от текущей даты, если она в будущем)?">
-        <input type="hidden" name="premium_action" value="extend">
-        <input type="hidden" name="add_days" value="2">
-        <button type="submit" class="secondary">+2 дня</button>
-      </form>
-      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
-            data-confirm="Продлить премиум на +7 дней?">
-        <input type="hidden" name="premium_action" value="extend">
-        <input type="hidden" name="add_days" value="7">
-        <button type="submit" class="secondary">+7 дней</button>
-      </form>
-      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
-            data-confirm="Продлить премиум на +30 дней?">
-        <input type="hidden" name="premium_action" value="extend">
-        <input type="hidden" name="add_days" value="30">
-        <button type="submit" class="secondary">+30 дней</button>
-      </form>
-      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
-            data-confirm="Снять премиум (дата → 2004-01-01)?">
-        <input type="hidden" name="premium_action" value="clear">
-        <button type="submit" class="danger">Снять премиум</button>
-      </form>
-    </div>
-  </section>
+    <section class="panel premium-zone" id="premium">
+      <h2 class="panel-title">⭐ Премиум</h2>
+      <p>
+        Статус:
+        <span data-premium-status>
+        {% if premium_active and u.premium_until %}
+        <strong class="flash-ok">работает до {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC</strong>
+        {% elif u.premium_until %}
+        <span class="meta">не активен (дата {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC уже прошла)</span>
+        {% else %}
+        <span class="meta">нет</span>
+        {% endif %}
+        </span>
+      </p>
 
-  <section class="panel danger-zone" id="likes">
-    <h2 class="panel-title">❤️ Лайки</h2>
-    <div class="stat-row">
-      <span>Отправлено (все): <strong data-likes-sent>{{ likes.sent }}</strong></span>
-      <span>Получено: <strong data-likes-received>{{ likes.received }}</strong></span>
-      <span>из них лайков: <strong data-likes-daily>{{ likes.daily_used }}</strong></span>
-    </div>
-    <p class="hint">Лимит считает только ❤️/💌 за сегодня (UTC), мужчины без премиум. «Отправлено» включает 👎. Удаление лайков снова покажет людей в ленте.</p>
-    <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}" class="js-ajax"
-          data-ajax="likes-clear" data-confirm="Удалить выбранные записи о лайках?">
-      <label class="check"><input type="checkbox" name="clear_sent" checked> исходящие (likes from)</label>
-      <label class="check"><input type="checkbox" name="clear_received" checked> входящие (likes to)</label>
-      <label class="check"><input type="checkbox" name="clear_daily" checked> дневные лимиты (daily_like_stats)</label>
-      <div class="actions">
-        <button type="submit" class="danger">Удалить лайки</button>
+      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
+            class="js-ajax js-confirm-changes" data-ajax="premium-save"
+            data-confirm-labels='{"premium_until":"премиум работает до"}'>
+        <input type="hidden" name="premium_action" value="set">
+        <label>Премиум работает до (UTC). Активен только пока дата в будущем.
+          <input type="datetime-local" name="premium_until"
+                 value="{% if u.premium_until %}{{ u.premium_until.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
+        </label>
+        <p class="hint">Пустое поле или «Снять» ставит 2004-01-01 — премиум выключен.</p>
+        <div class="actions">
+          <button type="submit">Сохранить дату</button>
+        </div>
+      </form>
+
+      <div class="actions" style="margin-top:.5rem">
+        <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
+              data-confirm="Продлить премиум на +2 дня от сейчас (или от текущей даты, если она в будущем)?">
+          <input type="hidden" name="premium_action" value="extend">
+          <input type="hidden" name="add_days" value="2">
+          <button type="submit" class="secondary">+2 дня</button>
+        </form>
+        <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
+              data-confirm="Продлить премиум на +7 дней?">
+          <input type="hidden" name="premium_action" value="extend">
+          <input type="hidden" name="add_days" value="7">
+          <button type="submit" class="secondary">+7 дней</button>
+        </form>
+        <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
+              data-confirm="Продлить премиум на +30 дней?">
+          <input type="hidden" name="premium_action" value="extend">
+          <input type="hidden" name="add_days" value="30">
+          <button type="submit" class="secondary">+30 дней</button>
+        </form>
+        <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
+              data-confirm="Снять премиум (дата → 2004-01-01)?">
+          <input type="hidden" name="premium_action" value="clear">
+          <button type="submit" class="danger">Снять премиум</button>
+        </form>
       </div>
-    </form>
-  </section>
+    </section>
+  </div>
 
   <section class="panel" id="user">
     <h2 class="panel-title">👤 Аккаунт</h2>

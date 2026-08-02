@@ -8,11 +8,11 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 |--------|------|
 | Точка входа бота | `bot.py` |
 | Веб-админка | `web.py`, `webapp/`; шапка/навигация — `templates/_admin_topbar.html`, `_admin_nav.html`, `_switch_compact.html`; число+ползунок — `_field_slider.html` |
-| Список аккаунтов (поиск/фильтры) | `webapp/` → `/accounts`, `services/accounts.py` |
-| Карточка аккаунта (блоки: премиум / лайки / аккаунт / анкета) | `/accounts/{tg_id}`; премиум активен только если `premium_until > now` (`is_premium`); снять → `2004-01-01` |
+| Список аккаунтов (поиск/фильтры; `is_test` по умолч. `false`) | `webapp/` → `/accounts`, `services/accounts.py` |
+| Карточка аккаунта (блоки: лайки+премиум в ряд / аккаунт / анкета) | `/accounts/{tg_id}`; премиум активен только если `premium_until > now` (`is_premium`); снять → `2004-01-01` |
 | Баны / подозрительные | `/bans`; `is_blocked` + `is_suspicious` + `suspicious_reason`; сообщения 💌 |
 | Обязательные каналы | `services/channels.py`; веб `/channels`; бот `/admin` → 📢 Каналы (@ник / t.me / forward); юзер: Настройки → Каналы |
-| Карта пользователей (≤200, random sample + админы красным; клик = центр спавна тестов; reload после create/clear) | `/accounts` (Leaflet), `GET /accounts/map-markers`, `map_markers()` |
+| Карта пользователей (≤200, random sample + админы красным; клик = центр спавна тестов; reload после create/clear; тестовые на карте по умолч. скрыты, чекбокс / `?include_test=1`) | `/accounts` (Leaflet), `GET /accounts/map-markers`, `map_markers(include_test=)` |
 | Гео админа / тестовые юзеры | `services/admin_tools.py` (`create_test_users` + optional center_lat/lon), `services/media.py`; веб: тесты на `/accounts`, свитч видимости также в настройках дашборда |
 | Трекинг-ссылки (deep-link + клики) | `services/tracking_links.py`, `handlers/admin_links.py`, веб `/links`; код `?start=` — явный или латиница из названия (не random); модели `TrackingLink` / `TrackingClick` |
 | Справочник НП (текст+координаты) | `data/settlements/settlements.csv.gz` (**только TJ+RU**), `services/settlements*.py`, `scripts/build_settlements_dump.py` |

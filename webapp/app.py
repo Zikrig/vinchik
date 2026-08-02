@@ -489,7 +489,8 @@ def create_app() -> FastAPI:
             return redir
         raw = {
             "q": request.query_params.get("q") or "",
-            "is_test": request.query_params.get("is_test") or "any",
+            # Default: hide test accounts from the list (explicit ?is_test=any|true).
+            "is_test": request.query_params.get("is_test") or "false",
             "is_blocked": request.query_params.get("is_blocked") or "any",
             "is_active": request.query_params.get("is_active") or "any",
             "is_complete": request.query_params.get("is_complete") or "any",
@@ -500,8 +501,12 @@ def create_app() -> FastAPI:
         }
         filters = filters_from_query(raw)
         rows = await search_accounts(session, **filters, limit=500)
+        map_include_test = request.query_params.get("map_test") in {"1", "true", "yes"}
         markers = await map_markers(
-            session, admin_ids=settings.admin_id_set, limit=MAP_MARKERS_LIMIT
+            session,
+            admin_ids=settings.admin_id_set,
+            limit=MAP_MARKERS_LIMIT,
+            include_test=map_include_test,
         )
         spawn_lat, spawn_lon, _spawn_city = await test_spawn_center(session)
         return await render_admin(
@@ -519,6 +524,7 @@ def create_app() -> FastAPI:
                 "spawn_lat": spawn_lat,
                 "spawn_lon": spawn_lon,
                 "map_markers_url": settings.abs_path("/accounts/map-markers"),
+                "map_include_test": map_include_test,
                 "test_users_count": await count_test_users(session),
                 "test_users_visible": await are_test_users_visible(session),
                 "flash": request.query_params.get("flash"),
@@ -531,11 +537,20 @@ def create_app() -> FastAPI:
     ):
         if (redir := require_auth(request)) is not None:
             return redir
+        include_test = request.query_params.get("include_test") in {"1", "true", "yes"}
         markers = await map_markers(
-            session, admin_ids=settings.admin_id_set, limit=MAP_MARKERS_LIMIT
+            session,
+            admin_ids=settings.admin_id_set,
+            limit=MAP_MARKERS_LIMIT,
+            include_test=include_test,
         )
         return JSONResponse(
-            {"ok": True, "markers": markers, "limit": MAP_MARKERS_LIMIT}
+            {
+                "ok": True,
+                "markers": markers,
+                "limit": MAP_MARKERS_LIMIT,
+                "include_test": include_test,
+            }
         )
 
     @app.get("/accounts/{user_id}", response_class=HTMLResponse)

@@ -90,7 +90,11 @@
 
   <section class="panel">
     <h2>Карта</h2>
-    <p>До {{ map_limit }} точек с координатами. Админы — красным (всегда в приоритете). Клик — центр спавна тестовых.</p>
+    <p>До {{ map_limit }} точек с координатами. Админы — красным (всегда в приоритете). Клик — центр спавна тестовых. Тестовые на карте по умолчанию скрыты.</p>
+    <label class="map-test-toggle" style="display:inline-flex;align-items:center;gap:.4rem;margin:.5rem 0 .75rem;">
+      <input type="checkbox" id="map-show-test" {% if map_include_test %}checked{% endif %}>
+      Показывать тестовых на карте
+    </label>
     <div id="users-map"></div>
     <div class="map-legend">
       <span class="user">пользователи</span>
@@ -102,7 +106,7 @@
 
   <section class="panel">
     <h2>Все аккаунты</h2>
-    <p>Включая тестовые. Поиск по tg id, username, имени, городу, описанию, возрасту, полу, языку. Найдено: <strong>{{ count }}</strong> (до 500).</p>
+    <p>По умолчанию без тестовых (фильтр «Тестовый»). Поиск по tg id, username, имени, городу, описанию, возрасту, полу, языку. Найдено: <strong>{{ count }}</strong> (до 500).</p>
 
     <form method="get" action="{{ url('/accounts') }}" class="row filters">
       <label>Поиск
@@ -252,6 +256,8 @@
     const detailBase = {{ url('/accounts/') | tojson }};
     const mapLimit = {{ map_limit | tojson }};
     let markers = {{ markers | tojson }};
+    const mapShowTestEl = document.getElementById("map-show-test");
+    let showTestOnMap = !!(mapShowTestEl && mapShowTestEl.checked);
     const map = L.map("users-map").setView([{{ spawn_lat }}, {{ spawn_lon }}], 6);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
@@ -376,8 +382,14 @@
       });
     }
 
+    function markersFetchUrl() {
+      const u = new URL(markersUrl, window.location.origin);
+      u.searchParams.set("include_test", showTestOnMap ? "1" : "0");
+      return u.pathname + u.search;
+    }
+
     window.reloadUsersMap = async function () {
-      const res = await fetch(markersUrl, {
+      const res = await fetch(markersFetchUrl(), {
         headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
         credentials: "same-origin",
       });
@@ -392,6 +404,13 @@
         map.fitBounds(bounds, { padding: [28, 28], maxZoom: 12 });
       }
     };
+
+    if (mapShowTestEl) {
+      mapShowTestEl.addEventListener("change", function () {
+        showTestOnMap = !!mapShowTestEl.checked;
+        window.reloadUsersMap();
+      });
+    }
 
     document.querySelectorAll("tr.clickable[data-href]").forEach(function (tr) {
       tr.addEventListener("click", function (e) {
