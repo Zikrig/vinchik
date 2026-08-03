@@ -335,9 +335,9 @@
         Статус:
         <span data-premium-status>
         {% if premium_active and u.premium_until %}
-        <strong class="flash-ok">работает до {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC</strong>
+        <strong class="flash-ok">работает до {{ u.premium_until.strftime('%d.%m.%Y %H:%M') }} UTC</strong>
         {% elif u.premium_until %}
-        <span class="meta">не активен (дата {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC уже прошла)</span>
+        <span class="meta">не активен (дата {{ u.premium_until.strftime('%d.%m.%Y %H:%M') }} UTC уже прошла)</span>
         {% else %}
         <span class="meta">нет</span>
         {% endif %}

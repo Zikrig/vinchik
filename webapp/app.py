@@ -778,7 +778,7 @@ def create_app() -> FastAPI:
             else None
         )
         premium_until_label = (
-            updated.premium_until.strftime("%Y-%m-%d %H:%M")
+            updated.premium_until.strftime("%d.%m.%Y %H:%M")
             if updated.premium_until
             else None
         )

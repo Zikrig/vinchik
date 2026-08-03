@@ -70,7 +70,7 @@ async def show_my_profile(message: Message, user: User, profile: Profile) -> Non
     from services.media import media_photos_for_profile, profile_photo_ids
 
     lang = user.language
-    caption = profile_caption(profile)
+    caption = profile_caption(profile, user=user, lang=lang)
     kb = my_profile_kb(lang)
     photos = profile_photo_ids(profile)
     if not photos:

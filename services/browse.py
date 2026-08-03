@@ -6,9 +6,12 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, case, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from database.models import Gender, Like, LookingFor, Profile, User
+from locales import t
 from services.performance import timed
+from services.users import is_premium
 
 # Distance expansion (km), capped by max_distance_km.
 RADIUS_TIERS_KM = (
@@ -24,13 +27,25 @@ RADIUS_TIERS_KM = (
 AGE_TOLERANCE_YEARS = (2, 5, 10, 999)
 
 
-def profile_caption(profile: Profile) -> str:
+def profile_caption(
+    profile: Profile,
+    *,
+    user: User | None = None,
+    lang: str = "ru",
+) -> str:
     name = html.escape(profile.name or "?")
     age = profile.age or "?"
     city = html.escape(profile.city_name or "?")
     desc = html.escape((profile.description or "").strip())
     head = f"{name}, {age}, {city}"
-    return f"{head}\n{desc}" if desc else head
+    owner = user or profile.user
+    verified = t("premium_verified", lang) if is_premium(owner) else ""
+    lines = [head]
+    if verified:
+        lines.append(verified)
+    if desc:
+        lines.append(desc)
+    return "\n".join(lines)
 
 
 @timed("browse.next_profile")
@@ -141,6 +156,7 @@ async def next_profile(
     base_q = (
         select(Profile)
         .join(User, User.tg_id == Profile.user_id)
+        .options(selectinload(Profile.user))
         .where(
             Profile.is_active.is_(True),
             Profile.is_complete.is_(True),

@@ -203,7 +203,7 @@
           <td>
             <div><a class="row-link" href="{{ url('/accounts/' ~ u.tg_id) }}"><code>{{ u.tg_id }}</code></a>{% if u.username %} @{{ u.username }}{% endif %}</div>
             <div class="meta">lang={{ u.language }} · с {{ u.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
-            {% if is_premium(u) %}<div class="meta">premium до {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }} UTC</div>{% elif u.premium_until %}<div class="meta">premium истёк {{ u.premium_until.strftime('%Y-%m-%d %H:%M') }}</div>{% endif %}
+            {% if is_premium(u) %}<div class="meta">premium до {{ u.premium_until.strftime('%d.%m.%Y %H:%M') }} UTC</div>{% elif u.premium_until %}<div class="meta">premium истёк {{ u.premium_until.strftime('%d.%m.%Y %H:%M') }}</div>{% endif %}
           </td>
           <td>
             {% if p %}

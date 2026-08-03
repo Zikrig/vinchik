@@ -34,7 +34,10 @@ from services.media import as_photo_input, media_photos_for_profile, profile_pho
 from services.likes import (
     deliver_like_media,
     empty_message_payload,
+    format_likes_list,
+    list_unseen_likers,
     mark_like_seen,
+    mark_likes_seen,
     next_unseen_liker,
     payload_text,
     record_action,
@@ -43,6 +46,7 @@ from services.likes import (
 from services.limits import can_browse
 from services.reports import file_report
 from services.settings_service import is_registration_only
+from services.users import is_premium
 from states.browse import BrowseStates, MessageStates
 
 router = Router()
@@ -208,7 +212,7 @@ async def start_browse(
             likes_like_id=None,
         )
 
-    caption = profile_caption(profile)
+    caption = profile_caption(profile, lang=lang)
     kb = browse_reply_kb(lang)
     await _send_profile_card(dest, chat_id, profile, caption, kb, lang)
 
@@ -286,7 +290,7 @@ async def start_likes_inbox(
     if announce:
         await dest.send_message(chat_id, t("likes_list_title", lang))
 
-    caption = profile_caption(profile)
+    caption = profile_caption(profile, user=liker, lang=lang)
     payload = like.message_payload if isinstance(like.message_payload, dict) else {}
     msg_text = payload_text(payload) or (like.message_text or "").strip()
     if msg_text:
@@ -759,6 +763,20 @@ async def cb_view_likes(
         await message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
+    if is_premium(user):
+        rows = await list_unseen_likers(session, user.tg_id)
+        text = format_likes_list(rows, user.language or "ru")
+        likes = [like for _, _, like in rows]
+        await message.answer(
+            text,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+            reply_markup=main_menu_kb(user.language or "ru"),
+        )
+        for like in likes:
+            await deliver_like_media(bot, user.tg_id, like)
+        await mark_likes_seen(session, user.tg_id)
+        return
     await start_likes_inbox(
         message, session, user, bot, state, announce=True
     )

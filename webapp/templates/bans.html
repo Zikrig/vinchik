@@ -73,7 +73,7 @@
           <ul class="msg-list">
             {% for m in row.messages %}
             <li>
-              <span class="hint">→ {{ m.to_user_id }} · {{ m.created_at }}
+              <span class="hint">→ {{ m.to_user_id }} · {{ m.created_at.strftime('%d.%m.%Y %H:%M') }}
                 {% if m.layouts %} · раскладки: {{ m.layouts|join(', ') }}{% endif %}
               </span><br>
               {{ m.text }}
