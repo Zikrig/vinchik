@@ -293,7 +293,7 @@
           {% if p and p.gender and p.gender.value == 'female' %}<span class="tag female">♀ ж</span>{% endif %}
         </div>
         <p class="meta" style="margin:.75rem 0 0">
-          создан {{ u.created_at }} · активность {{ u.last_activity_at or '—' }}
+          создан {{ u.created_at.strftime('%d.%m.%Y %H:%M') }} · активность {% if u.last_activity_at %}{{ u.last_activity_at.strftime('%d.%m.%Y %H:%M') }}{% else %}—{% endif %}
         </p>
       </div>
     </div>
