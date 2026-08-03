@@ -194,7 +194,8 @@
           <td>
             {% if p and p.photo_file_id %}
             <img src="{{ url('/users/' ~ u.tg_id ~ '/photo') }}" alt="" width="64" height="64"
-                 style="width:64px;height:64px;object-fit:cover;border-radius:10px;background:var(--bg-accent)">
+                 style="width:64px;height:64px;object-fit:cover;border-radius:10px;background:var(--bg-accent)"
+                 onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',textContent:'—',style:'width:64px;height:64px'}))">
             {% else %}
             <div class="ph" style="width:64px;height:64px">—</div>
             {% endif %}

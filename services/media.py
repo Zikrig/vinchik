@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError
 from aiogram.types import FSInputFile, InputMediaPhoto
 
 from database.models import Gender, Profile
@@ -59,6 +61,24 @@ def as_photo_input(file_id: str | None) -> FSInputFile | str | None:
     if file_id.startswith(LOCAL_PREFIX):
         return None
     return file_id
+
+
+async def download_telegram_file(
+    bot: Bot, file_id: str
+) -> tuple[bytes, str] | None:
+    """Fetch bytes for a Telegram file_id. None if local:/missing/invalid for this bot."""
+    if not file_id or file_id.startswith(LOCAL_PREFIX):
+        return None
+    try:
+        buf = await bot.download(file_id)
+    except TelegramAPIError:
+        return None
+    if buf is None:
+        return None
+    data = buf.read()
+    if not data:
+        return None
+    return data, "image/jpeg"
 
 
 def profile_photo_ids(profile: Profile | None) -> list[str]:

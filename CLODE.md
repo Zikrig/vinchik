@@ -105,4 +105,4 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 - Альбом фото приходит несколькими апдейтами параллельно: правки `draft_photos` в FSM только под `_photo_draft_lock` (`handlers/profile.py`).
 - `callback.message.from_user` — это **бот**, а не пользователь; ник берём из `callback.from_user`.
 - `callback.message` у кнопки старше 48 ч — это `InaccessibleMessage` (нет ни `.text`, ни `.from_user`), поэтому проверка идёт через `isinstance(..., Message)`, а не `if callback.message`.
-- Протухший Telegram `file_id` фото (смена токена бота / удаление файла) → `wrong file identifier`; `show_my_profile` / лента ловят `TelegramBadRequest` и показывают анкету текстом.
+- Протухший Telegram `file_id` фото (смена токена бота / удаление файла) → `wrong file identifier`; `show_my_profile` / лента ловят `TelegramBadRequest` и показывают анкету текстом. В админке `/users/{id}/photo` тоже 404 — тестовые с `local:` видны, чужие `file_id` от другого `BOT_TOKEN` нет; пользователям нужно заново залить фото под текущим ботом.

@@ -63,6 +63,7 @@
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
     align-items: stretch;
+    margin-bottom: 1rem;
   }
   @media (max-width: 820px) {
     .duo-row { grid-template-columns: 1fr; }
@@ -267,7 +268,8 @@
   <section class="panel">
     <div class="hero">
       {% if p and p.photo_file_id %}
-      <img src="{{ url('/users/' ~ u.tg_id ~ '/photo') }}" alt="">
+      <img src="{{ url('/users/' ~ u.tg_id ~ '/photo') }}" alt=""
+           onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',textContent:'фото недоступно'}))">
       {% else %}
       <div class="ph">нет фото</div>
       {% endif %}

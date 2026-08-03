@@ -7,8 +7,6 @@ from datetime import date
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import httpx
-from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -21,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 from database.models import PremiumOrder, RequiredChannel
 from database.session import async_session_maker, init_db
+from services.bot_factory import build_bot
 from services.admin_tools import (
     count_profiles_by_gender,
     DUSHANBE_CITY,
@@ -55,7 +54,12 @@ from services.tracking_links import (
     resolve_range,
 )
 from services.users import load_user_with_profile, is_premium
-from services.media import LOCAL_PREFIX, local_photo_path, project_root
+from services.media import (
+    LOCAL_PREFIX,
+    download_telegram_file,
+    local_photo_path,
+    project_root,
+)
 from services.premium import (
     approve_order,
     list_pending_orders,
@@ -336,7 +340,7 @@ async def lifespan(app: FastAPI):
     async with async_session_maker() as session:
         await ensure_defaults(session)
     # One long-lived client instead of a fresh aiohttp session per request.
-    app.state.bot = Bot(token=settings.bot_token)
+    app.state.bot = build_bot()
     try:
         yield
     finally:
@@ -840,19 +844,13 @@ def create_app() -> FastAPI:
             return FileResponse(local)
         if user.profile.photo_file_id.startswith(LOCAL_PREFIX):
             return Response(status_code=404)
-        try:
-            f = await request.app.state.bot.get_file(user.profile.photo_file_id)
-        except TelegramAPIError:
+        downloaded = await download_telegram_file(
+            request.app.state.bot, user.profile.photo_file_id
+        )
+        if downloaded is None:
             return Response(status_code=404)
-        if not f.file_path:
-            return Response(status_code=404)
-        url = f"https://api.telegram.org/file/bot{settings.bot_token}/{f.file_path}"
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            resp = await client.get(url)
-            if resp.status_code != 200:
-                return Response(status_code=404)
-            ctype = resp.headers.get("content-type", "image/jpeg")
-            return Response(content=resp.content, media_type=ctype)
+        content, ctype = downloaded
+        return Response(content=content, media_type=ctype)
 
     @app.post("/users/{user_id}/unban")
     async def user_unban(
@@ -964,18 +962,11 @@ def create_app() -> FastAPI:
             return FileResponse(local)
         if fid.startswith(LOCAL_PREFIX):
             return Response(status_code=404)
-        try:
-            f = await request.app.state.bot.get_file(fid)
-            if not f.file_path:
-                return Response(status_code=404)
-            url = f"https://api.telegram.org/file/bot{settings.bot_token}/{f.file_path}"
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.get(url)
-                resp.raise_for_status()
-            ctype = resp.headers.get("content-type") or "image/jpeg"
-            return Response(content=resp.content, media_type=ctype)
-        except Exception:
+        downloaded = await download_telegram_file(request.app.state.bot, fid)
+        if downloaded is None:
             return Response(status_code=404)
+        content, ctype = downloaded
+        return Response(content=content, media_type=ctype)
 
     @app.post("/settings/welcome")
     async def save_welcome(
@@ -1243,25 +1234,20 @@ def create_app() -> FastAPI:
         order = await session.get(PremiumOrder, order_id)
         if not order or not order.receipt_file_id:
             return Response(status_code=404)
-        try:
-            f = await request.app.state.bot.get_file(order.receipt_file_id)
-        except TelegramAPIError:
+        downloaded = await download_telegram_file(
+            request.app.state.bot, order.receipt_file_id
+        )
+        if downloaded is None:
             return Response(status_code=404)
-        if not f.file_path:
-            return Response(status_code=404)
-        url = f"https://api.telegram.org/file/bot{settings.bot_token}/{f.file_path}"
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            resp = await client.get(url)
-            if resp.status_code != 200:
-                return Response(status_code=404)
-            ctype = resp.headers.get("content-type") or "application/octet-stream"
-            if order.receipt_kind == "photo" and not ctype.startswith("image/"):
-                ctype = "image/jpeg"
-            filename = Path(f.file_path).name
-            headers = {}
-            if order.receipt_kind == "document":
-                headers["Content-Disposition"] = f'inline; filename="{filename}"'
-            return Response(content=resp.content, media_type=ctype, headers=headers)
+        content, ctype = downloaded
+        if order.receipt_kind == "photo" and not ctype.startswith("image/"):
+            ctype = "image/jpeg"
+        elif order.receipt_kind == "document":
+            ctype = "application/octet-stream"
+        headers = {}
+        if order.receipt_kind == "document":
+            headers["Content-Disposition"] = 'inline; filename="receipt"'
+        return Response(content=content, media_type=ctype, headers=headers)
 
     @app.post("/orders/{order_id}/approve")
     async def order_approve(
