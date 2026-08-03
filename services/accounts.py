@@ -258,7 +258,7 @@ async def clear_user_likes(
     """Admin likes cleanup.
 
     modes:
-      - reactions_today: outgoing+incoming likes created today (UTC)
+      - reactions_all: all outgoing+incoming likes
       - sent_today: outgoing likes created today (UTC)
       - limits_today: daily_like_stats row for today only
     """
@@ -268,11 +268,10 @@ async def clear_user_likes(
     n = 0
     touched_likes = False
 
-    if mode == "reactions_today":
+    if mode == "reactions_all":
         r = await session.execute(
             delete(Like).where(
-                or_(Like.from_user_id == user_id, Like.to_user_id == user_id),
-                Like.created_at >= day_start,
+                or_(Like.from_user_id == user_id, Like.to_user_id == user_id)
             )
         )
         n += r.rowcount or 0

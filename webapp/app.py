@@ -807,7 +807,7 @@ def create_app() -> FastAPI:
             return err_response(
                 request, settings.abs_path("/accounts"), error="not_found"
             )
-        allowed = {"reactions_today", "sent_today", "limits_today"}
+        allowed = {"reactions_all", "sent_today", "limits_today"}
         if mode not in allowed:
             return err_response(
                 request,
@@ -818,7 +818,7 @@ def create_app() -> FastAPI:
         n = await clear_user_likes(session, user_id, mode=mode)
         likes = await account_like_stats(session, user_id)
         labels = {
-            "reactions_today": "Удалено реакций за сегодня",
+            "reactions_all": "Удалено реакций за всё время",
             "sent_today": "Удалено исходящих за сегодня",
             "limits_today": "Сброшено лимитов за сегодня",
         }

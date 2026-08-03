@@ -311,9 +311,9 @@
       <div class="duo-foot">
         <div class="actions">
           <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}" class="js-ajax"
-                data-ajax="likes-clear" data-confirm="Удалить все реакции (❤️/👎/💌) за сегодня UTC?">
-            <input type="hidden" name="mode" value="reactions_today">
-            <button type="submit" class="danger">Удалить реакции за сегодня</button>
+                data-ajax="likes-clear" data-confirm="Удалить все реакции (❤️/👎/💌) за всё время?">
+            <input type="hidden" name="mode" value="reactions_all">
+            <button type="submit" class="danger">Удалить все реакции</button>
           </form>
           <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}" class="js-ajax"
                 data-ajax="likes-clear" data-confirm="Удалить только исходящие реакции за сегодня UTC?">
