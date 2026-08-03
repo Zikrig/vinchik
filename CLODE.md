@@ -9,7 +9,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Точка входа бота | `bot.py` |
 | Веб-админка | `web.py`, `webapp/`; шапка/навигация — `templates/_admin_topbar.html`, `_admin_nav.html`, `_switch_compact.html`; число+ползунок — `_field_slider.html` |
 | Список аккаунтов (поиск/фильтры; `is_test` по умолч. `false`) | `webapp/` → `/accounts`, `services/accounts.py` |
-| Карточка аккаунта (блоки: лайки+премиум в ряд / аккаунт / анкета) | `/accounts/{tg_id}`; премиум активен только если `premium_until > now` (`is_premium`); снять → `2004-01-01` |
+| Карточка аккаунта (лайки∥премиум в ряд; лайки: реакции/отправленные/лимиты за сегодня UTC) | `/accounts/{tg_id}`; премиум активен только если `premium_until > now` (`is_premium`); снять → `2004-01-01` |
 | Баны / подозрительные | `/bans`; `is_blocked` + `is_suspicious` + `suspicious_reason`; сообщения 💌 |
 | Обязательные каналы | `services/channels.py`; веб `/channels`; бот `/admin` → 📢 Каналы (@ник / t.me / forward); юзер: Настройки → Каналы |
 | Карта пользователей (≤200, random sample + админы красным; клик = центр спавна тестов; reload после create/clear; тестовые на карте по умолч. скрыты, чекбокс / `?include_test=1`) | `/accounts` (Leaflet), `GET /accounts/map-markers`, `map_markers(include_test=)` |

@@ -60,11 +60,31 @@
   }
   .duo-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: 1fr 1fr;
     gap: 1rem;
-    align-items: start;
+    align-items: stretch;
   }
-  .duo-row > .panel { margin: 0; }
+  @media (max-width: 820px) {
+    .duo-row { grid-template-columns: 1fr; }
+  }
+  .duo-row > .panel {
+    margin: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+  }
+  .duo-row > .panel .duo-foot {
+    margin-top: auto;
+    padding-top: .75rem;
+  }
+  .duo-row .stat-row,
+  .duo-row .duo-status {
+    min-height: 1.5rem;
+  }
+  .duo-row .hint {
+    min-height: 2.6em;
+  }
   .actions { margin-top: 1rem; display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
   .panel.danger-zone {
     border-color: #f3c4bf;
@@ -283,34 +303,33 @@
       <div class="stat-row">
         <span>Отправлено (все): <strong data-likes-sent>{{ likes.sent }}</strong></span>
         <span>Получено: <strong data-likes-received>{{ likes.received }}</strong></span>
-        <span>из них лайков: <strong data-likes-daily>{{ likes.daily_used }}</strong></span>
+        <span>Лимит сегодня: <strong data-likes-daily>{{ likes.daily_used }}</strong></span>
       </div>
-      <p class="hint">Лимит считает только ❤️/💌 за сегодня (UTC), мужчины без премиум. «Отправлено» включает 👎. Удаление лайков снова покажет людей в ленте.</p>
-      <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}" class="js-ajax"
-            data-ajax="likes-clear" data-confirm="Удалить выбранные записи о лайках?">
-        <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: .75rem;">
-          <label class="check" style="display: flex; align-items: center; gap: 0.4em;">
-            <input type="checkbox" name="clear_sent" checked>
-            <span>исходящие (likes from)</span>
-          </label>
-          <label class="check" style="display: flex; align-items: center; gap: 0.4em;">
-            <input type="checkbox" name="clear_received" checked>
-            <span>входящие (likes to)</span>
-          </label>
-          <label class="check" style="display: flex; align-items: center; gap: 0.4em;">
-            <input type="checkbox" name="clear_daily" checked>
-            <span>дневные лимиты (daily_like_stats)</span>
-          </label>
-        </div>
+      <p class="hint">Сутки считаются по UTC. Удаление реакций снова покажет этих людей в ленте.</p>
+      <div class="duo-foot">
         <div class="actions">
-          <button type="submit" class="danger">Удалить лайки</button>
+          <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}" class="js-ajax"
+                data-ajax="likes-clear" data-confirm="Удалить все реакции (❤️/👎/💌) за сегодня UTC?">
+            <input type="hidden" name="mode" value="reactions_today">
+            <button type="submit" class="danger">Удалить реакции за сегодня</button>
+          </form>
+          <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}" class="js-ajax"
+                data-ajax="likes-clear" data-confirm="Удалить только исходящие реакции за сегодня UTC?">
+            <input type="hidden" name="mode" value="sent_today">
+            <button type="submit" class="secondary">Удалить отправленные за сегодня</button>
+          </form>
+          <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/clear-likes') }}" class="js-ajax"
+                data-ajax="likes-clear" data-confirm="Сбросить дневной счётчик лимита за сегодня UTC?">
+            <input type="hidden" name="mode" value="limits_today">
+            <button type="submit" class="secondary">Очистить лимиты за сегодня</button>
+          </form>
         </div>
-      </form>
+      </div>
     </section>
 
     <section class="panel premium-zone" id="premium">
       <h2 class="panel-title">⭐ Премиум</h2>
-      <p>
+      <p class="duo-status">
         Статус:
         <span data-premium-status>
         {% if premium_active and u.premium_until %}
@@ -324,6 +343,7 @@
       </p>
 
       <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}"
+            id="premium-set-form"
             class="js-ajax js-confirm-changes" data-ajax="premium-save"
             data-confirm-labels='{"premium_until":"премиум работает до"}'>
         <input type="hidden" name="premium_action" value="set">
@@ -332,35 +352,37 @@
                  value="{% if u.premium_until %}{{ u.premium_until.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
         </label>
         <p class="hint">Пустое поле или «Снять» ставит 2004-01-01 — премиум выключен.</p>
-        <div class="actions">
-          <button type="submit">Сохранить дату</button>
-        </div>
       </form>
 
-      <div class="actions" style="margin-top:.5rem">
-        <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
-              data-confirm="Продлить премиум на +2 дня от сейчас (или от текущей даты, если она в будущем)?">
-          <input type="hidden" name="premium_action" value="extend">
-          <input type="hidden" name="add_days" value="2">
-          <button type="submit" class="secondary">+2 дня</button>
-        </form>
-        <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
-              data-confirm="Продлить премиум на +7 дней?">
-          <input type="hidden" name="premium_action" value="extend">
-          <input type="hidden" name="add_days" value="7">
-          <button type="submit" class="secondary">+7 дней</button>
-        </form>
-        <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
-              data-confirm="Продлить премиум на +30 дней?">
-          <input type="hidden" name="premium_action" value="extend">
-          <input type="hidden" name="add_days" value="30">
-          <button type="submit" class="secondary">+30 дней</button>
-        </form>
-        <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
-              data-confirm="Снять премиум (дата → 2004-01-01)?">
-          <input type="hidden" name="premium_action" value="clear">
-          <button type="submit" class="danger">Снять премиум</button>
-        </form>
+      <div class="duo-foot">
+        <div class="actions">
+          <button type="submit" form="premium-set-form">Сохранить дату</button>
+          <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
+                data-confirm="Снять премиум (дата → 2004-01-01)?">
+            <input type="hidden" name="premium_action" value="clear">
+            <button type="submit" class="danger">Снять премиум</button>
+          </form>
+        </div>
+        <div class="actions" style="margin-top:.5rem">
+          <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
+                data-confirm="Продлить премиум на +2 дня от сейчас (или от текущей даты, если она в будущем)?">
+            <input type="hidden" name="premium_action" value="extend">
+            <input type="hidden" name="add_days" value="2">
+            <button type="submit" class="secondary">+2 дня</button>
+          </form>
+          <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
+                data-confirm="Продлить премиум на +7 дней?">
+            <input type="hidden" name="premium_action" value="extend">
+            <input type="hidden" name="add_days" value="7">
+            <button type="submit" class="secondary">+7 дней</button>
+          </form>
+          <form method="post" action="{{ url('/accounts/' ~ u.tg_id ~ '/premium') }}" class="js-ajax" data-ajax="premium-save"
+                data-confirm="Продлить премиум на +30 дней?">
+            <input type="hidden" name="premium_action" value="extend">
+            <input type="hidden" name="add_days" value="30">
+            <button type="submit" class="secondary">+30 дней</button>
+          </form>
+        </div>
       </div>
     </section>
   </div>

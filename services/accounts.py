@@ -242,27 +242,62 @@ async def account_like_stats(session: AsyncSession, user_id: int) -> dict[str, i
     }
 
 
+def _utc_day_start() -> datetime:
+    from services.limits import utc_today
+
+    d = utc_today()
+    return datetime(d.year, d.month, d.day, tzinfo=UTC)
+
+
 async def clear_user_likes(
     session: AsyncSession,
     user_id: int,
     *,
-    sent: bool = True,
-    received: bool = True,
-    daily_stats: bool = True,
+    mode: str,
 ) -> int:
-    if not sent and not received and not daily_stats:
-        return 0
+    """Admin likes cleanup.
+
+    modes:
+      - reactions_today: outgoing+incoming likes created today (UTC)
+      - sent_today: outgoing likes created today (UTC)
+      - limits_today: daily_like_stats row for today only
+    """
+    from services.limits import utc_today
+
+    day_start = _utc_day_start()
     n = 0
-    if sent:
-        r = await session.execute(delete(Like).where(Like.from_user_id == user_id))
+    touched_likes = False
+
+    if mode == "reactions_today":
+        r = await session.execute(
+            delete(Like).where(
+                or_(Like.from_user_id == user_id, Like.to_user_id == user_id),
+                Like.created_at >= day_start,
+            )
+        )
         n += r.rowcount or 0
-    if received:
-        r = await session.execute(delete(Like).where(Like.to_user_id == user_id))
+        touched_likes = True
+    elif mode == "sent_today":
+        r = await session.execute(
+            delete(Like).where(
+                Like.from_user_id == user_id,
+                Like.created_at >= day_start,
+            )
+        )
         n += r.rowcount or 0
-    if daily_stats:
-        r = await session.execute(delete(DailyLikeStat).where(DailyLikeStat.user_id == user_id))
+        touched_likes = True
+    elif mode == "limits_today":
+        r = await session.execute(
+            delete(DailyLikeStat).where(
+                DailyLikeStat.user_id == user_id,
+                DailyLikeStat.utc_date == utc_today(),
+            )
+        )
         n += r.rowcount or 0
-    if sent or received:
+    else:
+        return 0
+
+    if touched_likes:
         user = await session.get(User, user_id)
         if user is not None:
             user.likes_notify_message_id = None

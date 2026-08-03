@@ -794,9 +794,7 @@ def create_app() -> FastAPI:
         user_id: int,
         request: Request,
         session: AsyncSession = Depends(get_db),
-        clear_sent: str | None = Form(None),
-        clear_received: str | None = Form(None),
-        clear_daily: str | None = Form(None),
+        mode: str = Form(...),
     ):
         if (redir := require_auth(request)) is not None:
             return redir
@@ -805,18 +803,25 @@ def create_app() -> FastAPI:
             return err_response(
                 request, settings.abs_path("/accounts"), error="not_found"
             )
-        n = await clear_user_likes(
-            session,
-            user_id,
-            sent=clear_sent is not None,
-            received=clear_received is not None,
-            daily_stats=clear_daily is not None,
-        )
+        allowed = {"reactions_today", "sent_today", "limits_today"}
+        if mode not in allowed:
+            return err_response(
+                request,
+                settings.abs_path(f"/accounts/{user_id}?flash=error"),
+                error="bad_mode",
+                message="Неизвестный режим очистки.",
+            )
+        n = await clear_user_likes(session, user_id, mode=mode)
         likes = await account_like_stats(session, user_id)
+        labels = {
+            "reactions_today": "Удалено реакций за сегодня",
+            "sent_today": "Удалено исходящих за сегодня",
+            "limits_today": "Сброшено лимитов за сегодня",
+        }
         return ok_response(
             request,
             settings.abs_path(f"/accounts/{user_id}?flash=likes_cleared_{n}"),
-            message=f"Удалено записей: {n}.",
+            message=f"{labels[mode]}: {n}.",
             n=n,
             likes=likes,
         )
