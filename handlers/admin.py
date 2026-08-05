@@ -354,7 +354,6 @@ async def admin_cmd(message: Message, session: AsyncSession, state: FSMContext) 
     if message.from_user is None:
         return
     if not _is_admin(message.from_user.id):
-        await message.answer(t("no_access", "ru"))
         return
     await state.clear()
     text, kb = await _root_view(session)
