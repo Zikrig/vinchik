@@ -349,7 +349,7 @@ async def _render_premiums(
     return text, _premiums_page_kb(chunk, page, total_pages)
 
 
-@router.message(Command("admin"))
+@router.message(Command("admin", "adm", "ad"))
 async def admin_cmd(message: Message, session: AsyncSession, state: FSMContext) -> None:
     if message.from_user is None:
         return
