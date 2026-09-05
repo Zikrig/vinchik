@@ -61,11 +61,19 @@ from services.media import (
     project_root,
 )
 from services.premium import (
+    PLAN_DAYS_MAX,
+    PLAN_DAYS_MIN,
     approve_order,
+    create_plan,
+    delete_plan,
     list_pending_orders,
+    list_plans,
     list_premium_users,
     notify_premium_activated,
     reject_order,
+    serialize_plan,
+    toggle_plan,
+    update_plan,
 )
 from services.reports import ban_user, list_blocked_users, unban_user
 from services.moderation import clear_suspicious, list_suspicious_users
@@ -462,6 +470,7 @@ def create_app() -> FastAPI:
     async def premium_page(request: Request, session: AsyncSession = Depends(get_db)):
         if (redir := require_auth(request)) is not None:
             return redir
+        plans = await list_plans(session)
         return await render_admin(
             request,
             session,
@@ -469,7 +478,131 @@ def create_app() -> FastAPI:
             {
                 "pending": await list_pending_orders(session),
                 "premiums": await list_premium_users(session),
+                "plans": plans,
+                "plan_by_id": {p.id: p for p in plans},
+                "plan_days_min": PLAN_DAYS_MIN,
+                "plan_days_max": PLAN_DAYS_MAX,
             },
+        )
+
+    @app.post("/plans/add")
+    async def plan_add(
+        request: Request,
+        title: str = Form(...),
+        days: int = Form(...),
+        price_text: str = Form(...),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        try:
+            plan = await create_plan(
+                session, title=title, days=days, price_text=price_text
+            )
+        except ValueError as exc:
+            return err_response(
+                request,
+                settings.abs_path("/premium"),
+                error=str(exc),
+                message=str(exc),
+            )
+        return ok_response(
+            request,
+            settings.abs_path("/premium"),
+            plan=serialize_plan(plan),
+            message="Тариф добавлен.",
+        )
+
+    @app.post("/plans/{plan_id}")
+    async def plan_save(
+        plan_id: int,
+        request: Request,
+        title: str = Form(...),
+        days: int = Form(...),
+        price_text: str = Form(...),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        try:
+            updated = await update_plan(
+                session, plan_id, title=title, days=days, price_text=price_text
+            )
+        except ValueError as exc:
+            return err_response(
+                request,
+                settings.abs_path("/premium"),
+                error=str(exc),
+                message=str(exc),
+            )
+        if updated is None:
+            return err_response(
+                request,
+                settings.abs_path("/premium"),
+                error="Тариф не найден.",
+                message="Тариф не найден.",
+            )
+        return ok_response(
+            request,
+            settings.abs_path("/premium"),
+            plan=serialize_plan(updated),
+            fields={
+                "title": updated.title,
+                "days": updated.days,
+                "price_text": updated.price_text,
+            },
+            message="Тариф сохранён.",
+        )
+
+    @app.post("/plans/{plan_id}/toggle")
+    async def plan_toggle(
+        plan_id: int, request: Request, session: AsyncSession = Depends(get_db)
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        updated = await toggle_plan(session, plan_id)
+        if updated is None:
+            return err_response(
+                request,
+                settings.abs_path("/premium"),
+                error="Тариф не найден.",
+                message="Тариф не найден.",
+            )
+        return ok_response(
+            request,
+            settings.abs_path("/premium"),
+            active=updated.is_active,
+            message="Включён." if updated.is_active else "Выключен.",
+        )
+
+    @app.post("/plans/{plan_id}/delete")
+    async def plan_delete(
+        plan_id: int, request: Request, session: AsyncSession = Depends(get_db)
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        try:
+            removed = await delete_plan(session, plan_id)
+        except ValueError as exc:
+            return err_response(
+                request,
+                settings.abs_path("/premium"),
+                error=str(exc),
+                message=str(exc),
+            )
+        if not removed:
+            return err_response(
+                request,
+                settings.abs_path("/premium"),
+                error="Тариф не найден.",
+                message="Тариф не найден.",
+            )
+        return ok_response(
+            request,
+            settings.abs_path("/premium"),
+            id=plan_id,
+            remove=True,
+            message="Тариф удалён.",
         )
 
     @app.get("/bans", response_class=HTMLResponse)
@@ -932,19 +1065,20 @@ def create_app() -> FastAPI:
         await set_setting(session, "support_contact", support_contact.strip())
         await set_setting(session, "payment_card", payment_card.strip())
         await set_setting(session, "payment_check_time", payment_check_time.strip())
+        fields = {
+            "daily_like_limit": int(daily_like_limit),
+            "max_distance_km": capped,
+            "profile_reshow_days": max(0, int(profile_reshow_days)),
+            "manager_contact": manager_contact.strip(),
+            "support_contact": support_contact.strip(),
+            "payment_card": payment_card.strip(),
+            "payment_check_time": payment_check_time.strip(),
+        }
         return ok_response(
             request,
             settings.abs_path("/"),
             message="Настройки сохранены.",
-            fields={
-                "daily_like_limit": int(daily_like_limit),
-                "max_distance_km": capped,
-                "profile_reshow_days": max(0, int(profile_reshow_days)),
-                "manager_contact": manager_contact.strip(),
-                "support_contact": support_contact.strip(),
-                "payment_card": payment_card.strip(),
-                "payment_check_time": payment_check_time.strip(),
-            },
+            fields=fields,
         )
 
     @app.get("/settings/welcome/photo")

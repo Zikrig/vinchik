@@ -187,7 +187,9 @@ TEXTS = {
     ),
     "premium_order_processed": "Коркард шуд: {processed}",
     "premium_pay": (
-        "Дархост #{order_id}\n\n"
+        "Дархост #{order_id}\n"
+        "Тариф: {plan}\n"
+        "Маблағ: {amount}\n\n"
         "Корт барои пардохт:\n{card}\n\n"
         "Вақти тафтиш: {check_time}\n\n"
         "Алоқа бо менеҷер:\n{manager}\n\n"

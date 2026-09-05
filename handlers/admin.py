@@ -23,11 +23,19 @@ from services.channels import (
 )
 from services.admin_tools import count_profiles_by_gender
 from services.premium import (
+    PLAN_DAYS_MAX,
+    PLAN_DAYS_MIN,
     approve_order,
+    create_plan,
+    delete_plan,
+    get_plan,
     list_pending_orders,
+    list_plans,
     list_premium_users,
     notify_premium_activated,
     reject_order,
+    toggle_plan,
+    update_plan,
 )
 from services.settings_service import (
     MAX_DISTANCE_KM,
@@ -122,6 +130,7 @@ def _root_kb(reg_only: bool, pending_n: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=orders, callback_data="adm:orders:0")],
             [InlineKeyboardButton(text="⭐ Премиум юзеры", callback_data="adm:premiums:0")],
+            [InlineKeyboardButton(text="💎 Тарифы", callback_data="adm:plans")],
             [InlineKeyboardButton(text="🔗 Ссылки", callback_data="adm:links")],
             [InlineKeyboardButton(text="📢 Каналы", callback_data="adm:channels")],
             [InlineKeyboardButton(text=soft, callback_data="adm:toggle_reg")],
@@ -143,6 +152,7 @@ def _settings_kb(reg_only: bool) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Радиус км", callback_data="adm:edit:dist")],
             [InlineKeyboardButton(text="Повтор анкеты (дней)", callback_data="adm:edit:reshow")],
             [InlineKeyboardButton(text="Карта оплаты", callback_data="adm:edit:card")],
+            [InlineKeyboardButton(text="Тарифы", callback_data="adm:plans")],
             [InlineKeyboardButton(text="Время проверки", callback_data="adm:edit:check_time")],
             [InlineKeyboardButton(text="Контакты менеджера", callback_data="adm:edit:manager")],
             [InlineKeyboardButton(text="Контакт поддержки", callback_data="adm:edit:support")],
@@ -165,6 +175,91 @@ def _cancel_channels_kb() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="❌ Отмена", callback_data="adm:channels")],
         ]
+    )
+
+
+def _cancel_plans_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="adm:plans")],
+        ]
+    )
+
+
+def _cancel_plan_kb(plan_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"adm:pl:{plan_id}")],
+        ]
+    )
+
+
+def _plans_block(plans) -> str:
+    if not plans:
+        return "Тарифы: нет"
+    lines = ["Тарифы:"]
+    for p in plans:
+        mark = "🟢" if p.is_active else "🔴"
+        lines.append(
+            f"{mark} {html.escape(p.title)} — {html.escape(p.price_text)} · {p.days} дн."
+        )
+    return "\n".join(lines)
+
+
+def _plans_kb(plans) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for p in plans:
+        tog = "Выкл" if p.is_active else "Вкл"
+        label = f"{p.title} — {p.price_text}"
+        rows.append(
+            [
+                _btn(f"{tog}: {label}", f"adm:pl:tog:{p.id}"),
+                _btn("✏️", f"adm:pl:{p.id}"),
+                _btn("🗑", f"adm:pl:del:{p.id}"),
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="➕ Добавить", callback_data="adm:pl:add")])
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _plans_view(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
+    plans = await list_plans(session)
+    text = (
+        "💎 Тарифы\n\n"
+        "В боте пользователь видит только включённые.\n"
+        "Название, срок и сумма — на кнопке и в инструкции оплаты."
+    )
+    if plans:
+        text += "\n\n" + _plans_block(plans)
+    else:
+        text += "\n\nСписок пуст."
+    return text, _plans_kb(plans)
+
+
+def _plan_detail_kb(plan) -> InlineKeyboardMarkup:
+    tog = "🔴 Выключить" if plan.is_active else "🟢 Включить"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                _btn("Название", f"adm:pl:t:{plan.id}"),
+                _btn("Срок", f"adm:pl:d:{plan.id}"),
+                _btn("Сумма", f"adm:pl:p:{plan.id}"),
+            ],
+            [_btn(tog, f"adm:pl:tg:{plan.id}")],
+            [_btn("🗑 Удалить", f"adm:pl:del:{plan.id}")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:plans")],
+        ]
+    )
+
+
+def _plan_detail_text(plan) -> str:
+    mark = "🟢 ON" if plan.is_active else "🔴 OFF"
+    return (
+        f"💎 {html.escape(plan.title)}\n\n"
+        f"Срок: {plan.days} дн.\n"
+        f"Сумма: {html.escape(plan.price_text)}\n"
+        f"Статус: {mark}"
     )
 
 
@@ -279,6 +374,7 @@ async def _settings_view(session: AsyncSession) -> tuple[str, InlineKeyboardMark
     reshow = await get_profile_reshow_days(session)
     reg_only = await is_registration_only(session)
     pay = await get_payment_info(session)
+    plans = await list_plans(session)
     welcome = await get_welcome_post(session)
     soft = "🟢 ON" if reg_only else "🔴 OFF"
     if welcome_post_configured(welcome):
@@ -296,6 +392,7 @@ async def _settings_view(session: AsyncSession) -> tuple[str, InlineKeyboardMark
         f"Повтор анкеты (дней): {reshow}\n\n"
         f"{welcome_line}\n\n"
         f"Карта:\n{html.escape(pay['card'])}\n\n"
+        f"{_plans_block(plans)}\n\n"
         f"Время проверки:\n{html.escape(pay['check_time'])}\n\n"
         f"Менеджер:\n{html.escape(pay['manager'])}\n\n"
         f"Поддержка:\n{html.escape(pay['support'])}"
@@ -389,6 +486,205 @@ async def adm_settings(
     await callback.answer()
     text, kb = await _settings_view(session)
     await _redraw(callback, bot, text, kb)
+
+
+@router.callback_query(F.data.in_({"adm:plans", "adm:prices"}))
+async def adm_plans(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext, bot: Bot
+) -> None:
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(t("no_access", "ru"), show_alert=True)
+        return
+    await state.clear()
+    await callback.answer()
+    text, kb = await _plans_view(session)
+    await _redraw(callback, bot, text, kb)
+
+
+@router.callback_query(F.data == "adm:pl:add")
+async def adm_plan_add_start(
+    callback: CallbackQuery, state: FSMContext, bot: Bot
+) -> None:
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(t("no_access", "ru"), show_alert=True)
+        return
+    await state.set_state(AdminStates.plan_add)
+    await state.update_data(step="title")
+    await callback.answer()
+    await bot.send_message(
+        callback.from_user.id,
+        "Название тарифа (как на кнопке, напр. «7 дней»):",
+        reply_markup=_cancel_plans_kb(),
+    )
+
+
+@router.callback_query(F.data.startswith("adm:pl:"))
+async def adm_plan_action(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext, bot: Bot
+) -> None:
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(t("no_access", "ru"), show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    if len(parts) < 3:
+        await callback.answer("—", show_alert=True)
+        return
+    action = parts[2]
+    plan_id_raw = parts[3] if len(parts) >= 4 else action
+    try:
+        plan_id = int(plan_id_raw)
+    except ValueError:
+        await callback.answer("—", show_alert=True)
+        return
+    plan = await get_plan(session, plan_id)
+    if plan is None:
+        await callback.answer("Тариф не найден.", show_alert=True)
+        return
+
+    if len(parts) == 3:
+        await state.clear()
+        await callback.answer()
+        await _redraw(callback, bot, _plan_detail_text(plan), _plan_detail_kb(plan))
+        return
+
+    if action in {"tog", "tg"}:
+        updated = await toggle_plan(session, plan_id)
+        await callback.answer()
+        if updated is None:
+            return
+        if action == "tg":
+            await _redraw(
+                callback, bot, _plan_detail_text(updated), _plan_detail_kb(updated)
+            )
+        else:
+            text, kb = await _plans_view(session)
+            await _redraw(callback, bot, text, kb)
+        return
+
+    if action == "del":
+        try:
+            await delete_plan(session, plan_id)
+        except ValueError as exc:
+            await callback.answer(str(exc), show_alert=True)
+            return
+        await callback.answer("Удалено")
+        await state.clear()
+        text, kb = await _plans_view(session)
+        await _redraw(callback, bot, text, kb)
+        return
+
+    field_map = {"t": "title", "d": "days", "p": "price"}
+    field = field_map.get(action)
+    if field is None:
+        await callback.answer("—", show_alert=True)
+        return
+    prompts = {
+        "title": f"Новое название (сейчас: {plan.title}):",
+        "days": (
+            f"Срок в днях {PLAN_DAYS_MIN}–{PLAN_DAYS_MAX} "
+            f"(сейчас: {plan.days}):"
+        ),
+        "price": f"Сумма оплаты (сейчас: {plan.price_text}):",
+    }
+    await state.set_state(AdminStates.plan_edit)
+    await state.update_data(plan_id=plan.id, field=field)
+    await callback.answer()
+    await bot.send_message(
+        callback.from_user.id, prompts[field], reply_markup=_cancel_plan_kb(plan.id)
+    )
+
+
+@router.message(StateFilter(AdminStates.plan_add), F.text)
+async def adm_plan_add_value(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> None:
+    if message.from_user is None:
+        return
+    if not _is_admin(message.from_user.id):
+        await state.clear()
+        return
+    raw = (message.text or "").strip()
+    data = await state.get_data()
+    step = data.get("step") or "title"
+    if step == "title":
+        if not raw:
+            await message.answer("Нужно название.")
+            return
+        await state.update_data(title=raw, step="days")
+        await message.answer(
+            f"Срок в днях ({PLAN_DAYS_MIN}–{PLAN_DAYS_MAX}):",
+            reply_markup=_cancel_plans_kb(),
+        )
+        return
+    if step == "days":
+        try:
+            days_n = int(raw.replace(",", ".").split(".")[0])
+        except ValueError:
+            await message.answer("Нужно целое число дней.")
+            return
+        if days_n < PLAN_DAYS_MIN or days_n > PLAN_DAYS_MAX:
+            await message.answer(f"Срок: {PLAN_DAYS_MIN}–{PLAN_DAYS_MAX} дней.")
+            return
+        await state.update_data(days=days_n, step="price")
+        await message.answer(
+            "Сумма оплаты (текст, напр. 50 сомони):",
+            reply_markup=_cancel_plans_kb(),
+        )
+        return
+    title = str(data.get("title") or "")
+    days_n = data.get("days")
+    try:
+        plan = await create_plan(session, title=title, days=days_n, price_text=raw)
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
+    await state.clear()
+    text, kb = await _plans_view(session)
+    await message.answer(f"✅ Тариф «{plan.title}» добавлен.\n\n" + text, reply_markup=kb)
+
+
+@router.message(StateFilter(AdminStates.plan_edit), F.text)
+async def adm_plan_edit_value(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> None:
+    if message.from_user is None:
+        return
+    if not _is_admin(message.from_user.id):
+        await state.clear()
+        return
+    raw = (message.text or "").strip()
+    data = await state.get_data()
+    try:
+        plan_id = int(data.get("plan_id"))
+    except (TypeError, ValueError):
+        await state.clear()
+        await message.answer("Некорректное значение. Попробуй ещё раз или отмени.")
+        return
+    field = data.get("field")
+    kwargs: dict = {}
+    if field == "title":
+        kwargs["title"] = raw
+    elif field == "days":
+        kwargs["days"] = raw
+    elif field == "price":
+        kwargs["price_text"] = raw
+    else:
+        await state.clear()
+        return
+    try:
+        updated = await update_plan(session, plan_id, **kwargs)
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
+    if updated is None:
+        await state.clear()
+        await message.answer("Тариф не найден.")
+        return
+    await state.clear()
+    await message.answer(
+        "✅ Сохранено.\n\n" + _plan_detail_text(updated),
+        reply_markup=_plan_detail_kb(updated),
+    )
 
 
 @router.callback_query(F.data.startswith("adm:edit:"))

@@ -929,7 +929,7 @@
         throw new Error("Метод не разрешён (проверьте URL формы)");
       }
       if (!res.ok || data.ok === false) {
-        throw new Error(data.error || data.detail || "Ошибка");
+        throw new Error(data.message || data.error || data.detail || "Ошибка");
       }
       return data;
     };
@@ -957,6 +957,37 @@
       };
     }
 
+    function planUrls(planId) {
+      const add = document.querySelector('form[data-ajax="plan-add"]');
+      const root = add ? add.action.replace(/\/plans\/add\/?$/, "") : "";
+      return {
+        save: root + "/plans/" + planId,
+        toggle: root + "/plans/" + planId + "/toggle",
+        del: root + "/plans/" + planId + "/delete",
+      };
+    }
+
+    function planRowHtml(p) {
+      const urls = planUrls(p.id);
+      const on = !!p.is_active;
+      const fid = "plan-save-" + p.id;
+      return (
+        '<tr data-plan-id="' + p.id + '">' +
+        "<td><form method=\"post\" action=\"" + urls.save + "\" id=\"" + fid + "\" class=\"js-ajax\" data-ajax=\"plan-save\">" +
+        "<input type=\"text\" name=\"title\" value=\"" + escapeHtml(p.title || "") + "\" required maxlength=\"128\"></form></td>" +
+        "<td><input form=\"" + fid + "\" type=\"number\" name=\"days\" value=\"" + escapeHtml(p.days) + "\" min=\"1\" max=\"365\" required data-no-slider></td>" +
+        "<td><input form=\"" + fid + "\" type=\"text\" name=\"price_text\" value=\"" + escapeHtml(p.price_text || "") + "\" required maxlength=\"64\"></td>" +
+        "<td class=\"row\">" +
+        "<button type=\"submit\" form=\"" + fid + "\" class=\"secondary\">OK</button>" +
+        "<form method=\"post\" action=\"" + urls.toggle + "\" class=\"js-ajax\" data-ajax=\"plan-toggle\">" +
+        "<button type=\"submit\" class=\"status-pill sm " + (on ? "on" : "off") + "\"><span class=\"dot\"></span> " +
+        (on ? "ON" : "OFF") + "</button></form>" +
+        "<form method=\"post\" action=\"" + urls.del + "\" class=\"js-ajax\" data-ajax=\"plan-delete\" " +
+        "data-confirm=\"Удалить тариф? Если по нему уже есть заявки — удалить нельзя, только выключить.\">" +
+        "<button type=\"submit\" class=\"danger\">удалить</button></form>" +
+        "</td></tr>"
+      );
+    }
     function channelRowHtml(ch) {
       const urls = channelUrls(ch.id);
       const on = !!ch.is_active;
@@ -1218,17 +1249,25 @@
           if (typeof window.reloadUsersMap === "function") {
             try { await window.reloadUsersMap(); } catch (_) {}
           }
-        } else if (kind === "channel-toggle") {
+        } else if (kind === "channel-toggle" || kind === "plan-toggle") {
           const active = !!data.active;
           const pill = form.querySelector(".status-pill");
           window.setPill(pill, active, "ON", "OFF");
-        } else if (kind === "channel-delete" || kind === "order" || kind === "unban" || kind === "clear-suspicious" || kind === "ban") {
+        } else if (kind === "channel-delete" || kind === "plan-delete" || kind === "order" || kind === "unban" || kind === "clear-suspicious" || kind === "ban") {
           const row = form.closest("tr, article.blocked-card");
           if (row) row.remove();
         } else if (kind === "channel-add" && data.channel) {
           const table = document.querySelector("#channels table");
           if (table) table.insertAdjacentHTML("beforeend", channelRowHtml(data.channel));
           form.reset();
+        } else if (kind === "plan-add" && data.plan) {
+          const table = document.querySelector("#plans table");
+          const empty = table && table.querySelector("tr.plans-empty");
+          if (empty) empty.remove();
+          if (table) table.insertAdjacentHTML("beforeend", planRowHtml(data.plan));
+          form.reset();
+        } else if (kind === "plan-save") {
+          window.applyFormFields(form, data.fields);
         } else if (kind === "link-create" || kind === "link-rename" || kind === "link-delete") {
           if (typeof window.refreshTrackingStats === "function") {
             await window.refreshTrackingStats();

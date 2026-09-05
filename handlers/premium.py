@@ -268,6 +268,7 @@ async def premium_buy(callback: CallbackQuery, session: AsyncSession) -> None:
         await callback.answer("—", show_alert=True)
         return
     pay = await get_payment_info(session)
+    plan = await session.get(PremiumPlan, order.plan_id)
     await callback.answer()
     try:
         await message.edit_reply_markup(reply_markup=None)
@@ -278,6 +279,8 @@ async def premium_buy(callback: CallbackQuery, session: AsyncSession) -> None:
             "premium_pay",
             user.language,
             order_id=order.id,
+            plan=html.escape(plan.title) if plan else "—",
+            amount=html.escape(plan.price_text) if plan else "—",
             manager=html.escape(pay["manager"]),
             card=html.escape(pay["card"]),
             check_time=html.escape(pay["check_time"]),

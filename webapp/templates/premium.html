@@ -6,9 +6,64 @@
 {% include "_admin_topbar.html" %}
 <div class="wrap">
   <nav class="jump">
+    <a href="#plans">💎 Тарифы</a>
     <a href="#orders">💳 Заявки</a>
     <a href="#premiums">⭐ Активные</a>
   </nav>
+
+  <section class="panel" id="plans">
+    <h2 class="panel-title">💎 Тарифы</h2>
+    <p class="hint">В боте пользователь видит только включённые. Сумма — текст на кнопке и в инструкции оплаты. Срок: {{ plan_days_min }}–{{ plan_days_max }} дней.</p>
+    <table>
+      <tr><th>Название</th><th>Дней</th><th>Сумма</th><th></th></tr>
+      {% for p in plans %}
+      <tr data-plan-id="{{ p.id }}">
+        <td>
+          <form method="post" action="{{ url('/plans/' ~ p.id) }}" id="plan-save-{{ p.id }}"
+                class="js-ajax" data-ajax="plan-save">
+            <input type="text" name="title" value="{{ p.title }}" required maxlength="128">
+          </form>
+        </td>
+        <td>
+          <input form="plan-save-{{ p.id }}" type="number" name="days" value="{{ p.days }}"
+                 min="{{ plan_days_min }}" max="{{ plan_days_max }}" required data-no-slider>
+        </td>
+        <td>
+          <input form="plan-save-{{ p.id }}" type="text" name="price_text" value="{{ p.price_text }}"
+                 required maxlength="64" placeholder="50 сомони">
+        </td>
+        <td class="row">
+          <button type="submit" form="plan-save-{{ p.id }}" class="secondary">OK</button>
+          <form method="post" action="{{ url('/plans/' ~ p.id ~ '/toggle') }}" class="js-ajax" data-ajax="plan-toggle">
+            <button type="submit" class="status-pill sm {{ 'on' if p.is_active else 'off' }}">
+              <span class="dot"></span>
+              {% if p.is_active %}ON{% else %}OFF{% endif %}
+            </button>
+          </form>
+          <form method="post" action="{{ url('/plans/' ~ p.id ~ '/delete') }}" class="js-ajax" data-ajax="plan-delete"
+                data-confirm="Удалить тариф? Если по нему уже есть заявки — удалить нельзя, только выключить.">
+            <button type="submit" class="danger">удалить</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr class="plans-empty"><td colspan="4" class="hint">Тарифов нет — добавь ниже.</td></tr>
+      {% endfor %}
+    </table>
+    <h3>Добавить тариф</h3>
+    <form method="post" action="{{ url('/plans/add') }}" class="row js-ajax" data-ajax="plan-add">
+      <label style="flex:1;min-width:160px">Название
+        <input type="text" name="title" required maxlength="128" placeholder="7 дней">
+      </label>
+      <label style="width:7rem">Дней
+        <input type="number" name="days" value="7" min="{{ plan_days_min }}" max="{{ plan_days_max }}" required data-no-slider>
+      </label>
+      <label style="flex:1;min-width:140px">Сумма
+        <input type="text" name="price_text" required maxlength="64" placeholder="50 сомони">
+      </label>
+      <button type="submit">Добавить</button>
+    </form>
+  </section>
 
   <section class="panel" id="orders">
     <h2 class="panel-title">💳 Заявки на Премиум {% if pending %}<span class="meta">({{ pending|length }})</span>{% endif %}</h2>
@@ -18,7 +73,10 @@
       <tr>
         <td>#{{ o.id }}</td>
         <td>user {{ o.user_id }}</td>
-        <td>plan {{ o.plan_id }}</td>
+        <td>
+          {% set plan = plan_by_id.get(o.plan_id) %}
+          {% if plan %}{{ plan.title }} · {{ plan.price_text }}{% else %}plan {{ o.plan_id }}{% endif %}
+        </td>
         <td>
           {% if o.receipt_file_id %}
             {% if o.receipt_kind == 'photo' %}

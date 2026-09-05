@@ -187,7 +187,9 @@ TEXTS = {
     ),
     "premium_order_processed": "Обработана: {processed}",
     "premium_pay": (
-        "Заявка #{order_id}\n\n"
+        "Заявка #{order_id}\n"
+        "Тариф: {plan}\n"
+        "Сумма: {amount}\n\n"
         "Карта для оплаты:\n{card}\n\n"
         "Время проверки: {check_time}\n\n"
         "Связь с менеджером:\n{manager}\n\n"
