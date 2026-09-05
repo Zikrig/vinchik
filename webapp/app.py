@@ -495,9 +495,9 @@ def create_app() -> FastAPI:
             "q": request.query_params.get("q") or "",
             # Default: hide test accounts from the list (explicit ?is_test=any|true).
             "is_test": request.query_params.get("is_test") or "false",
-            "is_blocked": request.query_params.get("is_blocked") or "any",
+            "is_blocked": request.query_params.get("is_blocked") or "false",
             "is_active": request.query_params.get("is_active") or "any",
-            "is_complete": request.query_params.get("is_complete") or "any",
+            "is_complete": request.query_params.get("is_complete") or "true",
             "gender": request.query_params.get("gender") or "any",
             "looking_for": request.query_params.get("looking_for") or "any",
             "language": request.query_params.get("language") or "any",

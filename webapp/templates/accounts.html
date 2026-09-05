@@ -6,8 +6,41 @@
 <style>
   .wrap { max-width: 1200px; }
   .table-scroll { overflow-x: auto; }
-  .filters label { min-width: 120px; }
-  .filters input[type="text"] { min-width: 220px; }
+  .filters { display: grid; gap: 1rem; }
+  .filter-search {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto;
+    gap: .75rem;
+    align-items: end;
+  }
+  .filter-groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(240px, 1fr));
+    gap: 1rem;
+  }
+  .filter-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    padding: .75rem;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg-accent);
+  }
+  .filter-group h3 {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: .9rem;
+  }
+  .filter-group label { min-width: 0; }
+  .filter-actions { display: flex; gap: .75rem; align-items: center; }
+  @media (max-width: 900px) {
+    .filter-groups { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .filter-search { grid-template-columns: 1fr; }
+    .filter-group { grid-template-columns: 1fr; }
+  }
   .meta { font-size: .85rem; color: var(--muted); }
   #users-map {
     height: 420px;
@@ -106,12 +139,21 @@
 
   <section class="panel">
     <h2>Все аккаунты</h2>
-    <p>По умолчанию без тестовых (фильтр «Тестовый»). Поиск по tg id, username, имени, городу, описанию, возрасту, полу, языку. Найдено: <strong>{{ count }}</strong> (до 500).</p>
+    <p>По умолчанию: без тестовых, без банов, только готовые анкеты. Найдено: <strong>{{ count }}</strong> (до 500).</p>
 
-    <form method="get" action="{{ url('/accounts') }}" class="row filters">
-      <label>Поиск
-        <input type="text" name="q" value="{{ f.q }}" placeholder="id, @user, имя, город…">
-      </label>
+    <form method="get" action="{{ url('/accounts') }}" class="filters">
+      <div class="filter-search">
+        <label>Поиск
+          <input type="text" name="q" value="{{ f.q }}" placeholder="id, @user, имя, город…">
+        </label>
+        <div class="filter-actions">
+          <button type="submit">Найти</button>
+          <a class="btn secondary" href="{{ url('/accounts') }}">Сброс</a>
+        </div>
+      </div>
+      <div class="filter-groups">
+        <div class="filter-group">
+          <h3>Статус</h3>
       <label>Тестовый
         <select name="is_test">
           <option value="any" {% if f.is_test == 'any' %}selected{% endif %}>любой</option>
@@ -140,6 +182,9 @@
           <option value="false" {% if f.is_complete == 'false' %}selected{% endif %}>нет</option>
         </select>
       </label>
+        </div>
+        <div class="filter-group">
+          <h3>Параметры анкеты</h3>
       <label>Пол
         <select name="gender">
           <option value="any" {% if f.gender == 'any' %}selected{% endif %}>любой</option>
@@ -169,8 +214,8 @@
           <option value="false" {% if f.has_premium == 'false' %}selected{% endif %}>нет</option>
         </select>
       </label>
-      <button type="submit">Найти</button>
-      <a class="btn secondary" href="{{ url('/accounts') }}">Сброс</a>
+        </div>
+      </div>
     </form>
   </section>
 
