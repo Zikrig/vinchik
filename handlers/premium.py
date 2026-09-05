@@ -19,6 +19,7 @@ from services.premium import (
     attach_receipt,
     create_order,
     get_order_with_plan,
+    get_plan,
     list_active_plans,
     list_user_orders,
 )
@@ -115,13 +116,23 @@ async def _send_premium_menu(message, session: AsyncSession, user) -> None:
 
 
 async def _notify_admins_receipt(
-    bot: Bot, user, order: PremiumOrder, kind: str, file_id: str
+    bot: Bot,
+    session: AsyncSession,
+    user,
+    order: PremiumOrder,
+    kind: str,
+    file_id: str,
 ) -> None:
     uname = f"@{user.username}" if user.username else "—"
+    plan = await get_plan(session, order.plan_id)
+    plan_line = html.escape(plan.title) if plan else "—"
+    amount_line = html.escape(plan.price_text) if plan else "—"
     admin_text = (
         f"💳 Чек по оплате\n"
         f"Заявка #{order.id}\n"
-        f"user: {user.tg_id} {uname}"
+        f"user: {user.tg_id} {html.escape(uname)}\n"
+        f"Тариф: {plan_line}\n"
+        f"Сумма: {amount_line}"
     )
     admin_kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -413,7 +424,7 @@ async def _accept_receipt(
         t("premium_paid_thanks", user.language, order_id=order.id),
         reply_markup=main_menu_kb(user.language),
     )
-    await _notify_admins_receipt(bot, user, order, kind, file_id)
+    await _notify_admins_receipt(bot, session, user, order, kind, file_id)
 
 
 @router.callback_query(F.data == "prem:back")

@@ -415,11 +415,15 @@ async def _render_order(
         )
     index = max(0, min(index, len(pending) - 1))
     order = pending[index]
+    plan = await get_plan(session, order.plan_id)
+    plan_title = html.escape(plan.title) if plan else f"#{order.plan_id}"
+    amount = html.escape(plan.price_text) if plan else "—"
     text = (
         f"Заявка {index + 1}/{len(pending)}\n\n"
         f"#{order.id}\n"
         f"user: {order.user_id}\n"
-        f"plan: {order.plan_id}\n"
+        f"тариф: {plan_title}\n"
+        f"сумма: {amount}\n"
         f"чек: {'есть' if order.receipt_file_id else 'нет'}\n"
         f"создана: {_fmt_dt(order.created_at)}"
     )
