@@ -131,6 +131,8 @@ TEXTS = {
     "likes_mutual_no_username": (
         "Взаимная симпатия с {name}, но у человека нет @username в Telegram."
     ),
+    "likes_contact": '<a href="https://t.me/{username}">{name}</a>',
+    "likes_contact_no_username": "{name}",
     "ask_message": (
         "Отправь одно сообщение этому человеку:\n"
         "✉️ текст, 📹 кружок или 🎤 голосовое."

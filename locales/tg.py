@@ -131,6 +131,8 @@ TEXTS = {
     "likes_mutual_no_username": (
         "Симпатияи мутақобила бо {name}, аммо корбар @username надорад."
     ),
+    "likes_contact": '<a href="https://t.me/{username}">{name}</a>',
+    "likes_contact_no_username": "{name}",
     "ask_message": (
         "Ба ин шахс як паём фиристед:\n"
         "✉️ матн, 📹 доира ё 🎤 овоз."

@@ -34,7 +34,6 @@ from services.media import as_photo_input, media_photos_for_profile, profile_pho
 from services.likes import (
     deliver_like_media,
     empty_message_payload,
-    format_likes_list,
     list_unseen_likers,
     mark_like_seen,
     mark_likes_seen,
@@ -115,11 +114,73 @@ async def _send_profile_card(
     if media:
         try:
             await dest.send_media_group(chat_id, media)
-            await dest.send_message(chat_id, t("browse_hint", lang), reply_markup=kb)
+            if kb is not None:
+                await dest.send_message(chat_id, t("browse_hint", lang), reply_markup=kb)
             return
         except TelegramBadRequest:
             pass
     await dest.send_message(chat_id, caption, reply_markup=kb)
+
+
+def _liker_extra_caption(like, lang: str) -> str:
+    payload = like.message_payload if isinstance(like.message_payload, dict) else {}
+    msg_text = payload_text(payload) or (like.message_text or "").strip()
+    extra: list[str] = []
+    if msg_text:
+        extra.append(
+            t(
+                "likes_list_message",
+                lang,
+                text=html.escape(msg_text.replace('"', "'")),
+            )
+        )
+    if isinstance(payload, dict) and payload.get("voice_file_id"):
+        extra.append(t("likes_list_voice", lang))
+    if isinstance(payload, dict) and payload.get("video_note_file_id"):
+        extra.append(t("likes_list_video_note", lang))
+    return "\n".join(extra)
+
+
+async def _send_contact_link(
+    dest: Bot,
+    chat_id: int,
+    other: User,
+    lang: str,
+    *,
+    profile=None,
+    reply_markup=None,
+    mutual: bool = True,
+) -> None:
+    card = profile if profile is not None else other.profile
+    name = html.escape((card.name if card else None) or "—")
+    if other.username:
+        key = "likes_mutual" if mutual else "likes_contact"
+        await dest.send_message(
+            chat_id,
+            t(key, lang, name=name, username=other.username),
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+            reply_markup=reply_markup,
+        )
+        return
+    key = "likes_mutual_no_username" if mutual else "likes_contact_no_username"
+    await dest.send_message(
+        chat_id,
+        t(key, lang, name=name),
+        parse_mode="HTML",
+        reply_markup=reply_markup,
+    )
+
+
+async def _send_match_profile_then_link(
+    dest: Bot, chat_id: int, other: User, lang: str, *, reply_markup=None
+) -> None:
+    """Profile card first, then the t.me contact line."""
+    profile = other.profile
+    if profile is not None:
+        caption = profile_caption(profile, user=other, lang=lang)
+        await _send_profile_card(dest, chat_id, profile, caption, None, lang)
+    await _send_contact_link(dest, chat_id, other, lang, reply_markup=reply_markup)
 
 
 async def start_browse(
@@ -291,17 +352,9 @@ async def start_likes_inbox(
         await dest.send_message(chat_id, t("likes_list_title", lang))
 
     caption = profile_caption(profile, user=liker, lang=lang)
-    payload = like.message_payload if isinstance(like.message_payload, dict) else {}
-    msg_text = payload_text(payload) or (like.message_text or "").strip()
-    if msg_text:
-        caption = (
-            f"{caption}\n\n"
-            f"{t('likes_list_message', lang, text=html.escape(msg_text.replace(chr(34), chr(39))))}"
-        )
-    if isinstance(payload, dict) and payload.get("voice_file_id"):
-        caption = f"{caption}\n{t('likes_list_voice', lang)}"
-    if isinstance(payload, dict) and payload.get("video_note_file_id"):
-        caption = f"{caption}\n{t('likes_list_video_note', lang)}"
+    extra = _liker_extra_caption(like, lang)
+    if extra:
+        caption = f"{caption}\n\n{extra}"
 
     kb = browse_reply_kb(lang)
     await _send_profile_card(dest, chat_id, profile, caption, kb, lang)
@@ -435,27 +488,7 @@ async def _rate_from_message(
         if in_likes_inbox:
             other = await load_user(session, int(target_id))
             if other is not None:
-                name = html.escape(
-                    (other.profile.name if other.profile else None) or "—"
-                )
-                if other.username:
-                    await bot.send_message(
-                        user.tg_id,
-                        t(
-                            "likes_mutual",
-                            lang,
-                            name=name,
-                            username=other.username,
-                        ),
-                        parse_mode="HTML",
-                        disable_web_page_preview=True,
-                    )
-                else:
-                    await bot.send_message(
-                        user.tg_id,
-                        t("likes_mutual_no_username", lang, name=name),
-                        parse_mode="HTML",
-                    )
+                await _send_match_profile_then_link(bot, user.tg_id, other, lang)
             else:
                 await bot.send_message(user.tg_id, t("like_sent", lang))
         else:
@@ -764,16 +797,32 @@ async def cb_view_likes(
     except Exception:
         pass
     if is_premium(user):
+        lang = user.language or "ru"
         rows = await list_unseen_likers(session, user.tg_id)
-        text = format_likes_list(rows, user.language or "ru")
-        likes = [like for _, _, like in rows]
-        await message.answer(
-            text,
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-            reply_markup=main_menu_kb(user.language or "ru"),
-        )
-        for like in likes:
+        if not rows:
+            await message.answer(
+                t("likes_list_empty", lang), reply_markup=main_menu_kb(lang)
+            )
+            await mark_likes_seen(session, user.tg_id)
+            return
+        await message.answer(t("likes_list_title", lang))
+        last = len(rows) - 1
+        for i, (liker, profile, like) in enumerate(rows):
+            caption = profile_caption(profile, user=liker, lang=lang)
+            extra = _liker_extra_caption(like, lang)
+            if extra:
+                caption = f"{caption}\n\n{extra}"
+            await _send_profile_card(bot, user.tg_id, profile, caption, None, lang)
+            link_kb = main_menu_kb(lang) if i == last else None
+            await _send_contact_link(
+                bot,
+                user.tg_id,
+                liker,
+                lang,
+                profile=profile,
+                reply_markup=link_kb,
+                mutual=False,
+            )
             await deliver_like_media(bot, user.tg_id, like)
         await mark_likes_seen(session, user.tg_id)
         return
