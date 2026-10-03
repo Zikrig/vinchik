@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}База — Dilino Admin{% endblock %}
+{% block body %}
+{% set nav = '' %}
+{% set brand_suffix = 'База' %}
+{% include "_admin_topbar.html" %}
+<div class="wrap">
+  <section class="panel">
+    <h2 class="panel-title">Дамп базы</h2>
+    <p class="hint">Файл — это Postgres. Каталог <code>data</code> на диске в него не входит. Фото анкет внутри базы — это file_id Telegram.</p>
+    {% if flash == 'restored' %}<p class="flash-ok">База заменена. Если бот был остановлен — запусти его снова.</p>{% endif %}
+    {% if error %}<p class="err">{{ error }}</p>{% endif %}
+    <p><a class="btn" href="{{ url('/archive/dump') }}">Скачать дамп</a></p>
+  </section>
+  <section class="panel">
+    <h2 class="panel-title">Заменить базу</h2>
+    <p class="hint">Файл с этой страницы подменяет текущие таблицы. Перед загрузкой останови бота: <code>docker compose stop bot</code>. После замены: <code>docker compose start bot</code>.</p>
+    <form method="post" action="{{ url('/archive/restore') }}" enctype="multipart/form-data">
+      <label>Файл .sql.gz
+        <input type="file" name="dump" accept=".sql,.gz,.sql.gz,application/gzip" required>
+      </label>
+      <label>Чтобы заменить базу, введи ЗАМЕНИТЬ
+        <input type="text" name="confirm" autocomplete="off" required>
+      </label>
+      <button type="submit" class="danger">Заменить базу</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

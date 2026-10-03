@@ -10,6 +10,7 @@ from pathlib import Path
 from aiogram.exceptions import TelegramAPIError
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from starlette.background import BackgroundTask
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from redis.asyncio import Redis
@@ -83,6 +84,14 @@ from services.channels import (
     delete_channel as remove_required_channel,
     resolve_channel_ref,
     toggle_channel as flip_required_channel,
+)
+from services.db_archive import (
+    ARCHIVE_PATH,
+    ArchiveError,
+    create_dump,
+    dump_filename,
+    restore_dump,
+    save_upload,
 )
 from services.settings_service import (
     MAX_DISTANCE_KM,
@@ -363,21 +372,33 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    def _archive_next(raw: str | None) -> str:
+        return ARCHIVE_PATH if (raw or "") == ARCHIVE_PATH else ""
+
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(request: Request):
+        nxt = _archive_next(request.query_params.get("next"))
         if is_logged_in(request):
-            return RedirectResponse(settings.abs_path("/"), status_code=303)
+            return RedirectResponse(settings.abs_path(nxt or "/"), status_code=303)
         return TEMPLATES.TemplateResponse(
-            request, "login.html", {"error": None}
+            request, "login.html", {"error": None, "next_path": nxt}
         )
 
     @app.post("/login")
-    async def login(request: Request, password: str = Form(...)):
+    async def login(
+        request: Request,
+        password: str = Form(...),
+        next: str = Form(""),
+    ):
+        nxt = _archive_next(next)
         if await _login_is_limited(request):
             return TEMPLATES.TemplateResponse(
                 request,
                 "login.html",
-                {"error": "Слишком много попыток. Попробуйте через 15 минут."},
+                {
+                    "error": "Слишком много попыток. Попробуйте через 15 минут.",
+                    "next_path": nxt,
+                },
                 status_code=429,
             )
         # compare_digest rejects non-ASCII str — compare the encoded forms.
@@ -387,11 +408,11 @@ def create_app() -> FastAPI:
             return TEMPLATES.TemplateResponse(
                 request,
                 "login.html",
-                {"error": "Неверный пароль"},
+                {"error": "Неверный пароль", "next_path": nxt},
                 status_code=401,
             )
         await _clear_login_failures(request)
-        resp = RedirectResponse(settings.abs_path("/"), status_code=303)
+        resp = RedirectResponse(settings.abs_path(nxt or "/"), status_code=303)
         forwarded_proto = request.headers.get("x-forwarded-proto", "")
         cookie_secure = request.url.scheme == "https" or forwarded_proto == "https"
         resp.set_cookie(
@@ -1530,6 +1551,83 @@ def create_app() -> FastAPI:
             n=n,
             count=0,
             message=f"Удалено тестовых: {n}.",
+        )
+
+    def _archive_auth(request: Request):
+        if is_logged_in(request):
+            return None
+        return RedirectResponse(
+            settings.abs_path(f"/login?next={ARCHIVE_PATH}"),
+            status_code=303,
+        )
+
+    async def _archive_html(request: Request, *, error: str | None = None, flash: str | None = None):
+        async with async_session_maker() as session:
+            try:
+                stats = await count_profiles_by_gender(session)
+            except Exception:
+                stats = {"male": 0, "female": 0, "total": 0}
+            return TEMPLATES.TemplateResponse(
+                request,
+                "archive.html",
+                {
+                    "gender_stats": stats,
+                    "error": error,
+                    "flash": flash if flash is not None else request.query_params.get("flash"),
+                },
+            )
+
+    @app.get(ARCHIVE_PATH, response_class=HTMLResponse, include_in_schema=False)
+    async def archive_page(request: Request):
+        if (redir := _archive_auth(request)) is not None:
+            return redir
+        return await _archive_html(request)
+
+    @app.get(f"{ARCHIVE_PATH}/dump", include_in_schema=False)
+    async def archive_dump(request: Request):
+        if (redir := _archive_auth(request)) is not None:
+            return redir
+        try:
+            path = await create_dump()
+        except ArchiveError as exc:
+            return await _archive_html(request, error=str(exc))
+        return FileResponse(
+            path,
+            media_type="application/gzip",
+            filename=dump_filename(),
+            background=BackgroundTask(path.unlink, missing_ok=True),
+        )
+
+    @app.post(f"{ARCHIVE_PATH}/restore", include_in_schema=False)
+    async def archive_restore(
+        request: Request,
+        dump: UploadFile = File(...),
+        confirm: str = Form(""),
+    ):
+        if (redir := _archive_auth(request)) is not None:
+            return redir
+        if confirm.strip() != "ЗАМЕНИТЬ":
+            return await _archive_html(request, error="Чтобы заменить базу, введи ЗАМЕНИТЬ")
+
+        async def chunks():
+            while True:
+                block = await dump.read(1024 * 1024)
+                if not block:
+                    break
+                yield block
+
+        path = None
+        try:
+            path = await save_upload(chunks())
+            await restore_dump(path)
+        except ArchiveError as exc:
+            return await _archive_html(request, error=str(exc))
+        finally:
+            if path is not None:
+                path.unlink(missing_ok=True)
+        return RedirectResponse(
+            settings.abs_path(f"{ARCHIVE_PATH}?flash=restored"),
+            status_code=303,
         )
 
     return app
