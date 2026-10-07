@@ -30,6 +30,7 @@ from services.admin_tools import (
     clear_test_users,
     count_test_users,
     create_test_users,
+    delete_users_by_ids,
     get_user_geo,
     set_test_users_visible,
     set_user_geo,
@@ -76,7 +77,7 @@ from services.premium import (
     toggle_plan,
     update_plan,
 )
-from services.reports import ban_user, list_blocked_users, unban_user
+from services.reports import ban_user, ban_users, list_blocked_users, unban_user
 from services.moderation import clear_suspicious, list_suspicious_users
 from services.channels import (
     ChannelResolveError,
@@ -692,6 +693,70 @@ def create_app() -> FastAPI:
                 "test_users_visible": await are_test_users_visible(session),
                 "flash": request.query_params.get("flash"),
             },
+        )
+
+    @app.post("/accounts/bulk")
+    async def accounts_bulk(
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+        bulk_action: str = Form(""),
+        tg_id: list[int] = Form(default=[]),
+    ):
+        if (redir := require_auth(request)) is not None:
+            return redir
+        action = (bulk_action or "").strip()
+        if action not in {"ban", "delete"}:
+            return err_response(
+                request,
+                settings.abs_path("/accounts"),
+                error="bad_action",
+                message="Неизвестное действие.",
+            )
+        seen: list[int] = []
+        known: set[int] = set()
+        for raw in tg_id:
+            if raw in known:
+                continue
+            known.add(raw)
+            seen.append(raw)
+        if not seen:
+            return err_response(
+                request,
+                settings.abs_path("/accounts"),
+                error="empty",
+                message="Ничего не выбрано.",
+            )
+        if len(seen) > 500:
+            return err_response(
+                request,
+                settings.abs_path("/accounts"),
+                error="too_many",
+                message="За раз можно выбрать не больше 500 аккаунтов.",
+            )
+        admins = [item for item in seen if item in settings.admin_id_set]
+        ids = [item for item in seen if item not in settings.admin_id_set]
+        if not ids:
+            return err_response(
+                request,
+                settings.abs_path("/accounts"),
+                error="admins",
+                message="Админов из этого списка трогать нельзя.",
+            )
+        if action == "ban":
+            done = await ban_users(session, ids)
+            verb = "Забанено"
+        else:
+            done = await delete_users_by_ids(session, ids)
+            verb = "Удалено"
+        note = f" Админов пропущено: {len(admins)}." if admins else ""
+        return ok_response(
+            request,
+            settings.abs_path("/accounts"),
+            action=action,
+            ids=done,
+            n=len(done),
+            count=await count_test_users(session),
+            message=f"{verb}: {len(done)}.{note}",
         )
 
     @app.get("/accounts/map-markers")

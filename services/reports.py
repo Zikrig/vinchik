@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -141,6 +141,29 @@ async def unban_user(session: AsyncSession, user_id: int) -> User | None:
         user.profile.is_active = True
     await session.commit()
     return user
+
+
+async def ban_users(session: AsyncSession, user_ids: list[int]) -> list[int]:
+    """Block users and hide their profiles. Returns ids that exist."""
+    if not user_ids:
+        return []
+    result = await session.execute(select(User).where(User.tg_id.in_(user_ids)))
+    users = list(result.scalars().all())
+    if not users:
+        return []
+    now = datetime.now(UTC)
+    changed: list[int] = []
+    for user in users:
+        if not user.is_blocked:
+            user.is_blocked = True
+            user.blocked_at = now
+            changed.append(int(user.tg_id))
+    if changed:
+        await session.execute(
+            update(Profile).where(Profile.user_id.in_(changed)).values(is_active=False)
+        )
+    await session.commit()
+    return [int(user.tg_id) for user in users]
 
 
 async def ban_user(session: AsyncSession, user_id: int) -> User | None:

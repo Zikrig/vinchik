@@ -74,6 +74,17 @@
   tr.clickable:hover td { background: #f0f7f3; }
   tr.clickable a.row-link { color: inherit; text-decoration: none; font-weight: 600; }
   tr.clickable a.row-link:hover { text-decoration: underline; color: var(--brand); }
+  .accounts-bulk {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+    align-items: center;
+    margin-bottom: .85rem;
+  }
+  .accounts-check { width: 2.2rem; text-align: center; }
+  .accounts-check input { width: 1.05rem; height: 1.05rem; cursor: pointer; }
+  #accounts-bulk button:disabled { opacity: .45; cursor: default; }
+  #accounts-bulk button.danger:hover { background: var(--danger); }
 </style>
 {% endblock %}
 {% block body %}
@@ -223,9 +234,21 @@
     {% if not rows %}
     <p>Никого не найдено.</p>
     {% else %}
+    <form id="accounts-bulk" method="post" action="{{ url('/accounts/bulk') }}" class="js-ajax"
+          data-ajax="accounts-bulk">
+      <input type="hidden" name="bulk_action" id="accounts-bulk-action" value="">
+      <div class="accounts-bulk">
+        <span class="meta" id="accounts-selected">Выбрано: 0</span>
+        <button type="submit" class="secondary" data-bulk="ban" disabled>Забанить</button>
+        <button type="submit" class="danger" data-bulk="delete" disabled>Удалить</button>
+      </div>
+    </form>
     <table>
       <thead>
         <tr>
+          <th class="accounts-check">
+            <input type="checkbox" id="accounts-select-all" title="Выделить все" aria-label="Выделить все">
+          </th>
           <th>Фото</th>
           <th>Пользователь</th>
           <th>Анкета</th>
@@ -236,6 +259,10 @@
       <tbody>
         {% for u, p in rows %}
         <tr class="clickable" data-href="{{ url('/accounts/' ~ u.tg_id) }}">
+          <td class="accounts-check">
+            <input type="checkbox" class="js-account-check" name="tg_id" value="{{ u.tg_id }}"
+                   form="accounts-bulk" aria-label="Выбрать {{ u.tg_id }}">
+          </td>
           <td>
             {% if p and p.photo_file_id %}
             <img src="{{ url('/users/' ~ u.tg_id ~ '/photo') }}" alt="" width="64" height="64"
@@ -464,6 +491,105 @@
         window.location = tr.getAttribute("data-href");
       });
     });
+
+    const bulkForm = document.getElementById("accounts-bulk");
+    const selectAll = document.getElementById("accounts-select-all");
+    const selectedLabel = document.getElementById("accounts-selected");
+    const hideBlocked = {{ (f.is_blocked == 'false') | tojson }};
+
+    function accountChecks() {
+      return Array.from(document.querySelectorAll(".js-account-check"));
+    }
+
+    function syncBulk() {
+      if (!bulkForm) return;
+      const checks = accountChecks();
+      const picked = checks.filter(function (cb) { return cb.checked; }).length;
+      if (selectedLabel) selectedLabel.textContent = "Выбрано: " + picked;
+      bulkForm.querySelectorAll("button[data-bulk]").forEach(function (btn) {
+        btn.disabled = picked === 0;
+      });
+      if (selectAll) {
+        selectAll.checked = checks.length > 0 && picked === checks.length;
+        selectAll.indeterminate = picked > 0 && picked < checks.length;
+      }
+    }
+
+    if (selectAll) {
+      selectAll.addEventListener("change", function () {
+        accountChecks().forEach(function (cb) { cb.checked = selectAll.checked; });
+        syncBulk();
+      });
+    }
+    document.querySelectorAll(".js-account-check").forEach(function (cb) {
+      cb.addEventListener("change", syncBulk);
+    });
+    if (bulkForm) {
+      bulkForm.querySelectorAll("button[data-bulk]").forEach(function (btn) {
+        btn.addEventListener("click", function (e) {
+          const n = accountChecks().filter(function (cb) { return cb.checked; }).length;
+          if (!n) {
+            e.preventDefault();
+            window.showToast("Ничего не выбрано.", false);
+            return;
+          }
+          const actionInput = document.getElementById("accounts-bulk-action");
+          if (actionInput) actionInput.value = btn.getAttribute("data-bulk") || "";
+          bulkForm.dataset.confirm = btn.getAttribute("data-bulk") === "delete"
+            ? "Удалить выбранные аккаунты (" + n + ")? Это нельзя отменить: анкеты, лайки и жалобы этих людей тоже удалятся."
+            : "Забанить выбранные аккаунты (" + n + ")? Они будут скрыты из ленты.";
+        });
+      });
+      bulkForm._ajaxAfter = function (data) {
+        const ids = new Set((data.ids || []).map(String));
+        accountChecks().forEach(function (cb) {
+          if (!ids.has(String(cb.value))) return;
+          const tr = cb.closest("tr");
+          if (!tr) return;
+          if (data.action === "delete" || (data.action === "ban" && hideBlocked)) {
+            tr.remove();
+            return;
+          }
+          if (data.action === "ban") {
+            cb.checked = false;
+            const flags = tr.children[4];
+            if (flags && !flags.querySelector(".tag.danger")) {
+              flags.insertAdjacentHTML("afterbegin", '<span class="tag danger">🚫 ban</span> ');
+            }
+            if (flags) {
+              flags.querySelectorAll("span.tag").forEach(function (tag) {
+                if (tag.textContent.indexOf("active") !== -1) {
+                  tag.className = "tag";
+                  tag.textContent = "🙈 скрыт";
+                }
+              });
+            }
+          }
+        });
+        if (typeof data.count === "number") {
+          document.querySelectorAll("[data-test-count]").forEach(function (el) {
+            el.textContent = String(data.count);
+          });
+        }
+        if (data.action === "delete" && typeof window.reloadUsersMap === "function") {
+          window.reloadUsersMap();
+        }
+        const body = document.querySelector(".table-scroll tbody");
+        if (body && !body.querySelector("tr")) {
+          const table = body.closest("table");
+          if (table) table.remove();
+          if (bulkForm) bulkForm.remove();
+          const panel = document.querySelector(".table-scroll");
+          if (panel && !panel.querySelector("p")) {
+            const empty = document.createElement("p");
+            empty.textContent = "Никого не найдено.";
+            panel.appendChild(empty);
+          }
+        }
+        setTimeout(syncBulk, 0);
+      };
+    }
+    syncBulk();
   })();
 </script>
 {% endblock %}

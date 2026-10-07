@@ -9,7 +9,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Точка входа бота | `bot.py` |
 | Веб-админка | `web.py`, `webapp/`; шапка/навигация — `templates/_admin_topbar.html`, `_admin_nav.html`, `_switch_compact.html`; число+ползунок — `_field_slider.html` |
 | Дамп и замена Postgres (страница без пункта в меню и без ссылок из бота) | `GET /archive`, `services/db_archive.py`; файл `.sql.gz`; замена просит ввести `ЗАМЕНИТЬ`; заливка кусками по 256 КБ (`POST /archive/restore`) |
-| Список аккаунтов (поиск/фильтры; по умолч. `is_test=false`, `is_blocked=false`, `is_complete=true`) | `webapp/` → `/accounts`, `services/accounts.py` |
+| Список аккаунтов (поиск/фильтры; по умолч. `is_test=false`, `is_blocked=false`, `is_complete=true`; галочки + `POST /accounts/bulk` забанить/удалить, админы из `ADMIN_IDS` пропускаются) | `webapp/` → `/accounts`, `services/accounts.py` |
 | Карточка аккаунта (лайки∥премиум в ряд; лайки: реакции/отправленные/лимиты за сегодня UTC) | `/accounts/{tg_id}`; премиум активен только если `premium_until > now` (`is_premium`); снять → `2004-01-01` |
 | Тарифы Премиум (CRUD) | `services/premium.py`; веб `/premium`; бот `/admin` → 💎 Тарифы |
 | Баны / подозрительные | `/bans`; `is_blocked` + `is_suspicious` + `suspicious_reason`; сообщения 💌 |

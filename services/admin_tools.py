@@ -374,24 +374,35 @@ async def set_test_users_visible(session: AsyncSession, visible: bool) -> int:
     await set_setting(session, "test_users_visible", "true" if visible else "false")
     return len(profiles)
 
+async def delete_users_by_ids(session: AsyncSession, ids: list[int]) -> list[int]:
+    """Delete users and rows that reference them. Returns ids that existed."""
+    if not ids:
+        return []
+    existing = await session.execute(select(User.tg_id).where(User.tg_id.in_(ids)))
+    found = [int(x) for x in existing.scalars().all()]
+    if not found:
+        return []
+    from database.models import DailyLikeStat, Like, PremiumOrder, Report
+
+    await session.execute(delete(Like).where(Like.from_user_id.in_(found)))
+    await session.execute(delete(Like).where(Like.to_user_id.in_(found)))
+    await session.execute(delete(Report).where(Report.from_user_id.in_(found)))
+    await session.execute(delete(Report).where(Report.to_user_id.in_(found)))
+    await session.execute(delete(DailyLikeStat).where(DailyLikeStat.user_id.in_(found)))
+    await session.execute(delete(PremiumOrder).where(PremiumOrder.user_id.in_(found)))
+    await session.execute(delete(Profile).where(Profile.user_id.in_(found)))
+    await session.execute(delete(User).where(User.tg_id.in_(found)))
+    await session.commit()
+    return found
+
+
 async def clear_test_users(session: AsyncSession) -> int:
     result = await session.execute(select(User.tg_id).where(User.is_test.is_(True)))
     ids = list(result.scalars().all())
     if not ids:
         return 0
-    # profiles cascade from users; likes/reports may reference — delete dependents first
-    from database.models import DailyLikeStat, Like, PremiumOrder, Report
-
-    await session.execute(delete(Like).where(Like.from_user_id.in_(ids)))
-    await session.execute(delete(Like).where(Like.to_user_id.in_(ids)))
-    await session.execute(delete(Report).where(Report.from_user_id.in_(ids)))
-    await session.execute(delete(Report).where(Report.to_user_id.in_(ids)))
-    await session.execute(delete(DailyLikeStat).where(DailyLikeStat.user_id.in_(ids)))
-    await session.execute(delete(PremiumOrder).where(PremiumOrder.user_id.in_(ids)))
-    await session.execute(delete(Profile).where(Profile.user_id.in_(ids)))
-    await session.execute(delete(User).where(User.tg_id.in_(ids)))
-    await session.commit()
-    return len(ids)
+    deleted = await delete_users_by_ids(session, ids)
+    return len(deleted)
 
 
 async def get_user_geo(session: AsyncSession, tg_id: int) -> dict[str, float | str | None]:
