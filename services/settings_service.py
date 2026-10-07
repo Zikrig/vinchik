@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from time import monotonic
 
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
-from database.models import PremiumPlan, Setting
+from database.models import PremiumPlan, Setting, User
 
 
 DEFAULTS = {
@@ -23,8 +23,8 @@ DEFAULTS = {
     # Empty photo = fallback to locale welcome texts on /start.
     "welcome_photo_file_id": "",
     "welcome_text": (
-        "👋 Привет! Это бот для знакомств в Таджикистане.\n"
-        "Салом! Ин бот барои шиносоӣ дар Тоҷикистон аст."
+        "👋 Привет! Это Юнона — бот для знакомств.\n"
+        "Hi! This is Yunona, a dating bot."
     ),
 }
 
@@ -48,6 +48,19 @@ async def ensure_defaults(session: AsyncSession) -> None:
         .values([{"key": key, "value": value} for key, value in DEFAULTS.items()])
         .on_conflict_do_nothing(index_elements=[Setting.key])
     )
+    await session.execute(
+        update(Setting)
+        .where(
+            Setting.key == "welcome_text",
+            Setting.value
+            == (
+                "👋 Привет! Это бот для знакомств в Таджикистане.\n"
+                "Салом! Ин бот барои шиносоӣ дар Тоҷикистон аст."
+            ),
+        )
+        .values(value=DEFAULTS["welcome_text"])
+    )
+    await session.execute(update(User).where(User.language == "tg").values(language="ru"))
     result = await session.execute(select(PremiumPlan))
     if not result.scalars().first():
         session.add_all(

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import Settlement, SettlementAlias
 from services.settlement_data import (
+    EXCLUDED_SETTLEMENT_COUNTRIES,
     SETTLEMENTS_DUMP,
     _NOT_FOR_DISPLAY,
     is_cyrillic_name,
@@ -63,7 +64,9 @@ async def import_settlements_from_dump(
             norm = normalize_name(name)
             if len(norm) < 2:
                 continue
-            country = (row.get("country") or "")[:2]
+            country = (row.get("country") or "")[:2].upper()
+            if country in EXCLUDED_SETTLEMENT_COUNTRIES:
+                continue
             admin1 = (row.get("admin1") or "")[:128]
             is_primary = (row.get("is_primary") or "0").strip() == "1"
             try:
@@ -185,7 +188,25 @@ async def import_settlements_from_dump(
     return len(aliases)
 
 
+async def drop_excluded_settlements(session: AsyncSession) -> int:
+    """Remove places that must not stay loaded (TJ rows from an older import)."""
+    excluded = tuple(EXCLUDED_SETTLEMENT_COUNTRIES)
+    id_query = select(Settlement.id).where(func.upper(Settlement.country_code).in_(excluded))
+    await session.execute(
+        delete(SettlementAlias).where(SettlementAlias.settlement_id.in_(id_query))
+    )
+    result = await session.execute(
+        delete(Settlement).where(func.upper(Settlement.country_code).in_(excluded))
+    )
+    await session.commit()
+    removed = int(result.rowcount or 0)
+    if removed:
+        logger.info("dropped excluded settlements places=%s countries=%s", removed, excluded)
+    return removed
+
+
 async def ensure_settlements_loaded(session: AsyncSession) -> None:
+    await drop_excluded_settlements(session)
     if await settlements_count(session) > 0:
         return
     if not SETTLEMENTS_DUMP.is_file():

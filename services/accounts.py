@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import delete
 
 from database.models import DailyLikeStat, Gender, Like, LookingFor, Profile, User
+from locales.i18n import SUPPORTED_LANGS
 from services.media import set_profile_photos
 from services.users import load_user_with_profile
 
@@ -98,7 +99,7 @@ async def search_accounts(
         filters.append(Profile.looking_for == LookingFor(looking_for))
     elif looking_for == "all":
         filters.append(Profile.looking_for == LookingFor.any)
-    if language in {"ru", "tg"}:
+    if language in SUPPORTED_LANGS:
         filters.append(User.language == language)
     if has_premium is not None:
         now = datetime.now(UTC)
@@ -440,7 +441,7 @@ async def update_account_profile(
         p.looking_for = LookingFor(looking_for)
     # empty / omitted — keep current (cannot clear via admin)
 
-    if language in {"ru", "tg"}:
+    if language in SUPPORTED_LANGS:
         user.language = language
         user.language_chosen = True
 

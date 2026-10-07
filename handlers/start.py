@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from handlers.common import callback_context, show_main_menu
 from keyboards.inline import language_kb
 from locales import t
+from locales.i18n import SUPPORTED_LANGS
 from services.media import as_photo_input
 from services.settings_service import get_welcome_post, welcome_post_configured
 from services.tracking_links import record_click
@@ -110,7 +111,7 @@ async def cmd_start(
 @router.callback_query(F.data.startswith("lang:"))
 async def on_language(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
     lang = (callback.data or "").split(":", 1)[1]
-    if lang not in {"ru", "tg"}:
+    if lang not in SUPPORTED_LANGS:
         await callback.answer()
         return
     ctx = await callback_context(callback, session)

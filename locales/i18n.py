@@ -1,8 +1,10 @@
-from locales import ru, tg
+from locales import en, ru
+
+SUPPORTED_LANGS = frozenset({"ru", "en"})
 
 _LOCALES = {
     "ru": ru.TEXTS,
-    "tg": tg.TEXTS,
+    "en": en.TEXTS,
 }
 
 

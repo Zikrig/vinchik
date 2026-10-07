@@ -4,7 +4,7 @@ Build portable settlements dump from GeoNames.
 Writes: data/settlements/settlements.csv.gz
 
 Sources:
-  - Full country dumps TJ + RU only (villages + towns, feature class P)
+  - Full country dump RU only (villages + towns, feature class P)
 
 Usage (on a machine with network):
   python scripts/build_settlements_dump.py
@@ -36,8 +36,8 @@ from services.settlement_data import (  # noqa: E402
 )
 
 GEONAMES = "https://download.geonames.org/export/dump"
-# Dating bot scope: Tajikistan + Russia only.
-COUNTRY_FILES = ("TJ", "RU")
+# Dating bot scope: Russia only. TJ stays out of Postgres even if an old dump has it.
+COUNTRY_FILES = ("RU",)
 
 # Populated places
 P_CODES = {
@@ -61,7 +61,7 @@ def _download_zip_text(name: str) -> str:
     with urlopen(url, timeout=600) as resp:
         data = resp.read()
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
-        # country file is TJ.txt / RU.txt
+        # country file is RU.txt
         members = [n for n in zf.namelist() if n.endswith(".txt") and "readme" not in n.lower()]
         if not members:
             raise RuntimeError(f"no txt in {name}.zip")
@@ -97,7 +97,7 @@ def _parse_places(raw: str) -> dict[int, dict]:
             population = int(parts[14] or 0)
         except ValueError:
             population = 0
-        if country not in {"TJ", "RU"}:
+        if country not in COUNTRY_FILES:
             continue
         if fclass != "P" or fcode not in P_CODES:
             continue

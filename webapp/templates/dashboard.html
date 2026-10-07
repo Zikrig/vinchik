@@ -98,7 +98,7 @@
         <div style="flex:1;min-width:240px">
           <label>Текст (подпись к фото, до 1024 символов)
             <textarea name="welcome_text" rows="5" maxlength="1024"
-                      placeholder="Можно на двух языках">{{ welcome_text }}</textarea>
+                      placeholder="Можно на русском и английском">{{ welcome_text }}</textarea>
           </label>
           <label style="margin-top:8px;display:block">Картинка (jpg/png/gif/webp, ≤5 МБ)
             <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp">
@@ -111,7 +111,7 @@
 
   <section class="panel" id="geo">
     <h2 class="panel-title">📍 Моя геолокация</h2>
-    <p>Координаты профиля админа для ленты. Без своих — подставляется Душанбе. Центр спавна тестовых задаётся кликом по карте на странице Аккаунты.</p>
+    <p>Координаты профиля админа для ленты. Если своих нет, подставляется точка по умолчанию. Центр спавна тестовых задаётся кликом по карте на странице Аккаунты.</p>
     {% if not admin_ids %}
     <p class="flash-err">В <code>ADMIN_IDS</code> никого нет.</p>
     {% else %}

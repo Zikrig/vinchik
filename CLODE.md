@@ -17,12 +17,12 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 | Карта пользователей (≤200, random sample + админы красным; клик = центр спавна тестов; reload после create/clear; тестовые на карте по умолч. скрыты, чекбокс / `?include_test=1`) | `/accounts` (Leaflet), `GET /accounts/map-markers`, `map_markers(include_test=)` |
 | Гео админа / тестовые юзеры | `services/admin_tools.py` (`create_test_users` + optional center_lat/lon), `services/media.py`; веб: тесты на `/accounts`, свитч видимости также в настройках дашборда |
 | Трекинг-ссылки (deep-link + клики) | `services/tracking_links.py`, `handlers/admin_links.py`, веб `/links`; код `?start=` — явный или латиница из названия (не random); модели `TrackingLink` / `TrackingClick` |
-| Справочник НП (текст+координаты) | `data/settlements/settlements.csv.gz` (**только TJ+RU**), `services/settlements*.py`, `scripts/build_settlements_dump.py` |
+| Справочник НП (текст+координаты) | `data/settlements/settlements.csv.gz` (**в Postgres только RU**; строки `TJ` в файле не импортируются и при старте удаляются), `services/settlements*.py`, `scripts/build_settlements_dump.py` |
 | Тестовое фото | `data/photos/men/`, `data/photos/women/` (по полу); fallback `data/test.png` |
 | Роутеры | `handlers/` |
 | Бизнес-логика | `services/` |
 | Модели БД | `database/models.py` |
-| Тексты UI | `locales/ru.py`, `locales/tg.py` (кнопка tg первой) |
+| Тексты UI | `locales/ru.py`, `locales/en.py` (кнопки: Русский, English) |
 | Клавиатуры | `keyboards/inline.py` |
 | Конфиг | `config/settings.py`, `.env` (`ADM_LINK` — URL веб-админки в тексте `/admin`) |
 | Нагрузочный тест / временные probes | `loadtest/`, `docker-compose.loadtest.yml`, `services/bot_factory.py`, `services/performance.py`, `middlewares/performance.py`; результаты/заметки — `ignored/loadtest/` |
@@ -31,7 +31,7 @@ Telegram dating bot (aiogram 3.29) + FastAPI admin. Postgres, Redis FSM.
 ## Инварианты
 
 - Кнопки пользователя — inline (кроме request_location и **reply-клавиатуры ленты** ❤️💌👎 / ⚠️⭐🚪).
-- Гео в анкете: GPS **или** текст → поиск по `settlements` (**только TJ+RU**). Алиасы (в т.ч. исторические) — только для поиска; в UI везде `display_name` (современное имя). Ранжирование: score → точное имя → population. Дамп `data/settlements/settlements.csv.gz`; после обновления: `docker compose exec bot python scripts/import_settlements.py`. Веб: `GET /settlements/search`.
+- Гео в анкете: GPS **или** текст → поиск по `settlements` (**только RU**; `TJ` не грузится). Алиасы (в т.ч. исторические) — только для поиска; в UI везде `display_name` (современное имя). Ранжирование: score → точное имя → population. Дамп `data/settlements/settlements.csv.gz`; после обновления: `docker compose exec bot python scripts/import_settlements.py`. Веб: `GET /settlements/search`.
 - Без нумерации на кнопках.
 - Лимит лайков: default 50, сутки **UTC**; у мужчин без Премиум при исчерпании **нельзя смотреть ленту**. Резерв слота + запись реакции — одна транзакция; реакции одного отправителя сериализуются блокировкой строки `users`.
 - Женщины и Премиум — без лимита.

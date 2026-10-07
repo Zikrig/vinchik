@@ -358,6 +358,9 @@ async def lifespan(app: FastAPI):
     await init_db()
     async with async_session_maker() as session:
         await ensure_defaults(session)
+        from services.settlements_import import drop_excluded_settlements
+
+        await drop_excluded_settlements(session)
     # One long-lived client instead of a fresh aiohttp session per request.
     app.state.bot = build_bot()
     try:

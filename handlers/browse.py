@@ -27,6 +27,7 @@ from keyboards.inline import (
     profile_enable_kb,
 )
 from locales import t
+from locales.i18n import SUPPORTED_LANGS
 from services.activity import touch_activity
 from services.browse import next_profile, profile_caption
 from services.channels import format_channels_lines, list_active_channels, user_subscribed_all
@@ -55,10 +56,10 @@ def _limit_promo_text(lang: str) -> str:
     return f"{t('limit_reached', lang)}\n\n{t('premium_benefits', lang)}"
 
 
-def _is_btn(text: str | None, key: str, lang: str) -> bool:
+def _is_btn(text: str | None, key: str, _lang: str) -> bool:
     if not text:
         return False
-    return text in {t(key, lang), t(key, "ru"), t(key, "tg")}
+    return text in {t(key, code) for code in SUPPORTED_LANGS}
 
 
 async def _say_limit(

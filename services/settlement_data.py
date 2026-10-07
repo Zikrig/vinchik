@@ -10,6 +10,8 @@ from pathlib import Path
 # Portable dump: copy data/settlements/ with the project to another server.
 SETTLEMENTS_DIR = Path(__file__).resolve().parents[1] / "data" / "settlements"
 SETTLEMENTS_DUMP = SETTLEMENTS_DIR / "settlements.csv.gz"
+# Present in the portable dump, but not imported into Postgres.
+EXCLUDED_SETTLEMENT_COUNTRIES = frozenset({"TJ"})
 
 # CSV columns in the dump (one row per searchable alias).
 # All alias rows are kept for SEARCH; only is_primary / pick_display_name

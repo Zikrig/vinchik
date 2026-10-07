@@ -10,8 +10,8 @@ def language_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text=t("lang_tg", "tg"), callback_data="lang:tg"),
                 InlineKeyboardButton(text=t("lang_ru", "ru"), callback_data="lang:ru"),
+                InlineKeyboardButton(text=t("lang_en", "en"), callback_data="lang:en"),
             ]
         ]
     )

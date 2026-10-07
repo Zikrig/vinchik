@@ -5,13 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database.models import Settlement, SettlementAlias
 from services.geo import haversine_km
-from services.settlement_data import normalize_name
+from services.settlement_data import EXCLUDED_SETTLEMENT_COUNTRIES, normalize_name
 
 
 @dataclass(frozen=True)
@@ -51,8 +51,12 @@ async def search_settlements(
     async def _fetch(where_clause, cap: int) -> list[SettlementAlias]:
         result = await session.execute(
             select(SettlementAlias)
+            .join(Settlement, Settlement.id == SettlementAlias.settlement_id)
             .options(selectinload(SettlementAlias.settlement))
-            .where(where_clause)
+            .where(
+                where_clause,
+                func.upper(Settlement.country_code).notin_(tuple(EXCLUDED_SETTLEMENT_COUNTRIES)),
+            )
             .limit(cap)
         )
         return list(result.scalars().all())
@@ -159,6 +163,7 @@ async def nearest_settlements(
         select(Settlement)
         .where(
             Settlement.id != exclude_id,
+            func.upper(Settlement.country_code).notin_(tuple(EXCLUDED_SETTLEMENT_COUNTRIES)),
             Settlement.lat.between(lat - dlat, lat + dlat),
             Settlement.lon.between(lon - dlon, lon + dlon),
         )

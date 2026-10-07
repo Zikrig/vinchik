@@ -299,7 +299,7 @@ async def create_test_users(
         user = User(
             tg_id=tg_id,
             username=f"test_{abs(tg_id)}",
-            language="tg",
+            language="ru",
             is_test=True,
             last_activity_at=datetime.now(UTC),
         )

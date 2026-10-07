@@ -1,4 +1,4 @@
-"""Patch population into existing settlements.csv.gz via GeoNames TJ + RU dumps."""
+"""Patch population into existing settlements.csv.gz via the GeoNames RU dump."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT))
 from services.settlement_data import SETTLEMENTS_DUMP  # noqa: E402
 
 GEONAMES = "https://download.geonames.org/export/dump"
-SOURCES = ("TJ", "RU")
+SOURCES = ("RU",)
 
 
 def _download_zip_text(name: str) -> str:
@@ -75,7 +75,7 @@ def main() -> None:
     with gzip.open(SETTLEMENTS_DUMP, "rt", encoding="utf-8", newline="") as f:
         for row in csv.DictReader(f):
             cc = (row.get("country") or "").upper()
-            if cc not in {"TJ", "RU"}:
+            if cc not in SOURCES:
                 skipped += 1
                 continue
             try:
