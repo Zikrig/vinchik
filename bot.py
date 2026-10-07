@@ -15,6 +15,7 @@ from middlewares.performance import PerformanceMiddleware
 from services.bot_factory import build_bot
 from services.reengage import reengage_loop
 from services.moderation import moderation_loop
+from services.subscriptions import poll_pending_payments, renew_due_subscriptions
 from services.performance import registry as performance_registry
 from services.settings_service import ensure_defaults
 
@@ -170,6 +171,23 @@ async def run_webhook(bot: Bot, dp: Dispatcher) -> None:
     await asyncio.Event().wait()
 
 
+async def subscription_loop(bot: Bot) -> None:
+    ticks = 0
+    while True:
+        try:
+            await poll_pending_payments(bot)
+        except Exception:
+            logger.exception("subscription payment poll")
+        # Renew less often than status checks.
+        if ticks % 15 == 0:
+            try:
+                await renew_due_subscriptions(bot)
+            except Exception:
+                logger.exception("subscription renew")
+        ticks += 1
+        await asyncio.sleep(60)
+
+
 async def main() -> None:
     await init_db()
     async with async_session_maker() as session:
@@ -182,6 +200,7 @@ async def main() -> None:
     dp = await build_dispatcher()
     _spawn_background(reengage_loop(bot), "reengage")
     _spawn_background(moderation_loop(), "moderation")
+    _spawn_background(subscription_loop(bot), "subscriptions")
 
     if settings.use_webhook:
         await run_webhook(bot, dp)

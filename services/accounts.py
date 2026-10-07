@@ -10,6 +10,7 @@ from sqlalchemy import delete
 
 from database.models import DailyLikeStat, Gender, Like, LookingFor, Profile, User
 from locales.i18n import SUPPORTED_LANGS
+from services.browse import visible_city
 from services.media import set_profile_photos
 from services.users import load_user_with_profile
 
@@ -191,7 +192,7 @@ async def map_markers(
                 "username": u.username,
                 "name": p.name,
                 "age": p.age,
-                "city": p.city_name,
+                "city": visible_city(p.city_name),
                 "lat": p.lat,
                 "lon": p.lon,
                 "is_admin": u.tg_id in admin_ids,

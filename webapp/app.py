@@ -1573,7 +1573,6 @@ def create_app() -> FastAPI:
             radius_km=radius_km,
             center_lat=lat,
             center_lon=lon,
-            city_name="Карта" if lat is not None else None,
         )
         total = await count_test_users(session)
         return ok_response(

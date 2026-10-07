@@ -23,7 +23,14 @@ from services.premium import (
     list_active_plans,
     list_user_orders,
 )
-from services.settings_service import get_payment_info
+from services.subscriptions import cancel_subscription, confirm_payment_id
+from services.yookassa_api import (
+    YooKassaError,
+    confirmation_url,
+    create_payment,
+    rub_amount,
+    yookassa_configured,
+)
 from services.users import is_premium
 from states.premium import PremiumStates
 
@@ -81,7 +88,7 @@ def _receipt_prompt_kb(lang: str, order_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def _premium_menu_kb(lang: str, plans: list[PremiumPlan]) -> InlineKeyboardMarkup:
+def _premium_menu_kb(lang: str, plans: list[PremiumPlan], *, renew: bool) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
@@ -99,7 +106,32 @@ def _premium_menu_kb(lang: str, plans: list[PremiumPlan]) -> InlineKeyboardMarku
             )
         ]
     )
+    if renew:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=t("btn_cancel_sub", lang),
+                    callback_data="prem:unsub",
+                )
+            ]
+        )
     rows.append([InlineKeyboardButton(text=t("back", lang), callback_data="prem:back")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _yookassa_pay_kb(lang: str, order_id: int, pay_url: str) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if pay_url:
+        rows.append([InlineKeyboardButton(text=t("btn_pay", lang), url=pay_url)])
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=t("btn_pay_check", lang),
+                callback_data=f"prem:check:{order_id}",
+            )
+        ]
+    )
+    rows.append([InlineKeyboardButton(text=t("back", lang), callback_data="prem:menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -109,10 +141,14 @@ async def _send_premium_menu(message, session: AsyncSession, user) -> None:
         status = t("premium_active_until", lang, dt=_fmt_dt(user.premium_until))
     else:
         status = t("premium_inactive", lang)
+    if user.yk_renew:
+        status = f"{status}\n{t('premium_sub_on', lang)}"
     plans = await list_active_plans(session)
     choose = t("premium_choose", lang) if plans else t("premium_title", lang)
     body = f"{t('premium_benefits', lang)}\n\n{status}\n\n{choose}"
-    await message.answer(body, reply_markup=_premium_menu_kb(lang, plans))
+    await message.answer(
+        body, reply_markup=_premium_menu_kb(lang, plans, renew=bool(user.yk_renew))
+    )
 
 
 async def _notify_admins_receipt(
@@ -278,9 +314,36 @@ async def premium_buy(callback: CallbackQuery, session: AsyncSession) -> None:
     if order is None:
         await callback.answer("—", show_alert=True)
         return
-    pay = await get_payment_info(session)
     plan = await session.get(PremiumPlan, order.plan_id)
+    amount = rub_amount(plan.price_text) if plan else None
+    lang = user.language
+    if not yookassa_configured():
+        await callback.answer(t("premium_pay_unconfigured", lang), show_alert=True)
+        return
+    if plan is None or amount is None:
+        await callback.answer(t("premium_pay_bad_price", lang), show_alert=True)
+        return
     await callback.answer()
+    try:
+        payment = await create_payment(
+            amount=amount,
+            description=f"Подписка {plan.title}",
+            metadata={
+                "order_id": str(order.id),
+                "user_id": str(user.tg_id),
+                "plan_id": str(plan.id),
+                "kind": "initial",
+            },
+            idempotence_key=f"order-{order.id}-plan-{plan.id}",
+            save_payment_method=True,
+        )
+    except YooKassaError as exc:
+        await message.answer(t("premium_pay_error", lang, error=html.escape(str(exc))))
+        return
+    payment_id = str(payment.get("id") or "")
+    if payment_id:
+        order.yk_payment_id = payment_id
+        await session.commit()
     try:
         await message.edit_reply_markup(reply_markup=None)
     except Exception:
@@ -288,16 +351,92 @@ async def premium_buy(callback: CallbackQuery, session: AsyncSession) -> None:
     await message.answer(
         t(
             "premium_pay",
-            user.language,
+            lang,
             order_id=order.id,
-            plan=html.escape(plan.title) if plan else "—",
-            amount=html.escape(plan.price_text) if plan else "—",
-            manager=html.escape(pay["manager"]),
-            card=html.escape(pay["card"]),
-            check_time=html.escape(pay["check_time"]),
+            plan=html.escape(plan.title),
+            amount=amount,
+            days=plan.days,
         ),
-        reply_markup=_premium_pay_kb(user.language, order.id),
+        reply_markup=_yookassa_pay_kb(lang, order.id, confirmation_url(payment)),
     )
+
+
+@router.callback_query(F.data.startswith("prem:check:"))
+async def premium_check_payment(callback: CallbackQuery, session: AsyncSession) -> None:
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
+    order_id = int((callback.data or "").split(":")[2])
+    row = await get_order_with_plan(session, order_id, user.tg_id)
+    if row is None:
+        await callback.answer("—", show_alert=True)
+        return
+    order, _plan = row
+    lang = user.language
+    if order.status == OrderStatus.approved:
+        await callback.answer()
+        fresh = await session.get(type(user), user.tg_id)
+        until = fresh.premium_until if fresh is not None else user.premium_until
+        await message.answer(t("premium_activated", lang, dt=_fmt_dt(until)))
+        return
+    if not order.yk_payment_id:
+        await callback.answer(t("premium_pay_pending", lang), show_alert=True)
+        return
+    try:
+        paid_user, _activated = await confirm_payment_id(session, order.yk_payment_id)
+    except YooKassaError as exc:
+        await callback.answer()
+        await message.answer(t("premium_pay_error", lang, error=html.escape(str(exc))))
+        return
+    await callback.answer()
+    if paid_user is not None and is_premium(paid_user):
+        await message.answer(
+            t("premium_activated", lang, dt=_fmt_dt(paid_user.premium_until)),
+            reply_markup=main_menu_kb(lang),
+        )
+        return
+    await message.answer(t("premium_pay_pending", lang))
+
+
+@router.callback_query(F.data == "prem:unsub")
+async def premium_unsub_ask(callback: CallbackQuery, session: AsyncSession) -> None:
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
+    lang = user.language
+    await callback.answer()
+    until = _fmt_dt(user.premium_until) if user.premium_until else "—"
+    await message.answer(
+        t("premium_unsub_confirm", lang, dt=until),
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=t("btn_cancel_sub_yes", lang),
+                        callback_data="prem:unsub:yes",
+                    )
+                ],
+                [InlineKeyboardButton(text=t("back", lang), callback_data="prem:menu")],
+            ]
+        ),
+    )
+
+
+@router.callback_query(F.data == "prem:unsub:yes")
+async def premium_unsub_yes(callback: CallbackQuery, session: AsyncSession) -> None:
+    ctx = await callback_context(callback, session)
+    if ctx is None:
+        return
+    user, message = ctx
+    lang = user.language
+    updated = await cancel_subscription(session, user.tg_id)
+    until = _fmt_dt(updated.premium_until) if updated and updated.premium_until else "—"
+    await callback.answer()
+    await message.answer(t("premium_sub_cancelled", lang, dt=until))
+    if updated is not None:
+        await _send_premium_menu(message, session, updated)
 
 
 @router.callback_query(F.data.startswith("prem:receipt:"))

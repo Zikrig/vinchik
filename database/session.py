@@ -156,6 +156,41 @@ async def init_db() -> None:
                 "ALTER TABLE tracking_links ALTER COLUMN code TYPE VARCHAR(64)"
             )
         )
+        await conn.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS yk_payment_method_id VARCHAR(64)"
+            )
+        )
+        await conn.execute(
+            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS yk_plan_id INTEGER")
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS yk_renew BOOLEAN DEFAULT FALSE"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS yk_renew_attempt INTEGER DEFAULT 0"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS yk_retry_after "
+                "TIMESTAMP WITH TIME ZONE"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE premium_orders ADD COLUMN IF NOT EXISTS yk_payment_id VARCHAR(64)"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_premium_orders_yk_payment "
+                "ON premium_orders (yk_payment_id) WHERE yk_payment_id IS NOT NULL"
+            )
+        )
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

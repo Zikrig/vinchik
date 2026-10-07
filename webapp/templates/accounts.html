@@ -279,7 +279,7 @@
           </td>
           <td>
             {% if p %}
-            <div>{{ p.name or '—' }}{% if p.age %}, {{ p.age }}{% endif %}{% if p.city_name %}, {{ p.city_name }}{% endif %}</div>
+            <div>{{ p.name or '—' }}{% if p.age %}, {{ p.age }}{% endif %}{% if p.city_name and p.city_name|trim|lower != 'карта' %}, {{ p.city_name }}{% endif %}</div>
             <div class="meta">
               {% if p.gender and p.gender.value == 'male' %}<span class="tag male">♂ м</span>
               {% elif p.gender and p.gender.value == 'female' %}<span class="tag female">♀ ж</span>

@@ -32,7 +32,7 @@
         <p><strong>Жалоб за 3 мес:</strong> {{ row.reports_n }}</p>
         <p><strong>Заблокирован:</strong> {{ row.blocked_at }}</p>
         {% if row.profile %}
-        <p><strong>Имя:</strong> {{ row.profile.name }} · <strong>Возраст:</strong> {{ row.profile.age }} · <strong>Город:</strong> {{ row.profile.city_name }}</p>
+        <p><strong>Имя:</strong> {{ row.profile.name }} · <strong>Возраст:</strong> {{ row.profile.age }}{% if row.profile.city_name and row.profile.city_name|trim|lower != 'карта' %} · <strong>Город:</strong> {{ row.profile.city_name }}{% endif %}</p>
         <p><strong>О себе:</strong> {{ row.profile.description or '—' }}</p>
         {% endif %}
         <form method="post" action="{{ url('/users/' ~ row.tg_id ~ '/unban') }}" class="js-ajax" data-ajax="unban">
@@ -65,7 +65,7 @@
         <p><strong>Жалоб за 3 мес:</strong> {{ row.reports_n }}</p>
         <p><strong>Помечен:</strong> {{ row.suspicious_at or '—' }}</p>
         {% if row.profile %}
-        <p><strong>Имя:</strong> {{ row.profile.name }} · <strong>Возраст:</strong> {{ row.profile.age }} · <strong>Город:</strong> {{ row.profile.city_name }}</p>
+        <p><strong>Имя:</strong> {{ row.profile.name }} · <strong>Возраст:</strong> {{ row.profile.age }}{% if row.profile.city_name and row.profile.city_name|trim|lower != 'карта' %} · <strong>Город:</strong> {{ row.profile.city_name }}{% endif %}</p>
         {% endif %}
         {% if row.messages %}
         <details open>

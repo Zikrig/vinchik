@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
@@ -187,6 +188,52 @@ async def nearest_settlements(
         if len(out) >= limit:
             break
     return out
+
+
+async def settlement_names_around(
+    session: AsyncSession,
+    lat: float,
+    lon: float,
+    radius_km: float,
+) -> list[tuple[float, float, str]]:
+    """Places inside a box around a point, for nearest-name lookup."""
+    radius_km = max(1.0, float(radius_km))
+    # Box is wider than the haversine limit so edge places are not clipped.
+    dlat = radius_km / 100.0
+    cos_lat = max(0.2, math.cos(math.radians(lat)))
+    dlon = radius_km / (100.0 * cos_lat)
+    result = await session.execute(
+        select(Settlement.lat, Settlement.lon, Settlement.display_name).where(
+            func.upper(Settlement.country_code).notin_(tuple(EXCLUDED_SETTLEMENT_COUNTRIES)),
+            Settlement.display_name != "",
+            Settlement.lat.between(lat - dlat, lat + dlat),
+            Settlement.lon.between(lon - dlon, lon + dlon),
+        )
+    )
+    return [
+        (float(row[0]), float(row[1]), str(row[2]))
+        for row in result.all()
+        if row[2]
+    ]
+
+
+def closest_place_name(
+    points: list[tuple[float, float, str]],
+    lat: float,
+    lon: float,
+    *,
+    max_km: float,
+) -> str | None:
+    best_km: float | None = None
+    best_name: str | None = None
+    for plat, plon, name in points:
+        dist = haversine_km(lat, lon, plat, plon)
+        if dist > max_km:
+            continue
+        if best_km is None or dist < best_km:
+            best_km = dist
+            best_name = name
+    return best_name
 
 
 async def get_settlement(session: AsyncSession, settlement_id: int) -> Settlement | None:

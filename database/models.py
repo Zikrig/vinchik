@@ -83,6 +83,14 @@ class User(Base):
     suspicious_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     suspicious_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_test: Mapped[bool] = mapped_column(Boolean, default=False)
+    # YooKassa subscription: saved card and the plan to renew.
+    yk_payment_method_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    yk_plan_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    yk_renew: Mapped[bool] = mapped_column(Boolean, default=False)
+    yk_renew_attempt: Mapped[int] = mapped_column(Integer, default=0)
+    yk_retry_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -224,6 +232,7 @@ class PremiumOrder(Base):
     )
     receipt_file_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
     receipt_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)  # photo|document
+    yk_payment_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -14,6 +14,7 @@ from services.media import (
     list_test_photo_markers,
     local_photo_path,
 )
+from services.settlements import closest_place_name, settlement_names_around
 from services.users import get_or_create_user
 
 # Dushanbe, capital of Tajikistan
@@ -23,6 +24,9 @@ DUSHANBE_CITY = "Душанбе"
 
 # Spawn test profiles near center (not across whole TJ).
 TEST_SPAWN_RADIUS_KM = 60.0
+# Nearest settlement farther than this is stored as «Карта» and hidden on cards.
+TEST_CITY_MAX_KM = 50.0
+TEST_CITY_UNKNOWN = "Карта"
 # Prefer not placing two profiles with the same photo closer than this.
 TEST_SAME_PHOTO_MIN_KM = 8.0
 _TEST_PHOTO_PLACE_ATTEMPTS = 24
@@ -265,7 +269,6 @@ async def create_test_users(
     radius_km: float | None = None,
     center_lat: float | None = None,
     center_lon: float | None = None,
-    city_name: str | None = None,
 ) -> int:
     count = max(0, min(int(count), 1000))
     spawn_r = (
@@ -279,10 +282,12 @@ async def create_test_users(
     if center_lat is not None and center_lon is not None:
         lat0 = max(-90.0, min(90.0, float(center_lat)))
         lon0 = max(-180.0, min(180.0, float(center_lon)))
-        city = (city_name or "").strip() or "Карта"
-        center_lat, center_lon, city = lat0, lon0, city
+        center_lat, center_lon = lat0, lon0
     else:
-        center_lat, center_lon, city = await test_spawn_center(session)
+        center_lat, center_lon, _city = await test_spawn_center(session)
+    nearby = await settlement_names_around(
+        session, center_lat, center_lon, spawn_r + TEST_CITY_MAX_KM
+    )
     placements = await _existing_test_photo_placements(session)
     created = 0
     for _ in range(count):
@@ -311,7 +316,10 @@ async def create_test_users(
             looking_for=LookingFor.any,
             lat=lat,
             lon=lon,
-            city_name=city,
+            city_name=closest_place_name(
+                nearby, lat, lon, max_km=TEST_CITY_MAX_KM
+            )
+            or TEST_CITY_UNKNOWN,
             description="",
             photo_file_id=test_photo,
             photo_file_ids=[test_photo] if test_photo else None,

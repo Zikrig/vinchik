@@ -186,14 +186,24 @@ TEXTS = {
     ),
     "premium_order_processed": "Processed: {processed}",
     "premium_pay": (
-        "Request #{order_id}\n"
-        "Plan: {plan}\n"
-        "Amount: {amount}\n\n"
-        "Card for payment:\n{card}\n\n"
-        "Review time: {check_time}\n\n"
-        "Contact the manager:\n{manager}\n\n"
-        "Premium turns on automatically after the payment is confirmed."
+        "Subscription: {plan}\n"
+        "Amount: {amount} RUB every {days} days\n"
+        "Request #{order_id}\n\n"
+        "Pay with YooKassa. The card is saved and the subscription renews itself. "
+        "You can turn auto-renew off in the Premium menu."
     ),
+    "btn_pay": "💳 Pay",
+    "btn_pay_check": "🔄 Check payment",
+    "btn_cancel_sub": "🚫 Cancel subscription",
+    "btn_cancel_sub_yes": "✅ Yes, cancel",
+    "premium_unsub_confirm": "Turn off auto-renew? The paid period stays active until {dt}.",
+    "premium_sub_on": "Auto-renew is on: the next charge is at the end of the period.",
+    "premium_sub_cancelled": "Auto-renew is off. Premium stays active until {dt}.",
+    "premium_pay_pending": "Payment has not come through yet. If you just paid, wait a minute and tap again.",
+    "premium_pay_bad_price": "This plan has no price in rubles. Set it as a number, for example 299.",
+    "premium_pay_unconfigured": "YooKassa is not configured yet.",
+    "premium_pay_error": "YooKassa rejected the payment: {error}",
+    "premium_renew_failed": "Could not renew the subscription. Open Premium and pay again.",
     "btn_send_receipt": "📎 Send receipt",
     "premium_send_receipt": (
         "Send a photo or file of the receipt for request #{order_id}."

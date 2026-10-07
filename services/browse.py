@@ -27,6 +27,14 @@ RADIUS_TIERS_KM = (
 AGE_TOLERANCE_YEARS = (2, 5, 10, 999)
 
 
+def visible_city(city: str | None) -> str:
+    """Drop the test-spawn placeholder so cards don't say «Карта»."""
+    raw = (city or "").strip()
+    if raw.casefold() == "карта":
+        return ""
+    return raw
+
+
 def profile_caption(
     profile: Profile,
     *,
@@ -35,9 +43,9 @@ def profile_caption(
 ) -> str:
     name = html.escape(profile.name or "?")
     age = profile.age or "?"
-    city = html.escape(profile.city_name or "?")
+    city = html.escape(visible_city(profile.city_name))
     desc = html.escape((profile.description or "").strip())
-    head = f"{name}, {age}, {city}"
+    head = f"{name}, {age}, {city}" if city else f"{name}, {age}"
     owner = user or profile.user
     verified = t("premium_verified", lang) if is_premium(owner) else ""
     lines = [head]
