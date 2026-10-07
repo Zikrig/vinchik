@@ -6,6 +6,9 @@ import asyncio
 import gzip
 import logging
 import os
+import re
+import secrets
+import shutil
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +20,9 @@ logger = logging.getLogger(__name__)
 ARCHIVE_PATH = "/archive"
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 MAX_SQL_BYTES = 512 * 1024 * 1024
+# Ниже лимита nginx по умолчанию (1 МБ), вместе с заголовками multipart.
+CHUNK_BYTES = 256 * 1024
+_MAX_CHUNK_BYTES = 700 * 1024
 _DUMP_TIMEOUT_SECONDS = 600
 _GZIP_MAGIC = b"\x1f\x8b"
 
@@ -177,6 +183,78 @@ async def save_upload(chunks) -> Path:
         path.unlink(missing_ok=True)
         raise
     if total == 0:
+        path.unlink(missing_ok=True)
+        raise ArchiveError("Файл пустой")
+    return path
+
+
+def _upload_dir(upload_id: str) -> Path:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", upload_id):
+        raise ArchiveError("Некорректный идентификатор загрузки")
+    root = (Path(tempfile.gettempdir()) / "vinchik-archive").resolve()
+    path = (root / upload_id).resolve()
+    if path.parent != root:
+        raise ArchiveError("Некорректный идентификатор загрузки")
+    return path
+
+
+def write_chunk(upload_id: str, index: int, data: bytes) -> str:
+    if index < 0:
+        raise ArchiveError("Некорректный номер куска")
+    if len(data) > _MAX_CHUNK_BYTES:
+        raise ArchiveError("Кусок больше 700 КБ")
+    if not upload_id:
+        if index != 0:
+            raise ArchiveError("Кусок не по порядку")
+        upload_id = secrets.token_urlsafe(18)
+        folder = _upload_dir(upload_id)
+        folder.mkdir(parents=True, exist_ok=False)
+    else:
+        folder = _upload_dir(upload_id)
+        if not folder.is_dir():
+            raise ArchiveError("Загрузка не найдена")
+    existing = sorted(folder.glob("*.part"))
+    if index != len(existing):
+        raise ArchiveError("Кусок не по порядку")
+    (folder / f"{index:06d}.part").write_bytes(data)
+    total = sum(part.stat().st_size for part in folder.glob("*.part"))
+    if total > MAX_UPLOAD_BYTES:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise ArchiveError("Файл больше 200 МБ")
+    return upload_id
+
+
+def discard_upload(upload_id: str) -> None:
+    if not upload_id:
+        return
+    folder = _upload_dir(upload_id)
+    shutil.rmtree(folder, ignore_errors=True)
+
+
+def assemble_upload(upload_id: str) -> Path:
+    folder = _upload_dir(upload_id)
+    if not folder.is_dir():
+        raise ArchiveError("Загрузка не найдена")
+    parts = sorted(folder.glob("*.part"))
+    if not parts:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise ArchiveError("Файл пустой")
+    fd, name = tempfile.mkstemp(prefix="vinchik-in-", suffix=".dump")
+    os.close(fd)
+    path = Path(name)
+    try:
+        with path.open("wb") as out:
+            for index, part in enumerate(parts):
+                if part.name != f"{index:06d}.part":
+                    raise ArchiveError("Куски не по порядку")
+                with part.open("rb") as src:
+                    shutil.copyfileobj(src, out)
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    if path.stat().st_size == 0:
         path.unlink(missing_ok=True)
         raise ArchiveError("Файл пустой")
     return path

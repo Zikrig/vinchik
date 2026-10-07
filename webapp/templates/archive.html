@@ -15,15 +15,72 @@
   <section class="panel">
     <h2 class="panel-title">Заменить базу</h2>
     <p class="hint">Файл с этой страницы подменяет текущие таблицы. Перед загрузкой останови бота: <code>docker compose stop bot</code>. После замены: <code>docker compose start bot</code>.</p>
-    <form method="post" action="{{ url('/archive/restore') }}" enctype="multipart/form-data">
+    <form id="restore-form" method="post" action="{{ url('/archive/restore') }}">
       <label>Файл .sql.gz
-        <input type="file" name="dump" accept=".sql,.gz,.sql.gz,application/gzip" required>
+        <input id="restore-file" type="file" name="dump" accept=".sql,.gz,.sql.gz,application/gzip" required>
       </label>
       <label>Чтобы заменить базу, введи ЗАМЕНИТЬ
-        <input type="text" name="confirm" autocomplete="off" required>
+        <input id="restore-confirm" type="text" name="confirm" autocomplete="off" required>
       </label>
       <button type="submit" class="danger">Заменить базу</button>
+      <p id="restore-status" class="hint" hidden></p>
     </form>
   </section>
 </div>
+<script>
+(function () {
+  const form = document.getElementById("restore-form");
+  const status = document.getElementById("restore-status");
+  const CHUNK = 256 * 1024;
+  form.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    const fileInput = document.getElementById("restore-file");
+    const confirmInput = document.getElementById("restore-confirm");
+    const file = fileInput.files && fileInput.files[0];
+    const button = form.querySelector("button[type=submit]");
+    if (!file) return;
+    status.hidden = false;
+    status.className = "hint";
+    status.textContent = "";
+    button.disabled = true;
+    let uploadId = "";
+    const total = Math.max(1, Math.ceil(file.size / CHUNK));
+    try {
+      for (let index = 0; index < total; index++) {
+        const start = index * CHUNK;
+        const blob = file.slice(start, Math.min(file.size, start + CHUNK));
+        const body = new FormData();
+        body.append("upload_id", uploadId);
+        body.append("index", String(index));
+        body.append("chunk", blob, "part");
+        const last = index === total - 1;
+        body.append("last", last ? "1" : "0");
+        if (last) body.append("confirm", confirmInput.value);
+        status.textContent = last && total > 1
+          ? "Файл на сервере, идёт замена базы…"
+          : "Загрузка " + (index + 1) + " из " + total;
+        const response = await fetch(form.action, { method: "POST", body: body });
+        const raw = await response.text();
+        let payload = null;
+        try { payload = JSON.parse(raw); } catch (e) { payload = null; }
+        if (response.status === 413 || raw.indexOf("413 Request Entity Too Large") !== -1) {
+          throw new Error("nginx снова отклонил запрос. Обнови страницу после пересборки контейнера web.");
+        }
+        if (!response.ok || !payload || !payload.ok) {
+          throw new Error((payload && payload.error) || "Не удалось загрузить дамп");
+        }
+        uploadId = payload.upload_id || uploadId;
+        if (payload.redirect) {
+          window.location.href = payload.redirect;
+          return;
+        }
+      }
+    } catch (err) {
+      status.className = "err";
+      status.textContent = err && err.message ? err.message : "Не удалось загрузить дамп";
+      button.disabled = false;
+    }
+  });
+})();
+</script>
 {% endblock %}

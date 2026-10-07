@@ -88,10 +88,12 @@ from services.channels import (
 from services.db_archive import (
     ARCHIVE_PATH,
     ArchiveError,
+    assemble_upload,
     create_dump,
+    discard_upload,
     dump_filename,
     restore_dump,
-    save_upload,
+    write_chunk,
 )
 from services.settings_service import (
     MAX_DISTANCE_KM,
@@ -1601,33 +1603,53 @@ def create_app() -> FastAPI:
     @app.post(f"{ARCHIVE_PATH}/restore", include_in_schema=False)
     async def archive_restore(
         request: Request,
-        dump: UploadFile = File(...),
+        chunk: UploadFile = File(...),
+        index: int = Form(...),
+        upload_id: str = Form(""),
         confirm: str = Form(""),
+        last: str = Form("0"),
     ):
-        if (redir := _archive_auth(request)) is not None:
-            return redir
-        if confirm.strip() != "ЗАМЕНИТЬ":
-            return await _archive_html(request, error="Чтобы заменить базу, введи ЗАМЕНИТЬ")
-
-        async def chunks():
-            while True:
-                block = await dump.read(1024 * 1024)
-                if not block:
-                    break
-                yield block
-
+        if not is_logged_in(request):
+            return JSONResponse(
+                {"ok": False, "error": "Нужно войти заново"},
+                status_code=401,
+            )
+        if form_truthy(last) and confirm.strip() != "ЗАМЕНИТЬ":
+            discard_upload(upload_id.strip())
+            return JSONResponse(
+                {"ok": False, "error": "Чтобы заменить базу, введи ЗАМЕНИТЬ"},
+                status_code=400,
+            )
+        buf = bytearray()
+        while True:
+            block = await chunk.read(64 * 1024)
+            if not block:
+                break
+            buf.extend(block)
+            if len(buf) > 700 * 1024:
+                discard_upload(upload_id.strip())
+                return JSONResponse(
+                    {"ok": False, "error": "Кусок больше 700 КБ"},
+                    status_code=400,
+                )
         path = None
         try:
-            path = await save_upload(chunks())
+            upload_id = write_chunk(upload_id.strip(), index, bytes(buf))
+            if not form_truthy(last):
+                return JSONResponse({"ok": True, "upload_id": upload_id})
+            path = assemble_upload(upload_id)
             await restore_dump(path)
         except ArchiveError as exc:
-            return await _archive_html(request, error=str(exc))
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
         finally:
             if path is not None:
                 path.unlink(missing_ok=True)
-        return RedirectResponse(
-            settings.abs_path(f"{ARCHIVE_PATH}?flash=restored"),
-            status_code=303,
+        return JSONResponse(
+            {
+                "ok": True,
+                "upload_id": upload_id,
+                "redirect": settings.abs_path(f"{ARCHIVE_PATH}?flash=restored"),
+            }
         )
 
     return app
