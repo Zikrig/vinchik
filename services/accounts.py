@@ -61,6 +61,23 @@ def _as_str(col):
     return func.cast(col, String)
 
 
+# Postgres INTEGER / BIGINT. Binding a wider Python int to int4 raises asyncpg OverflowError.
+_PG_INT4_MIN = -2_147_483_648
+_PG_INT4_MAX = 2_147_483_647
+_PG_INT8_MIN = -9_223_372_036_854_775_808
+_PG_INT8_MAX = 9_223_372_036_854_775_807
+
+
+def _search_int(raw: str) -> int | None:
+    text = (raw or "").strip()
+    if not text.lstrip("-").isdigit():
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
 async def search_accounts(
     session: AsyncSession,
     *,
@@ -121,9 +138,11 @@ async def search_accounts(
             _as_str(User.tg_id).ilike(like),
             _as_str(Profile.age).ilike(like),
         ]
-        if q.lstrip("-").isdigit():
-            parts.append(User.tg_id == int(q))
-            parts.append(Profile.age == int(q))
+        number = _search_int(q)
+        if number is not None and _PG_INT8_MIN <= number <= _PG_INT8_MAX:
+            parts.append(User.tg_id == number)
+        if number is not None and _PG_INT4_MIN <= number <= _PG_INT4_MAX:
+            parts.append(Profile.age == number)
         filters.append(or_(*parts))
 
     if filters:

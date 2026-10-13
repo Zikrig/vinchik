@@ -18,6 +18,19 @@ async def load_user_with_profile(session: AsyncSession, tg_id: int) -> User | No
     return result.scalar_one_or_none()
 
 
+async def load_users_with_profiles(
+    session: AsyncSession, tg_ids: list[int]
+) -> dict[int, User]:
+    """Batch load. Duplicate ids are queried once; unknown ids are omitted."""
+    unique = list(dict.fromkeys(tg_ids))
+    if not unique:
+        return {}
+    result = await session.execute(
+        select(User).where(User.tg_id.in_(unique)).options(selectinload(User.profile))
+    )
+    return {user.tg_id: user for user in result.scalars().all()}
+
+
 async def get_or_create_user(
     session: AsyncSession,
     tg_id: int,

@@ -54,7 +54,7 @@ from services.tracking_links import (
     rename_link,
     resolve_range,
 )
-from services.users import load_user_with_profile, is_premium
+from services.users import is_premium, load_user_with_profile, load_users_with_profiles
 from services.media import (
     LOCAL_PREFIX,
     download_telegram_file,
@@ -494,12 +494,17 @@ def create_app() -> FastAPI:
         if (redir := require_auth(request)) is not None:
             return redir
         plans = await list_plans(session)
+        pending = await list_pending_orders(session)
+        applicants = await load_users_with_profiles(
+            session, [order.user_id for order in pending]
+        )
         return await render_admin(
             request,
             session,
             "premium.html",
             {
-                "pending": await list_pending_orders(session),
+                "pending": pending,
+                "applicants": applicants,
                 "premiums": await list_premium_users(session),
                 "plans": plans,
                 "plan_by_id": {p.id: p for p in plans},
