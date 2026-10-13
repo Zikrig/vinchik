@@ -1,5 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Премиум — Dilino Admin{% endblock %}
+{% block head %}
+<style>
+  #orders tr.clickable { cursor: pointer; }
+  #orders tr.clickable:hover td { background: #f0f7f3; }
+  a.applicant {
+    display: flex;
+    gap: .75rem;
+    align-items: center;
+    color: inherit;
+    text-decoration: none;
+    min-width: 12rem;
+  }
+  a.applicant:hover strong { color: var(--brand); }
+  a.applicant img, a.applicant .ph {
+    width: 64px;
+    height: 64px;
+    flex: none;
+    object-fit: cover;
+    border-radius: 10px;
+    background: var(--bg-accent);
+  }
+  a.applicant .ph {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: .85rem;
+  }
+  a.applicant .meta { display: block; }
+</style>
+{% endblock %}
 {% block body %}
 {% set nav = 'premium' %}
 {% set brand_suffix = 'Премиум' %}
@@ -68,11 +99,30 @@
   <section class="panel" id="orders">
     <h2 class="panel-title">💳 Заявки на Премиум {% if pending %}<span class="meta">({{ pending|length }})</span>{% endif %}</h2>
     {% if not pending %}<p class="hint">Нет заявок.</p>{% endif %}
+    {% if pending %}
     <table>
+      <thead>
+        <tr><th>Кто</th><th>Заявка</th><th>Тариф</th><th>Чек</th><th></th></tr>
+      </thead>
       {% for o in pending %}
-      <tr>
+      {% set u = applicants.get(o.user_id) %}
+      {% set p = u.profile if u else none %}
+      <tr class="clickable" data-href="{{ url('/accounts/' ~ o.user_id) }}">
+        <td>
+          <a class="applicant" href="{{ url('/accounts/' ~ o.user_id) }}">
+            {% if p and p.photo_file_id %}
+            <img src="{{ url('/users/' ~ o.user_id ~ '/photo') }}" alt="" width="64" height="64"
+                 onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ph',textContent:'—'}))">
+            {% else %}
+            <span class="ph">—</span>
+            {% endif %}
+            <span>
+              <strong>{{ p.name if p and p.name else '—' }}</strong>
+              <span class="meta"><code>{{ o.user_id }}</code>{% if u and u.username %} @{{ u.username }}{% endif %}</span>
+            </span>
+          </a>
+        </td>
         <td>#{{ o.id }}</td>
-        <td>user {{ o.user_id }}</td>
         <td>
           {% set plan = plan_by_id.get(o.plan_id) %}
           {% if plan %}{{ plan.title }} · {{ plan.price_text }}{% else %}plan {{ o.plan_id }}{% endif %}
@@ -98,6 +148,15 @@
       </tr>
       {% endfor %}
     </table>
+    <script>
+      document.querySelectorAll("#orders tr.clickable[data-href]").forEach(function (tr) {
+        tr.addEventListener("click", function (e) {
+          if (e.target.closest("a, button, form, input")) return;
+          window.location = tr.getAttribute("data-href");
+        });
+      });
+    </script>
+    {% endif %}
   </section>
 
   <section class="panel" id="premiums">

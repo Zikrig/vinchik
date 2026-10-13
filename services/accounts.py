@@ -63,6 +63,26 @@ def _as_str(col):
     return func.cast(col, String)
 
 
+# asyncpg binds INTEGER as int4. A Telegram id does not fit, and comparing it
+# to profiles.age makes /accounts?q=<id> raise OverflowError (HTTP 500).
+_PG_INT4_MIN = -2_147_483_648
+_PG_INT4_MAX = 2_147_483_647
+_PG_INT8_MIN = -9_223_372_036_854_775_808
+_PG_INT8_MAX = 9_223_372_036_854_775_807
+
+
+def _search_int(q: str) -> int | None:
+    if len(q) < 1 or q == "-":
+        return None
+    body = q[1:] if q[0] == "-" else q
+    if not body.isdigit():
+        return None
+    try:
+        return int(q)
+    except ValueError:
+        return None
+
+
 async def search_accounts(
     session: AsyncSession,
     *,
@@ -123,9 +143,11 @@ async def search_accounts(
             _as_str(User.tg_id).ilike(like),
             _as_str(Profile.age).ilike(like),
         ]
-        if q.lstrip("-").isdigit():
-            parts.append(User.tg_id == int(q))
-            parts.append(Profile.age == int(q))
+        n = _search_int(q)
+        if n is not None and _PG_INT8_MIN <= n <= _PG_INT8_MAX:
+            parts.append(User.tg_id == n)
+        if n is not None and _PG_INT4_MIN <= n <= _PG_INT4_MAX:
+            parts.append(Profile.age == n)
         filters.append(or_(*parts))
 
     if filters:

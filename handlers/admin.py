@@ -4,7 +4,13 @@ from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+    Message,
+)
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
@@ -22,6 +28,8 @@ from services.channels import (
     toggle_channel,
 )
 from services.admin_tools import count_profiles_by_gender
+from services.media import as_photo_input
+from services.users import load_user_with_profile
 from services.premium import (
     PLAN_DAYS_MAX,
     PLAN_DAYS_MIN,
@@ -95,13 +103,72 @@ async def _redraw(
 ) -> None:
     """Repaint the panel in place; a stale button gets a fresh screen instead."""
     message = callback.message
-    if isinstance(message, Message):
+    if isinstance(message, Message) and message.text is not None:
         try:
             await message.edit_text(text, reply_markup=kb)
             return
         except TelegramBadRequest as exc:
             if "not modified" in str(exc).lower():
                 return
+    if isinstance(message, Message) and message.text is None:
+        try:
+            await message.delete()
+        except TelegramBadRequest:
+            pass
+    await bot.send_message(callback.from_user.id, text, reply_markup=kb)
+
+
+def _card_url(tg_id: int) -> str | None:
+    base = (settings.adm_link or "").strip().rstrip("/")
+    if not base.startswith(("http://", "https://")):
+        return None
+    return f"{base}/accounts/{tg_id}"
+
+
+async def _present_order(
+    callback: CallbackQuery,
+    bot: Bot,
+    text: str,
+    kb: InlineKeyboardMarkup,
+    photo_id: str | None,
+) -> None:
+    """Order screen: profile photo when we have one, otherwise the text panel."""
+    message = callback.message
+    media = as_photo_input(photo_id)
+    is_message = isinstance(message, Message)
+
+    if is_message and media is not None and message.photo:
+        try:
+            await message.edit_media(
+                media=InputMediaPhoto(media=media, caption=text),
+                reply_markup=kb,
+            )
+            return
+        except TelegramBadRequest as exc:
+            if "not modified" in str(exc).lower():
+                return
+
+    if is_message and media is None and message.text is not None:
+        await _redraw(callback, bot, text, kb)
+        return
+
+    if is_message:
+        try:
+            await message.delete()
+        except TelegramBadRequest:
+            pass
+
+    if media is not None:
+        try:
+            await bot.send_photo(
+                callback.from_user.id,
+                media,
+                caption=text,
+                reply_markup=kb,
+            )
+            return
+        except TelegramBadRequest:
+            pass
     await bot.send_message(callback.from_user.id, text, reply_markup=kb)
 
 
@@ -314,22 +381,25 @@ def _premiums_page_kb(users, page: int, total_pages: int) -> InlineKeyboardMarku
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _order_kb(order_id: int, index: int, total: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Подтвердить",
-                    callback_data=f"adm:ok:{order_id}:{index}",
-                ),
-                InlineKeyboardButton(
-                    text="❌ Отклонить",
-                    callback_data=f"adm:no:{order_id}:{index}",
-                ),
-            ],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")],
+def _order_kb(
+    order_id: int, index: int, card_url: str | None
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text="✅ Подтвердить",
+                callback_data=f"adm:ok:{order_id}:{index}",
+            ),
+            InlineKeyboardButton(
+                text="❌ Отклонить",
+                callback_data=f"adm:no:{order_id}:{index}",
+            ),
         ]
-    )
+    ]
+    if card_url:
+        rows.append([InlineKeyboardButton(text="Карточка", url=card_url)])
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _gender_stats_block(stats: dict[str, int]) -> str:
@@ -402,7 +472,7 @@ async def _settings_view(session: AsyncSession) -> tuple[str, InlineKeyboardMark
 
 async def _render_order(
     session: AsyncSession, index: int
-) -> tuple[str, InlineKeyboardMarkup]:
+) -> tuple[str, InlineKeyboardMarkup, str | None]:
     pending = await list_pending_orders(session)
     if not pending:
         return (
@@ -412,22 +482,48 @@ async def _render_order(
                     [InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:root")]
                 ]
             ),
+            None,
         )
     index = max(0, min(index, len(pending) - 1))
     order = pending[index]
     plan = await get_plan(session, order.plan_id)
     plan_title = html.escape(plan.title) if plan else f"#{order.plan_id}"
     amount = html.escape(plan.price_text) if plan else "—"
+    applicant = await load_user_with_profile(session, order.user_id)
+    name = "—"
+    uname = ""
+    photo_id = None
+    if applicant is not None:
+        if applicant.username:
+            uname = f" @{html.escape(applicant.username)}"
+        profile = applicant.profile
+        if profile is not None:
+            if profile.name:
+                name = html.escape(profile.name)
+            photo_id = profile.photo_file_id
+    card = _card_url(order.user_id)
+    if card:
+        name_line = f'<a href="{html.escape(card, quote=True)}">{name}</a>'
+    else:
+        name_line = name
     text = (
         f"Заявка {index + 1}/{len(pending)}\n\n"
         f"#{order.id}\n"
-        f"user: {order.user_id}\n"
+        f"{name_line}\n"
+        f"id: {order.user_id}{uname}\n"
         f"тариф: {plan_title}\n"
         f"сумма: {amount}\n"
         f"чек: {'есть' if order.receipt_file_id else 'нет'}\n"
         f"создана: {_fmt_dt(order.created_at)}"
     )
-    return text, _order_kb(order.id, index, len(pending))
+    return text, _order_kb(order.id, index, card), photo_id
+
+
+async def _show_order(
+    callback: CallbackQuery, bot: Bot, session: AsyncSession, index: int
+) -> None:
+    text, kb, photo_id = await _render_order(session, index)
+    await _present_order(callback, bot, text, kb, photo_id)
 
 
 async def _render_premiums(
@@ -950,9 +1046,8 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, bot: Bot) -
         await callback.answer(t("no_access", "ru"), show_alert=True)
         return
     index = int((callback.data or "").split(":")[2])
-    text, kb = await _render_order(session, index)
     await callback.answer()
-    await _redraw(callback, bot, text, kb)
+    await _show_order(callback, bot, session, index)
 
 
 async def _seal_receipt_notice(callback: CallbackQuery, line: str) -> None:
@@ -1029,8 +1124,7 @@ async def adm_ok(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> No
         await callback.answer("Одобрено")
     else:
         await callback.answer("Уже обработана", show_alert=True)
-    text, kb = await _render_order(session, index)
-    await _redraw(callback, bot, text, kb)
+    await _show_order(callback, bot, session, index)
 
 
 @router.callback_query(F.data.startswith("adm:no:"))
@@ -1046,8 +1140,7 @@ async def adm_no(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> No
         await callback.answer("Отклонено")
     else:
         await callback.answer("Уже обработана", show_alert=True)
-    text, kb = await _render_order(session, index)
-    await _redraw(callback, bot, text, kb)
+    await _show_order(callback, bot, session, index)
 
 
 @router.callback_query(F.data.startswith("adm:premiums:"))

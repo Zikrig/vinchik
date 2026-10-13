@@ -18,6 +18,18 @@ async def load_user_with_profile(session: AsyncSession, tg_id: int) -> User | No
     return result.scalar_one_or_none()
 
 
+async def load_users_with_profiles(
+    session: AsyncSession, tg_ids: list[int]
+) -> dict[int, User]:
+    ids = list(dict.fromkeys(tg_ids))
+    if not ids:
+        return {}
+    result = await session.execute(
+        select(User).where(User.tg_id.in_(ids)).options(selectinload(User.profile))
+    )
+    return {u.tg_id: u for u in result.scalars().unique().all()}
+
+
 async def get_or_create_user(
     session: AsyncSession,
     tg_id: int,
